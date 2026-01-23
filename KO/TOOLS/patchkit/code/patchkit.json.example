@@ -1,0 +1,11 @@
+{
+  "name": "code-main-patchkit",
+  "upstream": {
+    "remote": "origin",
+    "branch": "main"
+  },
+  "paths": {
+    "codeHome": ".codes",
+    "i18nLog": ".codes/patchkit/i18n-missing.jsonl"
+  }
+}

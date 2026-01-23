@@ -1,0 +1,39 @@
+# OpenCode PatchKit - 参考变更清单（非 git apply 补丁）
+
+# 注意
+# - 此文件仅用于“人类阅读/审阅”，不是 `git apply` 或 `patch` 可直接应用的补丁。
+# - 真正可重复应用的补丁逻辑在：`opencode-patchkit/scripts/apply-patches.ps1`
+# - 更新上游源码后，请运行：`opencode-patchkit/scripts/run.ps1`
+
+# 变更项（权威来源以脚本为准）
+
+1) 强制中文 + 固定输出结构
+   - 安装/覆盖：`C:/Users/<用户名>/.config/opencode/AGENTS.md`
+   - 来源：`opencode-patchkit/templates/AGENTS.md`
+
+2) Ctrl+C 三连按才退出（防误退）
+   - `packages/opencode/src/cli/cmd/tui/util/exit-confirm.ts`
+   - 入口接入：
+     - `packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx`
+     - `packages/opencode/src/cli/cmd/tui/app.tsx`
+     - `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`
+     - `packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx`
+     - `packages/opencode/src/cli/cmd/tui/routes/session/question.tsx`
+
+3) 非 git 目录的会话分桶修复（避免跨目录串会话）
+   - `packages/opencode/src/project/project.ts`
+   - 没有 `.git` 时，不再使用共享 `global`，改为 `dir-<sha256(absDir)[:16]>`。
+
+4) 启动时提示“继续上次会话？”（OpenCode 原生会话存储）
+   - `packages/opencode/src/cli/cmd/tui/app.tsx`
+
+5) zip/no-git 构建稳健性（可选但建议）
+   - `packages/script/src/index.ts`
+   - 在没有 `.git` 的情况下避免构建因为 `git branch --show-current` 失败。
+
+# 运行时禁用 Claude Code 兼容（不改源码）
+# - `opencode-patchkit/scripts/run-opencode.ps1` 会设置：
+#   - OPENCODE_DISABLE_CLAUDE_CODE=1
+#   - OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1
+#   - OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1
+

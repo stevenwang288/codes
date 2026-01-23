@@ -1,0 +1,1443 @@
+diff --git a/code-rs/cli/src/main.rs b/code-rs/cli/src/main.rs
+index a5b922c16..688d0ac14 100644
+--- a/code-rs/cli/src/main.rs
++++ b/code-rs/cli/src/main.rs
+@@ -63,7 +63,7 @@ fn pre_main_hardening() {
+     }
+ }
+ 
+-/// Codex CLI
++/// CODES CLI
+ ///
+ /// If no subcommand is specified, options will be forwarded to the interactive CLI.
+ #[derive(Debug, Parser)]
+diff --git a/code-rs/i18n/assets/en.json b/code-rs/i18n/assets/en.json
+index 09f055e2d..a5b95f1fb 100644
+--- a/code-rs/i18n/assets/en.json
++++ b/code-rs/i18n/assets/en.json
+@@ -77,5 +77,49 @@
+   "tui.approval.no_feedback_desc": "Do not run the command; provide feedback",
+   "tui.approval.patch_yes_desc": "Approve and apply the changes",
+   "tui.approval.patch_no_desc": "Do not apply the changes; provide feedback",
+-  "tui.approval.terminal_no_desc": "Dismiss without running the command",
++  "tui.approval.terminal_no_desc": "Dismiss without running the command"
++
++  ,"tui.welcome.popular_commands": "Popular commands:"
++  ,"tui.welcome.badge.updated": " UPDATED"
++  ,"tui.welcome.badge.new": " NEW"
++
++  ,"tui.slash.chrome.desc": "connect to your Chrome browser"
++  ,"tui.slash.browser.desc": "open internal browser"
++  ,"tui.slash.resume.desc": "resume a past session for this folder"
++  ,"tui.slash.plan.desc": "create a comprehensive plan (multiple agents)"
++  ,"tui.slash.solve.desc": "solve a challenging problem (multiple agents)"
++  ,"tui.slash.code.desc": "perform a coding task (multiple agents)"
++  ,"tui.slash.reasoning.desc": "change reasoning effort (minimal/low/medium/high)"
++  ,"tui.slash.verbosity.desc": "change text verbosity (high/medium/low)"
++  ,"tui.slash.new.desc": "start a new chat during a conversation"
++  ,"tui.slash.init.desc": "create an AGENTS.md file with instructions for Code"
++  ,"tui.slash.compact.desc": "summarize conversation to prevent hitting the context limit"
++  ,"tui.slash.undo.desc": "restore the workspace to the last Code snapshot"
++  ,"tui.slash.review.desc": "review your changes for potential issues"
++  ,"tui.slash.cloud.desc": "browse, apply, and create cloud tasks"
++  ,"tui.slash.quit.desc": "exit Code"
++  ,"tui.slash.diff.desc": "show git diff (including untracked files)"
++  ,"tui.slash.mention.desc": "mention a file"
++  ,"tui.slash.cmd.desc": "run a project command"
++  ,"tui.slash.status.desc": "show current session configuration and token usage"
++  ,"tui.slash.limits.desc": "adjust session limits"
++  ,"tui.slash.update.desc": "check for updates and optionally upgrade"
++  ,"tui.slash.notifications.desc": "manage notification settings"
++  ,"tui.slash.theme.desc": "customize the app theme"
++  ,"tui.slash.settings.desc": "manage all settings in one place"
++  ,"tui.slash.prompts.desc": "manage custom prompts"
++  ,"tui.slash.skills.desc": "manage skills"
++  ,"tui.slash.model.desc": "choose your default model"
++  ,"tui.slash.agents.desc": "configure agents"
++  ,"tui.slash.auto.desc": "work autonomously on long tasks with Auto Drive"
++  ,"tui.slash.branch.desc": "work in an isolated /branch then /merge when done (great for parallel work)"
++  ,"tui.slash.merge.desc": "merge current worktree branch back to default"
++  ,"tui.slash.push.desc": "commit, push, and monitor workflows"
++  ,"tui.slash.validation.desc": "control validation harness (status/on/off)"
++  ,"tui.slash.mcp.desc": "manage MCP servers"
++  ,"tui.slash.perf.desc": "performance tracing (on/off/show/reset)"
++  ,"tui.slash.demo.desc": "populate history with demo cells (dev/perf only)"
++  ,"tui.slash.login.desc": "manage Code sign-ins (add/select/disconnect)"
++  ,"tui.slash.logout.desc": "log out of Code"
++  ,"tui.slash.test_approval.desc": "test approval request"
+ }
+diff --git a/code-rs/i18n/assets/zh-CN.json b/code-rs/i18n/assets/zh-CN.json
+index d6aaa89e5..a32a5bc0e 100644
+--- a/code-rs/i18n/assets/zh-CN.json
++++ b/code-rs/i18n/assets/zh-CN.json
+@@ -77,5 +77,49 @@
+   "tui.approval.no_feedback_desc": "不运行命令；提供反馈",
+   "tui.approval.patch_yes_desc": "批准并应用更改",
+   "tui.approval.patch_no_desc": "不应用更改；提供反馈",
+-  "tui.approval.terminal_no_desc": "取消而不运行命令",
++  "tui.approval.terminal_no_desc": "取消而不运行命令"
++
++  ,"tui.welcome.popular_commands": "常用命令："
++  ,"tui.welcome.badge.updated": " 已更新"
++  ,"tui.welcome.badge.new": " 新"
++
++  ,"tui.slash.chrome.desc": "连接到 Chrome 浏览器"
++  ,"tui.slash.browser.desc": "打开内置浏览器"
++  ,"tui.slash.resume.desc": "恢复此目录的历史会话"
++  ,"tui.slash.plan.desc": "生成计划（多代理）"
++  ,"tui.slash.solve.desc": "解决难题（多代理）"
++  ,"tui.slash.code.desc": "执行编码任务（多代理）"
++  ,"tui.slash.reasoning.desc": "切换推理强度（minimal/low/medium/high）"
++  ,"tui.slash.verbosity.desc": "切换文本详细度（high/medium/low）"
++  ,"tui.slash.new.desc": "在当前会话中开启新对话"
++  ,"tui.slash.init.desc": "创建用于 Code 的 AGENTS.md"
++  ,"tui.slash.compact.desc": "压缩对话，避免触达上下文上限"
++  ,"tui.slash.undo.desc": "回滚工作区到上一次快照"
++  ,"tui.slash.review.desc": "检查改动中的潜在问题"
++  ,"tui.slash.cloud.desc": "浏览/应用/创建云任务"
++  ,"tui.slash.quit.desc": "退出"
++  ,"tui.slash.diff.desc": "显示 git diff（含未跟踪文件）"
++  ,"tui.slash.mention.desc": "引用一个文件"
++  ,"tui.slash.cmd.desc": "运行项目命令"
++  ,"tui.slash.status.desc": "显示会话配置与用量"
++  ,"tui.slash.limits.desc": "调整会话限制"
++  ,"tui.slash.update.desc": "检查更新并可选择升级"
++  ,"tui.slash.notifications.desc": "通知设置"
++  ,"tui.slash.theme.desc": "主题设置"
++  ,"tui.slash.settings.desc": "统一设置面板"
++  ,"tui.slash.prompts.desc": "管理自定义 prompts"
++  ,"tui.slash.skills.desc": "管理 skills"
++  ,"tui.slash.model.desc": "选择默认模型"
++  ,"tui.slash.agents.desc": "配置 agents"
++  ,"tui.slash.auto.desc": "长任务自动执行（Auto Drive）"
++  ,"tui.slash.branch.desc": "在隔离分支工作，完成后合并"
++  ,"tui.slash.merge.desc": "把 worktree 分支合并回默认分支"
++  ,"tui.slash.push.desc": "提交并推送，监控工作流"
++  ,"tui.slash.validation.desc": "控制验证流程（status/on/off）"
++  ,"tui.slash.mcp.desc": "管理 MCP servers"
++  ,"tui.slash.perf.desc": "性能追踪（on/off/show/reset）"
++  ,"tui.slash.demo.desc": "填充演示历史（仅 dev/perf）"
++  ,"tui.slash.login.desc": "登录管理（添加/选择/断开）"
++  ,"tui.slash.logout.desc": "登出"
++  ,"tui.slash.test_approval.desc": "测试审批请求"
+ }
+diff --git a/code-rs/i18n/src/lib.rs b/code-rs/i18n/src/lib.rs
+index d223a433d..ea54a1500 100644
+--- a/code-rs/i18n/src/lib.rs
++++ b/code-rs/i18n/src/lib.rs
+@@ -45,6 +45,7 @@ struct Bundles {
+ static BUNDLES: OnceLock<Bundles> = OnceLock::new();
+ static LANG: OnceLock<Language> = OnceLock::new();
+ static MISSING_KEYS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
++static SEEN_KEYS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+ 
+ fn bundles() -> &'static Bundles {
+     BUNDLES.get_or_init(|| {
+@@ -71,10 +72,23 @@ fn collect_missing_enabled() -> bool {
+     )
+ }
+ 
++fn collect_seen_enabled() -> bool {
++    matches!(
++        std::env::var("CODE_I18N_COLLECT_SEEN")
++            .as_deref()
++            .map(|s| s.trim().to_ascii_lowercase()),
++        Ok(ref v) if v == "1" || v == "true" || v == "yes"
++    )
++}
++
+ fn missing_keys() -> &'static Mutex<HashSet<String>> {
+     MISSING_KEYS.get_or_init(|| Mutex::new(HashSet::new()))
+ }
+ 
++fn seen_keys() -> &'static Mutex<HashSet<String>> {
++    SEEN_KEYS.get_or_init(|| Mutex::new(HashSet::new()))
++}
++
+ fn collect_path() -> Option<std::path::PathBuf> {
+     if let Ok(p) = std::env::var("CODE_I18N_COLLECT_PATH") {
+         let p = p.trim();
+@@ -83,10 +97,21 @@ fn collect_path() -> Option<std::path::PathBuf> {
+         }
+     }
+ 
++    if let Ok(home) = std::env::var("CODE_HOME") {
++        let home = home.trim();
++        if !home.is_empty() {
++            let mut p = std::path::PathBuf::from(home);
++            p.push("patchkit");
++            p.push("i18n-missing.jsonl");
++            return Some(p);
++        }
++    }
++
+     if let Ok(home) = std::env::var("CODEX_HOME") {
+         let home = home.trim();
+         if !home.is_empty() {
+             let mut p = std::path::PathBuf::from(home);
++            p.push("patchkit");
+             p.push("i18n-missing.jsonl");
+             return Some(p);
+         }
+@@ -123,6 +148,7 @@ fn record_missing(missing_in: &str, key: &str, fallback_text: Option<&str>) {
+     let record = serde_json::json!({
+         "ts_ms": ts_ms,
+         "app": std::env::args().next().unwrap_or_else(|| "unknown".to_string()),
++        "event": "missing",
+         "missing_in": missing_in,
+         "key": key,
+         "fallback_text": fallback_text,
+@@ -140,16 +166,63 @@ fn record_missing(missing_in: &str, key: &str, fallback_text: Option<&str>) {
+     let _ = writeln!(f, "{record}");
+ }
+ 
++fn record_seen(locale: &str, key: &str) {
++    if !collect_seen_enabled() {
++        return;
++    }
++
++    let Some(path) = collect_path() else {
++        return;
++    };
++
++    let unique_key = format!("seen:{locale}:{key}");
++    {
++        let Ok(mut seen) = seen_keys().lock() else {
++            return;
++        };
++        if !seen.insert(unique_key) {
++            return;
++        }
++    }
++
++    let ts_ms = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .ok()
++        .map(|d| d.as_millis())
++        .unwrap_or(0);
++
++    let record = serde_json::json!({
++        "ts_ms": ts_ms,
++        "app": std::env::args().next().unwrap_or_else(|| "unknown".to_string()),
++        "event": "seen",
++        "locale": locale,
++        "key": key,
++    });
++
++    if let Some(parent) = path.parent() {
++        let _ = std::fs::create_dir_all(parent);
++    }
++
++    let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
++        Ok(f) => f,
++        Err(_) => return,
++    };
++
++    let _ = writeln!(f, "{record}");
++}
++
+ pub fn tr_plain(key: &str) -> String {
+     let b = bundles();
+     match lang() {
+         Language::ZhCn => {
+             if let Some(s) = b.zh_cn.get(key) {
++                record_seen("zh-CN", key);
+                 return s.clone();
+             }
+ 
+             record_missing("zh-CN", key, b.en.get(key).map(String::as_str));
+             if let Some(s) = b.en.get(key) {
++                record_seen("en", key);
+                 return s.clone();
+             }
+ 
+@@ -158,6 +231,7 @@ pub fn tr_plain(key: &str) -> String {
+         }
+         Language::En => {
+             if let Some(s) = b.en.get(key) {
++                record_seen("en", key);
+                 return s.clone();
+             }
+ 
+diff --git a/code-rs/tui/src/bottom_pane/command_popup.rs b/code-rs/tui/src/bottom_pane/command_popup.rs
+index 90af585ee..d14914aba 100644
+--- a/code-rs/tui/src/bottom_pane/command_popup.rs
++++ b/code-rs/tui/src/bottom_pane/command_popup.rs
+@@ -253,7 +253,7 @@ impl WidgetRef for CommandPopup {
+                     let (name, desc) = match cmd_item {
+                         CommandItem::Builtin(cmd) => (
+                             format!("/{}", cmd.command()),
+-                            Some(cmd.description().to_string()),
++                            Some(cmd.description()),
+                         ),
+                         CommandItem::UserPrompt(i) => {
+                             let prompt = &self.prompts[i];
+diff --git a/code-rs/tui/src/chatwidget.rs b/code-rs/tui/src/chatwidget.rs
+index e30242a7c..bd4b49078 100644
+--- a/code-rs/tui/src/chatwidget.rs
++++ b/code-rs/tui/src/chatwidget.rs
+@@ -21576,7 +21576,7 @@ Have we met every part of this goal and is there no further work to do?"#
+                 continue;
+             }
+             // Prefer "Code" branding in the Help panel
+-            let desc = cmd.description().replace("Codex", "Code");
++            let desc = cmd.description();
+             // Render as "/command  —  description"
+             lines.push(RtLine::from(vec![
+                 RtSpan::styled(format!("/{cmd_str:<12}"), t_fg),
+diff --git a/code-rs/tui/src/history_cell/plain.rs b/code-rs/tui/src/history_cell/plain.rs
+index 810c29480..289400ace 100644
+--- a/code-rs/tui/src/history_cell/plain.rs
++++ b/code-rs/tui/src/history_cell/plain.rs
+@@ -575,54 +575,66 @@ pub(crate) fn new_session_info(
+ fn popular_commands_lines(_latest_version: Option<&str>) -> Vec<Line<'static>> {
+     let mut lines: Vec<Line<'static>> = Vec::new();
+     lines.push(Line::styled(
+-        "Popular commands:",
++        code_i18n::tr_plain("tui.welcome.popular_commands"),
+         Style::default().fg(crate::colors::text_bright()),
+     ));
+     lines.push(Line::from(vec![
+-        Span::styled("/settings", Style::default().fg(crate::colors::primary())),
++        Span::styled("/1", Style::default().fg(crate::colors::primary())),
++        Span::from(" "),
++        Span::from("(/settings)").style(Style::default().add_modifier(Modifier::DIM)),
+         Span::from(" - "),
+         Span::from(SlashCommand::Settings.description())
+             .style(Style::default().add_modifier(Modifier::DIM)),
+         Span::styled(
+-            " UPDATED",
++            code_i18n::tr_plain("tui.welcome.badge.updated"),
+             Style::default().fg(crate::colors::primary()),
+         ),
+     ]));
+     lines.push(Line::from(vec![
+-        Span::styled("/auto", Style::default().fg(crate::colors::primary())),
++        Span::styled("/2", Style::default().fg(crate::colors::primary())),
++        Span::from(" "),
++        Span::from("(/auto)").style(Style::default().add_modifier(Modifier::DIM)),
+         Span::from(" - "),
+         Span::from(SlashCommand::Auto.description())
+             .style(Style::default().add_modifier(Modifier::DIM)),
+         Span::styled(
+-            " UPDATED",
++            code_i18n::tr_plain("tui.welcome.badge.updated"),
+             Style::default().fg(crate::colors::primary()),
+         ),
+     ]));
+     lines.push(Line::from(vec![
+-        Span::styled("/chrome", Style::default().fg(crate::colors::primary())),
++        Span::styled("/3", Style::default().fg(crate::colors::primary())),
++        Span::from(" "),
++        Span::from("(/chrome)").style(Style::default().add_modifier(Modifier::DIM)),
+         Span::from(" - "),
+         Span::from(SlashCommand::Chrome.description())
+             .style(Style::default().add_modifier(Modifier::DIM)),
+     ]));
+     lines.push(Line::from(vec![
+-        Span::styled("/plan", Style::default().fg(crate::colors::primary())),
++        Span::styled("/4", Style::default().fg(crate::colors::primary())),
++        Span::from(" "),
++        Span::from("(/plan)").style(Style::default().add_modifier(Modifier::DIM)),
+         Span::from(" - "),
+         Span::from(SlashCommand::Plan.description())
+             .style(Style::default().add_modifier(Modifier::DIM)),
+     ]));
+     lines.push(Line::from(vec![
+-        Span::styled("/code", Style::default().fg(crate::colors::primary())),
++        Span::styled("/5", Style::default().fg(crate::colors::primary())),
++        Span::from(" "),
++        Span::from("(/code)").style(Style::default().add_modifier(Modifier::DIM)),
+         Span::from(" - "),
+         Span::from(SlashCommand::Code.description())
+             .style(Style::default().add_modifier(Modifier::DIM)),
+     ]));
+     lines.push(Line::from(vec![
+-        Span::styled("/skills", Style::default().fg(crate::colors::primary())),
++        Span::styled("/6", Style::default().fg(crate::colors::primary())),
++        Span::from(" "),
++        Span::from("(/skills)").style(Style::default().add_modifier(Modifier::DIM)),
+         Span::from(" - "),
+         Span::from(SlashCommand::Skills.description())
+             .style(Style::default().add_modifier(Modifier::DIM)),
+         Span::styled(
+-            " NEW",
++            code_i18n::tr_plain("tui.welcome.badge.new"),
+             Style::default().fg(crate::colors::primary()),
+         ),
+     ]));
+diff --git a/code-rs/tui/src/slash_command.rs b/code-rs/tui/src/slash_command.rs
+index 4fb3d2f32..27fa7fda2 100644
+--- a/code-rs/tui/src/slash_command.rs
++++ b/code-rs/tui/src/slash_command.rs
+@@ -51,6 +51,7 @@ pub enum SlashCommand {
+     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
+     // more frequently used commands should be listed first.
+     Browser,
++    #[strum(serialize = "3", serialize = "浏览", serialize = "chrome")]
+     Chrome,
+     New,
+     Init,
+@@ -67,15 +68,18 @@ pub enum SlashCommand {
+     Update,
+     Notifications,
+     Theme,
++    #[strum(serialize = "1", serialize = "设置", serialize = "settings")]
+     Settings,
+     Model,
+     Reasoning,
+     Verbosity,
+     Prompts,
++    #[strum(serialize = "6", serialize = "技能", serialize = "skills")]
+     Skills,
+     Perf,
+     Demo,
+     Agents,
++    #[strum(serialize = "2", serialize = "自动", serialize = "auto")]
+     Auto,
+     Branch,
+     Merge,
+@@ -85,8 +89,10 @@ pub enum SlashCommand {
+     Resume,
+     Login,
+     // Prompt-expanding commands
++    #[strum(serialize = "4", serialize = "计划", serialize = "plan")]
+     Plan,
+     Solve,
++    #[strum(serialize = "5", serialize = "代码", serialize = "code")]
+     Code,
+     Logout,
+     Quit,
+@@ -96,50 +102,48 @@ pub enum SlashCommand {
+ 
+ impl SlashCommand {
+     /// User-visible description shown in the popup.
+-    pub fn description(self) -> &'static str {
++    pub fn description(self) -> String {
+         match self {
+-            SlashCommand::Chrome => "connect to your Chrome browser",
+-            SlashCommand::Browser => "open internal browser",
+-            SlashCommand::Resume => "resume a past session for this folder",
+-            SlashCommand::Plan => "create a comprehensive plan (multiple agents)",
+-            SlashCommand::Solve => "solve a challenging problem (multiple agents)",
+-            SlashCommand::Code => "perform a coding task (multiple agents)",
+-            SlashCommand::Reasoning => "change reasoning effort (minimal/low/medium/high)",
+-            SlashCommand::Verbosity => "change text verbosity (high/medium/low)",
+-            SlashCommand::New => "start a new chat during a conversation",
+-            SlashCommand::Init => "create an AGENTS.md file with instructions for Code",
+-            SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
+-            SlashCommand::Undo => "restore the workspace to the last Code snapshot",
+-            SlashCommand::Review => "review your changes for potential issues",
+-            SlashCommand::Cloud => "browse, apply, and create cloud tasks",
+-            SlashCommand::Quit => "exit Code",
+-            SlashCommand::Diff => "show git diff (including untracked files)",
+-            SlashCommand::Mention => "mention a file",
+-            SlashCommand::Cmd => "run a project command",
+-            SlashCommand::Status => "show current session configuration and token usage",
+-            SlashCommand::Limits => "adjust session limits",
+-            SlashCommand::Update => "check for updates and optionally upgrade",
+-            SlashCommand::Notifications => "manage notification settings",
+-            SlashCommand::Theme => "customize the app theme",
+-            SlashCommand::Settings => "manage all settings in one place",
+-            SlashCommand::Prompts => "manage custom prompts",
+-            SlashCommand::Skills => "manage skills",
+-            SlashCommand::Model => "choose your default model",
+-            SlashCommand::Agents => "configure agents",
+-            SlashCommand::Auto => "work autonomously on long tasks with Auto Drive",
+-            SlashCommand::Branch => {
+-                "work in an isolated /branch then /merge when done (great for parallel work)"
+-            }
+-            SlashCommand::Merge => "merge current worktree branch back to default",
+-            SlashCommand::Push => "commit, push, and monitor workflows",
+-            SlashCommand::Validation => "control validation harness (status/on/off)",
+-            SlashCommand::Mcp => "manage MCP servers",
+-            SlashCommand::Perf => "performance tracing (on/off/show/reset)",
+-            SlashCommand::Demo => "populate history with demo cells (dev/perf only)",
+-            SlashCommand::Login => "manage Code sign-ins (add/select/disconnect)",
+-            SlashCommand::Logout => "log out of Code",
++            SlashCommand::Chrome => code_i18n::tr_plain("tui.slash.chrome.desc"),
++            SlashCommand::Browser => code_i18n::tr_plain("tui.slash.browser.desc"),
++            SlashCommand::Resume => code_i18n::tr_plain("tui.slash.resume.desc"),
++            SlashCommand::Plan => code_i18n::tr_plain("tui.slash.plan.desc"),
++            SlashCommand::Solve => code_i18n::tr_plain("tui.slash.solve.desc"),
++            SlashCommand::Code => code_i18n::tr_plain("tui.slash.code.desc"),
++            SlashCommand::Reasoning => code_i18n::tr_plain("tui.slash.reasoning.desc"),
++            SlashCommand::Verbosity => code_i18n::tr_plain("tui.slash.verbosity.desc"),
++            SlashCommand::New => code_i18n::tr_plain("tui.slash.new.desc"),
++            SlashCommand::Init => code_i18n::tr_plain("tui.slash.init.desc"),
++            SlashCommand::Compact => code_i18n::tr_plain("tui.slash.compact.desc"),
++            SlashCommand::Undo => code_i18n::tr_plain("tui.slash.undo.desc"),
++            SlashCommand::Review => code_i18n::tr_plain("tui.slash.review.desc"),
++            SlashCommand::Cloud => code_i18n::tr_plain("tui.slash.cloud.desc"),
++            SlashCommand::Quit => code_i18n::tr_plain("tui.slash.quit.desc"),
++            SlashCommand::Diff => code_i18n::tr_plain("tui.slash.diff.desc"),
++            SlashCommand::Mention => code_i18n::tr_plain("tui.slash.mention.desc"),
++            SlashCommand::Cmd => code_i18n::tr_plain("tui.slash.cmd.desc"),
++            SlashCommand::Status => code_i18n::tr_plain("tui.slash.status.desc"),
++            SlashCommand::Limits => code_i18n::tr_plain("tui.slash.limits.desc"),
++            SlashCommand::Update => code_i18n::tr_plain("tui.slash.update.desc"),
++            SlashCommand::Notifications => code_i18n::tr_plain("tui.slash.notifications.desc"),
++            SlashCommand::Theme => code_i18n::tr_plain("tui.slash.theme.desc"),
++            SlashCommand::Settings => code_i18n::tr_plain("tui.slash.settings.desc"),
++            SlashCommand::Prompts => code_i18n::tr_plain("tui.slash.prompts.desc"),
++            SlashCommand::Skills => code_i18n::tr_plain("tui.slash.skills.desc"),
++            SlashCommand::Model => code_i18n::tr_plain("tui.slash.model.desc"),
++            SlashCommand::Agents => code_i18n::tr_plain("tui.slash.agents.desc"),
++            SlashCommand::Auto => code_i18n::tr_plain("tui.slash.auto.desc"),
++            SlashCommand::Branch => code_i18n::tr_plain("tui.slash.branch.desc"),
++            SlashCommand::Merge => code_i18n::tr_plain("tui.slash.merge.desc"),
++            SlashCommand::Push => code_i18n::tr_plain("tui.slash.push.desc"),
++            SlashCommand::Validation => code_i18n::tr_plain("tui.slash.validation.desc"),
++            SlashCommand::Mcp => code_i18n::tr_plain("tui.slash.mcp.desc"),
++            SlashCommand::Perf => code_i18n::tr_plain("tui.slash.perf.desc"),
++            SlashCommand::Demo => code_i18n::tr_plain("tui.slash.demo.desc"),
++            SlashCommand::Login => code_i18n::tr_plain("tui.slash.login.desc"),
++            SlashCommand::Logout => code_i18n::tr_plain("tui.slash.logout.desc"),
+             #[cfg(debug_assertions)]
+-            SlashCommand::TestApproval => "test approval request",
++            SlashCommand::TestApproval => code_i18n::tr_plain("tui.slash.test_approval.desc"),
+         }
+     }
+ 
+diff --git a/codes b/codes
+index 14fbc1ee3..09d4cbff0 100644
+--- a/codes
++++ b/codes
+@@ -3,13 +3,188 @@ set -euo pipefail
+ 
+ # Start the locally built Code (this repo) with zh-CN enabled.
+ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-export CODEX_HOME="${script_dir}/.code-home"
++# CODES uses a fully isolated home directory under the user profile.
++# Keep cache + state on C: by default, and keep it parallel to ~/.codex.
++
++collect_mode="off" # off|missing|seen|all|menu
++build_mode="smart" # smart|build|nobuild
++
++first_arg="${1:-}"
++case "$first_arg" in
++  caiji|Caiji|CAIJI|采集)
++    collect_mode="missing"
++    shift || true
++    ;;
++esac
++
++for arg in "$@"; do
++  case "$arg" in
++    -c|-C|--collect-menu|--收集)
++      collect_mode="menu"
++      ;;
++    -m|--missing|--collect=missing)
++      collect_mode="missing"
++      ;;
++    -s|--seen|--collect=seen)
++      collect_mode="seen"
++      ;;
++    -a|--all|--collect|--collect=all)
++      collect_mode="all"
++      ;;
++    -0|--off|--collect=off)
++      collect_mode="off"
++      ;;
++    --collect)
++      collect_mode="all"
++      ;;
++    --build)
++      build_mode="build"
++      ;;
++    --no-build)
++      build_mode="nobuild"
++      ;;
++  esac
++done
++# Canonical home directory for this repo run.
++#
++# - `CODE_HOME` is the modern config/state root (defaults to ~/.code).
++# - `CODEX_HOME` is kept for backwards compatibility (legacy ~/.codex).
++#
++# Set BOTH so every subsystem reads/writes the same place.
++export CODE_HOME="$HOME/.codes"
++export CODEX_HOME="$HOME/.codes"
+ export HOME="${HOME:-/c/Users/${USERNAME:-$(whoami)}}"
+ export PATH="$HOME/.cargo/bin:$PATH"
+-unset CODE_HOME || true
+ export CODEX_LANG="zh-CN"
+ export CODE_AUTO_TRUST="1"
+-export CODE_I18N_COLLECT_MISSING="1"
++if [ "$collect_mode" = "menu" ]; then
++  echo "[CODES] 采集模式（用于汉化素材积累）"
++  echo "  1) 不采集"
++  echo "  2) 只采缺失（只记录没有翻译的条目）"
++  echo "  3) 采已见（记录用到过的条目，推荐快速积累）"
++  echo "  4) 全采（缺失 + 已见）"
++  read -r -p "请选择 [1-4]（默认 3）: " sel || true
++  case "${sel:-3}" in
++    1) collect_mode="off" ;;
++    2) collect_mode="missing" ;;
++    3) collect_mode="seen" ;;
++    4) collect_mode="all" ;;
++    *) collect_mode="seen" ;;
++  esac
++fi
++
++if [ "$collect_mode" != "off" ]; then
++  if [ "$collect_mode" = "missing" ] || [ "$collect_mode" = "all" ]; then
++    export CODE_I18N_COLLECT_MISSING="1"
++  fi
++  if [ "$collect_mode" = "seen" ] || [ "$collect_mode" = "all" ]; then
++    export CODE_I18N_COLLECT_SEEN="1"
++  fi
++fi
++
++mkdir -p "$CODE_HOME" || true
++
++patchkit_dir="$CODE_HOME/patchkit"
++mkdir -p "$patchkit_dir" || true
++
++repo_id="$(basename "$script_dir")"
++repo_patchkit_dir="$patchkit_dir/$repo_id"
++mkdir -p "$repo_patchkit_dir" || true
++
++log_build="$repo_patchkit_dir/build-fast.log"
++stamp_file="$repo_patchkit_dir/build-stamp.txt"
++bin_file="$repo_patchkit_dir/last-bin.txt"
++
++resolve_latest_bin() {
++  local root="$CODE_HOME/working/_target-cache/$repo_id"
++  if [ ! -d "$root" ]; then
++    return 1
++  fi
++
++  # Prefer the newest Windows binary.
++  local bin
++  bin="$(find "$root" -type f \( -name 'code.exe' -o -name 'code' \) -print 2>/dev/null | while IFS= read -r p; do echo "$(stat -c %Y "$p" 2>/dev/null || echo 0) $p"; done | sort -nr | head -n 1 | cut -d' ' -f2-)" || true
++
++  if [ -z "$bin" ] || [ ! -f "$bin" ]; then
++    return 1
++  fi
++  printf '%s' "$bin"
++}
++
++need_build=0
++current_head=""
++if command -v git >/dev/null 2>&1; then
++  current_head="$(cd "$script_dir" && git rev-parse HEAD 2>/dev/null || true)"
++fi
++
++if [ "$build_mode" = "build" ]; then
++  need_build=1
++elif [ "$build_mode" = "nobuild" ]; then
++  need_build=0
++else
++  # smart: build only when the cached binary is missing or head changed
++  cached_bin=""
++  if [ -f "$bin_file" ]; then
++    cached_bin="$(cat "$bin_file" 2>/dev/null || true)"
++  fi
++  if [ -n "$cached_bin" ] && [ ! -f "$cached_bin" ]; then
++    cached_bin=""
++  fi
++  if [ -z "$cached_bin" ]; then
++    cached_bin="$(resolve_latest_bin 2>/dev/null || true)"
++  fi
++  cached_head="$(cat "$stamp_file" 2>/dev/null || true)"
++  if [ -z "$cached_bin" ]; then
++    need_build=1
++  elif [ -n "$current_head" ] && [ "$cached_head" != "$current_head" ]; then
++    need_build=1
++  fi
++fi
++
++if [ $need_build -eq 1 ]; then
++  if [ "$build_mode" = "nobuild" ]; then
++    echo "[CODES] Need build, but --no-build was set."
++    echo "[CODES] Try: ./codes --build"
++    exit 1
++  fi
++  echo "[CODES] Building (log: $log_build) ..."
++  # Build only (no run) so we can keep the terminal clean.
++  if ! (cd "$script_dir" && ./build-fast.sh >"$log_build" 2>&1); then
++    echo "[CODES] Build failed. Tail of log:"
++    tail -n 120 "$log_build" || true
++    exit 1
++  fi
++  # Persist stamp + binary path for fast future startups.
++  if [ -n "$current_head" ]; then
++    echo "$current_head" >"$stamp_file" || true
++  fi
++  built_bin="$(grep -E "^Binary location:" "$log_build" 2>/dev/null | tail -n 1 | sed -E 's/^Binary location: *//' | tr -d '\r' || true)"
++  if [ -n "$built_bin" ]; then
++    echo "$built_bin" >"$bin_file" || true
++  fi
++fi
++
++bin_path="$(resolve_latest_bin)" || {
++  echo "[CODES] Built binary not found under $CODE_HOME/working/_target-cache."
++  echo "[CODES] Try: ./codes --build"
++  exit 1
++}
++
++filtered_args=()
++for arg in "$@"; do
++  case "$arg" in
++    caiji|Caiji|CAIJI|采集)
++      ;;
++    -c|-C|--collect-menu|--收集|-m|--missing|--collect=missing|-s|--seen|--collect=seen|-a|--all|--collect|--collect=all|-0|--off|--collect=off|--build|--no-build)
++      ;;
++    *)
++      filtered_args+=("$arg")
++      ;;
++  esac
++done
++
++cd "$script_dir"
++exec "$bin_path" "${filtered_args[@]}"
+ 
+ cd "${script_dir}"
+ ./build-fast.sh run
+diff --git a/codes.cmd b/codes.cmd
+index 450663c7d..4375803c2 100644
+--- a/codes.cmd
++++ b/codes.cmd
+@@ -8,11 +8,39 @@ pushd "%~dp0" >nul
+ 
+ set "REPO_WIN=%CD%"
+ 
+-set "CODEX_HOME=%CD%\.code-home"
++REM Canonical home directory for this repo run.
++REM
++REM - CODE_HOME is the modern config/state root (defaults to %USERPROFILE%\.code)
++REM - CODEX_HOME is legacy/back-compat (defaults to %USERPROFILE%\.codex)
++REM
++REM Set BOTH so every subsystem reads/writes the same place.
++set "CODE_HOME=%USERPROFILE%\.codes"
++set "CODEX_HOME=%USERPROFILE%\.codes"
+ set "CODEX_LANG=zh-CN"
+ set "CODE_AUTO_TRUST=1"
+-set "CODE_I18N_COLLECT_MISSING=1"
+-set "CODE_HOME="
++set "CODE_I18N_COLLECT_MISSING="
++set "CODE_I18N_COLLECT_SEEN="
++
++REM Optional: enable collection only when requested.
++REM   codes --collect
++REM   codes --collect=missing
++REM   codes --collect=seen
++REM   codes --collect=all
++set "COLLECT_MODE=off"
++for %%A in (%*) do (
++  if /I "%%~A"=="--collect" set "COLLECT_MODE=all"
++  if /I "%%~A"=="--collect=missing" set "COLLECT_MODE=missing"
++  if /I "%%~A"=="--collect=seen" set "COLLECT_MODE=seen"
++  if /I "%%~A"=="--collect=all" set "COLLECT_MODE=all"
++  if /I "%%~A"=="--collect=off" set "COLLECT_MODE=off"
++)
++
++if /I "%COLLECT_MODE%"=="missing" set "CODE_I18N_COLLECT_MISSING=1"
++if /I "%COLLECT_MODE%"=="seen" set "CODE_I18N_COLLECT_SEEN=1"
++if /I "%COLLECT_MODE%"=="all" (
++  set "CODE_I18N_COLLECT_MISSING=1"
++  set "CODE_I18N_COLLECT_SEEN=1"
++)
+ 
+ REM Prefer Git for Windows bash.
+ set "BASH_EXE=C:\Program Files\Git\usr\bin\bash.exe"
+@@ -37,7 +65,7 @@ for %%A in (a b c d e f g h i j k l m n o p q r s t u v w x y z) do (
+ )
+ set "REPO_MSYS=/!REPO_DRIVE_L!!REPO_REST!"
+ 
+-"%BASH_EXE%" -lc "cd '!REPO_MSYS!'; export HOME='!HOME_MSYS!'; export PATH=\"$HOME/.cargo/bin:$PATH\"; export CODEX_HOME=\"$PWD/.code-home\"; unset CODE_HOME; export CODEX_LANG=zh-CN; export CODE_AUTO_TRUST=1; export CODE_I18N_COLLECT_MISSING=1; ./build-fast.sh run"
++"%BASH_EXE%" -lc "cd '!REPO_MSYS!'; export HOME='!HOME_MSYS!'; export PATH=\"$HOME/.cargo/bin:$PATH\"; export CODE_HOME=\"$HOME/.codes\"; export CODEX_HOME=\"$HOME/.codes\"; export CODEX_LANG=zh-CN; export CODE_AUTO_TRUST=1; if [ -n \"%CODE_I18N_COLLECT_MISSING%\" ]; then export CODE_I18N_COLLECT_MISSING=1; fi; if [ -n \"%CODE_I18N_COLLECT_SEEN%\" ]; then export CODE_I18N_COLLECT_SEEN=1; fi; mkdir -p \"$CODE_HOME\" || true; ./codes %*"
+ 
+ popd >nul
+ endlocal
+diff --git a/tools/i18n-collector/README.md b/tools/i18n-collector/README.md
+index 4b107b9fb..faaced3c6 100644
+--- a/tools/i18n-collector/README.md
++++ b/tools/i18n-collector/README.md
+@@ -26,30 +26,114 @@
+ 
+ 1. 正常使用（建议用 `codes` 启动），缺翻译会自动写入：
+ 
+-- 默认：`.code-home/i18n-missing.jsonl`
++- 默认：`.codes-home/i18n-missing.jsonl`
+ - 可改：设置环境变量 `CODE_I18N_COLLECT_PATH=<path>`
+ 
+ 2. 生成“待翻译任务包”（给 AI）：
+ 
+ ```powershell
+ node tools/i18n-collector/cli.mjs extract \
+-  --log ".code-home/i18n-missing.jsonl" \
++  --log ".codes-home/i18n-missing.jsonl" \
+   --en "code-rs/i18n/assets/en.json" \
+-  --out ".code-home/i18n-todo.zh-CN.json"
++  --out ".codes-home/i18n-todo.zh-CN.json"
+ ```
+ 
+ 输出文件是一个扁平 JSON：`{ "key": "English text", ... }`。
+ 
+-3. 让 AI 把 `i18n-todo.zh-CN.json` 翻译成 `i18n-zh-CN.patch.json`（同 key→中文）。
++3. 自动翻译（推荐，使用 Code CLI，不改启动命令、不会花屏）：
++
++```powershell
++node tools/i18n-collector/cli.mjs translate \
++  --in ".codes-home/i18n-todo.zh-CN.json" \
++  --out ".codes-home/i18n-zh-CN.patch.json" \
++  --runner coder \
++  --model code-gpt-5.2-codex \
++  --style zh-only
++```
++
++可选：TUI 空间足够时双语对照：`--style bilingual-tui`。
+ 
+ 4. 回写到语言包：
+ 
+ ```powershell
+ node tools/i18n-collector/cli.mjs apply \
+-  --in ".code-home/i18n-zh-CN.patch.json" \
++  --in ".codes-home/i18n-zh-CN.patch.json" \
+   --zh "code-rs/i18n/assets/zh-CN.json"
+ ```
+ 
++## 2.0) 统计（智能分类：CLI/TUI/站点）
++
++工具会基于 key 前缀（例如 `cli.*` / `tui.*` / `docs.*`/`site.*`）和 `app` 字段做启发式分类，并支持用规则文件覆盖。
++
++```powershell
++node tools/i18n-collector/cli.mjs stats \
++  --log ".codes-home/i18n-missing.jsonl" \
++  --en "code-rs/i18n/assets/en.json" \
++  --zh "code-rs/i18n/assets/zh-CN.json" \
++  --group-by type
++```
++
++按 app 维度查看（跨项目汇总时有用）：
++
++```powershell
++node tools/i18n-collector/cli.mjs stats \
++  --log ".codes-home/i18n-missing.jsonl" \
++  --en "code-rs/i18n/assets/en.json" \
++  --zh "code-rs/i18n/assets/zh-CN.json" \
++  --group-by app \
++  --top 20
++```
++
++可选：用规则文件覆盖分类（适配多个项目）：
++
++```json
++{
++  "rules": [
++    { "type": "tui", "key_prefixes": ["tui."] },
++    { "type": "cli", "key_prefixes": ["cli."] },
++    { "type": "site", "key_prefixes": ["docs.", "site.", "web."] },
++    { "type": "tui", "app_regex": "(code-tui|.*tui.*)" }
++  ]
++}
++```
++
++```powershell
++node tools/i18n-collector/cli.mjs stats \
++  --log ".codes-home/i18n-missing.jsonl" \
++  --en "code-rs/i18n/assets/en.json" \
++  --zh "code-rs/i18n/assets/zh-CN.json" \
++  --rules ".codes-home/i18n.rules.json" \
++  --group-by type
++```
++
++## 2.1) 一键闭环（sync）
++
++将 `extract -> translate -> apply` 串起来：
++
++```powershell
++node tools/i18n-collector/cli.mjs sync \
++  --log ".codes-home/i18n-missing.jsonl" \
++  --en "code-rs/i18n/assets/en.json" \
++  --zh "code-rs/i18n/assets/zh-CN.json" \
++  --runner coder \
++  --model code-gpt-5.2-codex \
++  --style zh-only \
++  --once
++```
++
++持续监听（缺口日志追加时自动回写）：
++
++```powershell
++node tools/i18n-collector/cli.mjs sync \
++  --log ".codes-home/i18n-missing.jsonl" \
++  --en "code-rs/i18n/assets/en.json" \
++  --zh "code-rs/i18n/assets/zh-CN.json" \
++  --runner coder \
++  --model code-gpt-5.2-codex \
++  --style zh-only \
++  --watch
++```
++
+ ## 3) 使用（其它项目）
+ 
+ 只要其它项目也把缺口写到同样的 JSONL（append 模式），本工具同样可以 `extract/apply`。
+@@ -59,4 +143,3 @@ node tools/i18n-collector/cli.mjs apply \
+ - `CODE_I18N_COLLECT_PATH=<somewhere>/i18n-missing.jsonl`
+ 
+ 这样你不用改启动命令也能持续积累（例如写到系统环境变量或全局 profile）。
+-
+diff --git a/tools/i18n-collector/cli.mjs b/tools/i18n-collector/cli.mjs
+index 8d382d1d9..7495e20d3 100644
+--- a/tools/i18n-collector/cli.mjs
++++ b/tools/i18n-collector/cli.mjs
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env node
+ import fs from 'node:fs';
+ import path from 'node:path';
++import childProcess from 'node:child_process';
+ 
+ function fail(msg) {
+   console.error(msg);
+@@ -43,6 +44,9 @@ function writeJson(filePath, obj) {
+ }
+ 
+ function* readJsonLines(filePath) {
++  if (!fs.existsSync(filePath)) {
++    return;
++  }
+   const raw = fs.readFileSync(filePath, 'utf8');
+   const lines = raw.split(/\r?\n/);
+   for (const line of lines) {
+@@ -61,7 +65,77 @@ function normalizeRecord(rec) {
+   if (!key) return null;
+   const missingIn = typeof rec?.missing_in === 'string' ? rec.missing_in : 'unknown';
+   const app = typeof rec?.app === 'string' ? rec.app : null;
+-  return { key, missingIn, app };
++  const fallbackText = typeof rec?.fallback_text === 'string' ? rec.fallback_text : null;
++  const event = typeof rec?.event === 'string' ? rec.event : null;
++  const locale = typeof rec?.locale === 'string' ? rec.locale : null;
++  return { key, missingIn, app, fallbackText, event, locale };
++}
++
++function safeRegex(pattern) {
++  try {
++    return new RegExp(pattern);
++  } catch {
++    return null;
++  }
++}
++
++function loadTypeRules(rulesPath) {
++  if (!rulesPath) return null;
++  const raw = readJson(rulesPath);
++  const rules = Array.isArray(raw?.rules) ? raw.rules : null;
++  if (!rules) {
++    fail(`Invalid rules file (expected { rules: [...] }): ${rulesPath}`);
++  }
++  const compiled = [];
++  for (const rule of rules) {
++    const type = typeof rule?.type === 'string' ? rule.type : null;
++    if (!type) continue;
++    const keyPrefixes = Array.isArray(rule?.key_prefixes)
++      ? rule.key_prefixes.filter(x => typeof x === 'string' && x.trim())
++      : [];
++    const appRegex = typeof rule?.app_regex === 'string' ? safeRegex(rule.app_regex) : null;
++    compiled.push({ type, keyPrefixes, appRegex });
++  }
++  return compiled;
++}
++
++function detectTypeWithRules({ key, app }, compiledRules) {
++  if (!compiledRules) return null;
++  for (const rule of compiledRules) {
++    if (rule.keyPrefixes.length > 0) {
++      if (rule.keyPrefixes.some(p => key.startsWith(p))) return rule.type;
++    }
++    if (rule.appRegex && typeof app === 'string') {
++      if (rule.appRegex.test(app)) return rule.type;
++    }
++  }
++  return null;
++}
++
++function detectTypeFallback({ key, app }) {
++  if (key.startsWith('tui.')) return 'tui';
++  if (key.startsWith('cli.')) return 'cli';
++  if (key.startsWith('docs.') || key.startsWith('site.') || key.startsWith('web.')) return 'site';
++  if (typeof app === 'string') {
++    const a = app.toLowerCase();
++    if (a.includes('tui')) return 'tui';
++    if (a.includes('cli')) return 'cli';
++  }
++  return 'unknown';
++}
++
++function detectType(rec, compiledRules) {
++  const fromRules = detectTypeWithRules(rec, compiledRules);
++  return fromRules || detectTypeFallback(rec);
++}
++
++function inc(map, key, n = 1) {
++  map.set(key, (map.get(key) || 0) + n);
++}
++
++function topEntries(map, top) {
++  const arr = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
++  return typeof top === 'number' && Number.isFinite(top) && top > 0 ? arr.slice(0, top) : arr;
+ }
+ 
+ function cmdExtract(args) {
+@@ -83,8 +157,10 @@ function cmdExtract(args) {
+     if (!n) continue;
+     if (n.missingIn !== 'zh-CN') continue;
+     const base = en[n.key];
+-    if (typeof base === 'string' && !(n.key in todo)) {
+-      todo[n.key] = base;
++    const fallback = n.fallbackText;
++    const text = typeof base === 'string' ? base : (typeof fallback === 'string' ? fallback : null);
++    if (typeof text === 'string' && !(n.key in todo)) {
++      todo[n.key] = text;
+     }
+   }
+ 
+@@ -92,6 +168,216 @@ function cmdExtract(args) {
+   console.log(`extract: wrote ${Object.keys(todo).length} keys -> ${outPath}`);
+ }
+ 
++function buildTodoFromLog({ logPath, enPath, zhPath }) {
++  const en = readJson(enPath);
++  if (typeof en !== 'object' || en == null || Array.isArray(en)) {
++    fail(`Expected flat JSON object: ${enPath}`);
++  }
++
++  const zh = readJson(zhPath);
++  if (typeof zh !== 'object' || zh == null || Array.isArray(zh)) {
++    fail(`Expected flat JSON object: ${zhPath}`);
++  }
++
++  const todo = {};
++  for (const rec of readJsonLines(logPath)) {
++    const n = normalizeRecord(rec);
++    if (!n) continue;
++    // Only treat explicit missing events as translation tasks.
++    if (n.event && n.event !== 'missing') continue;
++    if (n.missingIn !== 'zh-CN') continue;
++    if (typeof zh[n.key] === 'string' && zh[n.key].trim()) continue;
++
++    const base = en[n.key];
++    const fallback = n.fallbackText;
++    const text = typeof base === 'string' ? base : (typeof fallback === 'string' ? fallback : null);
++    if (typeof text === 'string') {
++      todo[n.key] = text;
++    }
++  }
++
++  const sorted = {};
++  for (const key of Object.keys(todo).sort()) {
++    sorted[key] = todo[key];
++  }
++  return sorted;
++}
++
++function cmdStats(args) {
++  const logPath = args.log;
++  const enPath = args.en;
++  const zhPath = args.zh;
++  const json = args.json === true;
++  const groupBy = args['group-by'] || 'type';
++  const top = args.top ? Number(args.top) : 20;
++  const rulesPath = args.rules || null;
++
++  if (!logPath) fail('stats requires --log <path>');
++  if (!enPath) fail('stats requires --en <path-to-en.json>');
++  if (!zhPath) fail('stats requires --zh <path-to-zh-CN.json>');
++
++  const compiledRules = loadTypeRules(rulesPath);
++
++  let total = 0;
++  const missingZh = new Set();
++  const missingEn = new Set();
++  const seenKeys = new Set();
++  const byType = new Map();
++  const byApp = new Map();
++  for (const rec of readJsonLines(logPath)) {
++    total++;
++    const n = normalizeRecord(rec);
++    if (!n) continue;
++    const t = detectType(n, compiledRules);
++    inc(byType, t);
++    inc(byApp, n.app || 'unknown');
++    if (n.event === 'seen') {
++      seenKeys.add(n.key);
++      continue;
++    }
++    if (n.missingIn === 'zh-CN') missingZh.add(n.key);
++    if (n.missingIn === 'en') missingEn.add(n.key);
++  }
++
++  const pending = buildTodoFromLog({ logPath, enPath, zhPath });
++  const payload = {
++    log: logPath,
++    rules: rulesPath,
++    total_records: total,
++    unique_missing_zh_cn: missingZh.size,
++    unique_missing_en: missingEn.size,
++    unique_seen: seenKeys.size,
++    pending_zh_cn: Object.keys(pending).length,
++    by_type: Object.fromEntries(byType.entries()),
++    by_app: Object.fromEntries(topEntries(byApp, top)),
++  };
++
++  if (json) {
++    console.log(JSON.stringify(payload, null, 2));
++    return;
++  }
++
++  console.log('i18n-collector stats');
++  console.log(`  log: ${payload.log}`);
++  if (payload.rules) console.log(`  rules: ${payload.rules}`);
++  console.log(`  total records: ${payload.total_records}`);
++  console.log(`  unique missing zh-CN: ${payload.unique_missing_zh_cn}`);
++  console.log(`  unique missing en: ${payload.unique_missing_en}`);
++  console.log(`  unique seen keys: ${payload.unique_seen}`);
++  console.log(`  pending zh-CN (needs translation): ${payload.pending_zh_cn}`);
++
++  if (groupBy === 'none') return;
++  if (groupBy === 'type') {
++    console.log('  by type:');
++    for (const [k, v] of topEntries(byType, 0)) {
++      console.log(`    ${k}: ${v}`);
++    }
++    return;
++  }
++  if (groupBy === 'app') {
++    console.log(`  by app (top ${top}):`);
++    for (const [k, v] of topEntries(byApp, top)) {
++      console.log(`    ${k}: ${v}`);
++    }
++    return;
++  }
++  fail(`Unknown --group-by: ${groupBy} (expected type|app|none)`);
++}
++
++function buildSchema() {
++  return {
++    type: 'object',
++    properties: {
++      translations: {
++        type: 'object',
++        additionalProperties: { type: 'string' },
++      },
++    },
++    required: ['translations'],
++    additionalProperties: false,
++  };
++}
++
++function cmdTranslate(args) {
++  const inPath = args.in;
++  const outPath = args.out;
++  const runner = args.runner || 'coder';
++  const model = args.model || 'code-gpt-5.2-codex';
++  const style = args.style || 'zh-only';
++  const maxSeconds = args['max-seconds'] ? Number(args['max-seconds']) : 600;
++
++  if (!inPath) fail('translate requires --in <todo.json>');
++  if (!outPath) fail('translate requires --out <translated.json>');
++  if (!Number.isFinite(maxSeconds) || maxSeconds <= 0) fail('translate --max-seconds must be a positive number');
++
++  const todo = readJson(inPath);
++  if (typeof todo !== 'object' || todo == null || Array.isArray(todo)) {
++    fail(`Expected flat JSON object: ${inPath}`);
++  }
++
++  const schemaPath = args.schema || path.join(path.dirname(outPath), 'i18n-translate.schema.json');
++  const rawOutPath = path.join(path.dirname(outPath), 'i18n-translate.raw.json');
++  writeJson(schemaPath, buildSchema());
++
++  const keys = Object.keys(todo);
++  const prompt = [
++    'You are a localization assistant.',
++    'Task: translate the provided map of i18n keys -> English strings into Simplified Chinese (zh-CN).',
++    'Output MUST be valid JSON that matches the provided JSON schema (object with {"translations":{...}}).',
++    '',
++    'Rules (critical):',
++    '- Do NOT translate command names, subcommands, flags, environment variable names, file paths, URLs, model names, tool names, error codes, JSON/protocol field names.',
++    '- Preserve any placeholders exactly, including braces segments like {name} or {path}. Do not add/remove placeholders.',
++    '- Preserve inline code in backticks `like_this` without translating the code tokens.',
++    '',
++    'Style preference:',
++    style === 'bilingual-tui'
++      ? '- Default: Chinese only. For keys starting with "tui.", you MAY use bilingual form "中文（English）" when the English is short and space likely allows; otherwise Chinese only.'
++      : '- Chinese only.',
++    '',
++    'Return translations for ALL keys. If you are unsure, still provide a reasonable Chinese translation.',
++    '',
++    'Input JSON (key -> English):',
++    JSON.stringify(todo),
++    '',
++  ].join('\n');
++
++  const execArgs = [
++    'exec',
++    '-',
++    '--model',
++    model,
++    '--output-schema',
++    schemaPath,
++    '--output-last-message',
++    rawOutPath,
++    '--max-seconds',
++    String(maxSeconds),
++  ];
++
++  const res = childProcess.spawnSync(runner, execArgs, {
++    input: prompt,
++    encoding: 'utf8',
++    stdio: ['pipe', 'inherit', 'inherit'],
++    env: { ...process.env },
++  });
++  if (res.error) {
++    fail(`Failed to run ${runner}: ${res.error}`);
++  }
++  if (res.status !== 0) {
++    fail(`${runner} exited with code ${res.status}`);
++  }
++
++  const raw = readJson(rawOutPath);
++  const translations = raw?.translations;
++  if (typeof translations !== 'object' || translations == null || Array.isArray(translations)) {
++    fail(`Translator output missing translations object: ${rawOutPath}`);
++  }
++
++  writeJson(outPath, translations);
++  console.log(`translate: wrote ${Object.keys(translations).length} keys -> ${outPath}`);
++}
++
+ function cmdApply(args) {
+   const inPath = args.in;
+   const zhPath = args.zh;
+@@ -121,12 +407,106 @@ function cmdApply(args) {
+   console.log(`apply: updated ${applied} keys -> ${zhPath}`);
+ }
+ 
++function cmdSync(args) {
++  const logPath = args.log;
++  const enPath = args.en;
++  const zhPath = args.zh;
++  const runner = args.runner || 'coder';
++  const model = args.model || 'code-gpt-5.2-codex';
++  const style = args.style || 'zh-only';
++  const maxSeconds = args['max-seconds'] ? Number(args['max-seconds']) : 600;
++  const watch = args.watch === true;
++  const once = args.once === true;
++  const debounceMs = args['debounce-ms'] ? Number(args['debounce-ms']) : 750;
++
++  if (!logPath) fail('sync requires --log <path>');
++  if (!enPath) fail('sync requires --en <path-to-en.json>');
++  if (!zhPath) fail('sync requires --zh <path-to-zh-CN.json>');
++  if (!Number.isFinite(maxSeconds) || maxSeconds <= 0) fail('sync --max-seconds must be a positive number');
++  if (args['debounce-ms'] && (!Number.isFinite(debounceMs) || debounceMs < 0)) {
++    fail('sync --debounce-ms must be >= 0');
++  }
++
++  const outDir = args['out-dir'] || path.dirname(logPath);
++  const todoPath = path.join(outDir, 'i18n-todo.zh-CN.json');
++  const patchPath = path.join(outDir, 'i18n-zh-CN.patch.json');
++
++  function syncOnce() {
++    if (!fs.existsSync(logPath)) {
++      console.log(`sync: log not found yet -> ${logPath}`);
++      return;
++    }
++
++    const todo = buildTodoFromLog({ logPath, enPath, zhPath });
++    const todoCount = Object.keys(todo).length;
++    if (todoCount === 0) {
++      console.log('sync: no pending zh-CN keys');
++      return;
++    }
++
++    writeJson(todoPath, todo);
++    console.log(`sync: extracted ${todoCount} keys -> ${todoPath}`);
++
++    cmdTranslate({
++      in: todoPath,
++      out: patchPath,
++      runner,
++      model,
++      style,
++      'max-seconds': String(maxSeconds),
++    });
++
++    cmdApply({ in: patchPath, zh: zhPath });
++  }
++
++  if (once || !watch) {
++    syncOnce();
++    return;
++  }
++
++  console.log(`sync: watching ${logPath}`);
++  let timer = null;
++  const schedule = () => {
++    if (timer) clearTimeout(timer);
++    timer = setTimeout(() => {
++      timer = null;
++      syncOnce();
++    }, debounceMs);
++  };
++
++  const dir = path.dirname(logPath);
++  try {
++    fs.mkdirSync(dir, { recursive: true });
++  } catch (e) {
++    fail(`sync: failed to prepare watch directory ${dir}: ${e}`);
++  }
++  try {
++    const watcher = fs.watch(dir, { persistent: true }, (_event, filename) => {
++      if (filename && filename !== path.basename(logPath)) return;
++      schedule();
++    });
++
++    // Run once on startup so an existing log is processed immediately.
++    schedule();
++
++    process.on('SIGINT', () => {
++      watcher.close();
++      process.exit(0);
++    });
++  } catch (e) {
++    fail(`sync: failed to watch directory ${dir}: ${e}`);
++  }
++}
++
+ function cmdHelp() {
+   console.log(`i18n-collector
+ 
+ Commands:
+   extract --log <jsonl> --en <en.json> --out <todo.json>
++  stats   --log <jsonl> --en <en.json> --zh <zh-CN.json> [--json] [--group-by type|app|none] [--top 20] [--rules <rules.json>]
++  translate --in <todo.json> --out <translated.json> [--runner coder] [--model code-gpt-5.2-codex] [--style zh-only|bilingual-tui]
+   apply   --in <translated.json> --zh <zh-CN.json>
++  sync    --log <jsonl> --en <en.json> --zh <zh-CN.json> [--watch] [--once] [--out-dir <dir>] [--runner coder] [--model code-gpt-5.2-codex] [--style zh-only|bilingual-tui]
+ `);
+ }
+ 
+@@ -138,9 +518,18 @@ function main() {
+     case 'extract':
+       cmdExtract(args);
+       break;
++    case 'stats':
++      cmdStats(args);
++      break;
++    case 'translate':
++      cmdTranslate(args);
++      break;
+     case 'apply':
+       cmdApply(args);
+       break;
++    case 'sync':
++      cmdSync(args);
++      break;
+     case 'help':
+     case undefined:
+       cmdHelp();
+@@ -151,4 +540,3 @@ function main() {
+ }
+ 
+ main();
+-
+diff --git a/交接文档/国际化汉化交接说明.md b/交接文档/国际化汉化交接说明.md
+index 9d8f5e07e..1bb22ada6 100644
+--- a/交接文档/国际化汉化交接说明.md
++++ b/交接文档/国际化汉化交接说明.md
+@@ -32,7 +32,7 @@
+ 
+ - 开关：`CODE_I18N_COLLECT_MISSING=1`
+ - 输出文件：
+-  - 默认：`$CODEX_HOME/i18n-missing.jsonl`（`codes` 已把 `CODEX_HOME` 指到仓库内 `.code-home/`）
++  - 默认：`$CODE_HOME/i18n-missing.jsonl`（`codes` 会把 `CODE_HOME`/`CODEX_HOME` 指到仓库内 `.codes-home/`）
+   - 可覆盖：`CODE_I18N_COLLECT_PATH=<path>`
+ 
+ 记录格式：JSONL，每行一条，例如：`{"ts_ms":...,"app":"code","missing_in":"zh-CN","key":"tui.xxx","fallback_text":"..."}`。
+@@ -59,7 +59,7 @@
+ 
+ - Repo 根目录：`codes` / `codes.cmd`
+ - 它们会设置：
+-  - `CODEX_HOME=$PWD/.code-home`（把配置/状态落到仓库本地，避免污染全局）
++  - `CODE_HOME=$PWD/.codes-home`（把配置/状态落到仓库本地，避免污染全局）
+   - `CODEX_LANG=zh-CN`（强制中文）
+   - `CODE_AUTO_TRUST=1`（尽量避免交互式 trust 提示）
+ 
+@@ -114,14 +114,14 @@
+ 
+ ## 5. 模型/子代理设置如何持久化（你要求只用 GPT-5.2-Codex）
+ 
+-你当前的 `codes` 启动方式会把 `CODEX_HOME` 指到仓库的 `.code-home/`。
++你当前的 `codes` 启动方式会把 `CODE_HOME`/`CODEX_HOME` 指到仓库的 `.codes-home/`。
+ 
+-- 已在 `D:\OneDrive\steven\code\ai\12CLI\code-main\.code-home/config.toml` 写入：
++- 已在 `D:\OneDrive\steven\code\ai\12CLI\code-main\.codes-home/config.toml` 写入：
+   - `[[subagents.commands]] name = "plan"|"solve"|"code"` 都固定 `agents = ["code-gpt-5.2-codex"]`
+ 
+ 如果你不用 `codes`，而是用全局配置，则把相同配置写入：`~/.code/config.toml`。
+ 
+-附：当前仓库内已写入该配置（用于 `codes`）：`.code-home/config.toml:1`
++附：当前仓库内已写入该配置（用于 `codes`）：`.codes-home/config.toml:1`
+ 
+ ## 6. 交接给“做汉化的 AI”时的任务拆分（建议）
+ 
+diff --git a/交接文档/持续式国际化采集工作流.md b/交接文档/持续式国际化采集工作流.md
+index 09fe8ad8e..d833b3b7a 100644
+--- a/交接文档/持续式国际化采集工作流.md
++++ b/交接文档/持续式国际化采集工作流.md
+@@ -14,9 +14,9 @@
+ 
+ 默认输出：`$CODEX_HOME/i18n-missing.jsonl`
+ 
+-你用 `codes` 启动时，`CODEX_HOME` 指向仓库内 `.code-home/`，所以通常文件路径是：
++你用 `codes` 启动时，`CODE_HOME`/`CODEX_HOME` 指向仓库内 `.codes-home/`，所以通常文件路径是：
+ 
+-- `.code-home/i18n-missing.jsonl`
++- `.codes-home/i18n-missing.jsonl`
+ 
+ 如要改位置：
+ 
+@@ -37,28 +37,31 @@
+ 
+ ```powershell
+ node tools/i18n-collector/cli.mjs extract `
+-  --log ".code-home/i18n-missing.jsonl" `
++  --log ".codes-home/i18n-missing.jsonl" `
+   --en "code-rs/i18n/assets/en.json" `
+-  --out ".code-home/i18n-todo.zh-CN.json"
++  --out ".codes-home/i18n-todo.zh-CN.json"
+ ```
+ 
+-### 2.2 让 AI 翻译
++### 2.2 让 AI 翻译（自动化）
+ 
+-把 `.code-home/i18n-todo.zh-CN.json` 丢给任意 AI，让它输出一个同结构文件：
++直接一条命令自动翻译（使用 Code CLI；不会接管终端渲染）：
+ 
+-- `.code-home/i18n-zh-CN.patch.json`
+-
+-要求：
++```powershell
++node tools/i18n-collector/cli.mjs translate `
++  --in ".codes-home/i18n-todo.zh-CN.json" `
++  --out ".codes-home/i18n-zh-CN.patch.json" `
++  --runner coder `
++  --model code-gpt-5.2-codex `
++  --style zh-only
++```
+ 
+-- key 不变
+-- value 默认只输出中文；仅在 TUI 且空间足够时可用 `中文（English）` 做对照
+-- 不要翻译命令/flag/env 这些“不可翻译项”
++可选：TUI 空间足够时双语对照：`--style bilingual-tui`。
+ 
+ ### 2.3 回写到 `zh-CN.json`
+ 
+ ```powershell
+ node tools/i18n-collector/cli.mjs apply `
+-  --in ".code-home/i18n-zh-CN.patch.json" `
++  --in ".codes-home/i18n-zh-CN.patch.json" `
+   --zh "code-rs/i18n/assets/zh-CN.json"
+ ```
+ 
