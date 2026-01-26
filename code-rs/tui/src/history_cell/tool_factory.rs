@@ -48,7 +48,7 @@ pub(crate) fn new_active_mcp_tool_call(invocation: McpInvocation) -> ToolCallCel
         id: HistoryId::ZERO,
         call_id: None,
         status: HistoryToolStatus::Running,
-        title: "Working".to_string(),
+        title: code_i18n::tr(code_i18n::current_language(), "tui.status_summary.working").to_string(),
         duration: None,
         arguments: vec![ToolArgument {
             name: "invocation".to_string(),
@@ -71,7 +71,7 @@ pub(crate) fn new_active_custom_tool_call(tool_name: String, args: Option<String
         id: HistoryId::ZERO,
         call_id: None,
         status: HistoryToolStatus::Running,
-        title: "Working".to_string(),
+        title: code_i18n::tr(code_i18n::current_language(), "tui.status_summary.working").to_string(),
         duration: None,
         arguments: vec![ToolArgument {
             name: "invocation".to_string(),
@@ -86,19 +86,19 @@ pub(crate) fn new_active_custom_tool_call(tool_name: String, args: Option<String
 // Friendly present-participle titles for running browser tools
 fn browser_running_title(tool_name: &str) -> &'static str {
     match tool_name {
-        "browser_click" => "Clicking...",
-        "browser_type" => "Typing...",
-        "browser_key" => "Sending key...",
-        "browser_javascript" => "Running JavaScript...",
-        "browser_scroll" => "Scrolling...",
-        "browser_open" => "Opening...",
-        "browser_close" => "Closing...",
-        "browser_status" => "Checking status...",
-        "browser_history" => "Navigating...",
-        "browser_inspect" => "Inspecting...",
-        "browser_console" => "Reading console...",
-        "browser_move" => "Moving...",
-        _ => "Working...",
+        "browser_click" => code_i18n::tr_plain("tui.tool.browser.clicking"),
+        "browser_type" => code_i18n::tr_plain("tui.tool.browser.typing"),
+        "browser_key" => code_i18n::tr_plain("tui.tool.browser.sending_key"),
+        "browser_javascript" => code_i18n::tr_plain("tui.tool.browser.running_javascript"),
+        "browser_scroll" => code_i18n::tr_plain("tui.tool.browser.scrolling"),
+        "browser_open" => code_i18n::tr_plain("tui.tool.browser.opening"),
+        "browser_close" => code_i18n::tr_plain("tui.tool.browser.closing"),
+        "browser_status" => code_i18n::tr_plain("tui.tool.browser.checking_status"),
+        "browser_history" => code_i18n::tr_plain("tui.tool.browser.navigating"),
+        "browser_inspect" => code_i18n::tr_plain("tui.tool.browser.inspecting"),
+        "browser_console" => code_i18n::tr_plain("tui.tool.browser.reading_console"),
+        "browser_move" => code_i18n::tr_plain("tui.tool.browser.moving"),
+        _ => code_i18n::tr_plain("tui.status_summary.working"),
     }
 }
 

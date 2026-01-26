@@ -9,6 +9,7 @@ use std::cell::Cell;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
+use code_i18n;
 
 use super::bottom_pane_view::{BottomPaneView, ConditionalUpdate};
 use super::{BottomPane, popup_consts::MAX_POPUP_ROWS};
@@ -217,8 +218,16 @@ impl BottomPaneView<'_> for ResumeSelectionView {
             Constraint::Min(10),    // Last User Message
         ];
 
-        let header = Row::new(vec!["Modified", "Created", "User Msgs", "Branch", "Last User Message"]).height(1)
-            .style(Style::default().fg(crate::colors::text_bright()));
+        let ui_language = code_i18n::current_language();
+        let header = Row::new(vec![
+            code_i18n::tr(ui_language, "tui.resume.header.modified"),
+            code_i18n::tr(ui_language, "tui.resume.header.created"),
+            code_i18n::tr(ui_language, "tui.resume.header.user_msgs"),
+            code_i18n::tr(ui_language, "tui.resume.header.branch"),
+            code_i18n::tr(ui_language, "tui.resume.header.last_user_message"),
+        ])
+        .height(1)
+        .style(Style::default().fg(crate::colors::text_bright()));
 
         let table = Table::new(rows_iter, widths)
             .header(header)
@@ -229,13 +238,16 @@ impl BottomPaneView<'_> for ResumeSelectionView {
         // Footer hints
         // Draw a spacer line above footer (implicit by not drawing into that row)
         let footer = Rect { x: inner.x.saturating_add(1), y: inner.y + inner.height.saturating_sub(1), width: inner.width.saturating_sub(1), height: 1 };
+        let footer_nav = code_i18n::tr(ui_language, "tui.resume.footer.navigate");
+        let footer_select = code_i18n::tr(ui_language, "tui.resume.footer.select");
+        let footer_cancel = code_i18n::tr(ui_language, "tui.resume.footer.cancel");
         let footer_line = Line::from(vec![
             Span::styled("↑↓ PgUp PgDn", Style::default().fg(crate::colors::light_blue())),
-            Span::raw(" Navigate  "),
+            Span::raw(format!(" {footer_nav}  ")),
             Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::raw(" Select  "),
+            Span::raw(format!(" {footer_select}  ")),
             Span::styled("Esc", Style::default().fg(crate::colors::error())),
-            Span::raw(" Cancel"),
+            Span::raw(format!(" {footer_cancel}")),
         ]);
         Paragraph::new(footer_line)
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))

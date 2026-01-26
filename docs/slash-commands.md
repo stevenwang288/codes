@@ -56,6 +56,7 @@ Notes
 ## UX & Display
 
 - `/theme`: customize the app theme.
+- `/lang <en|zh-CN>`: switch UI language.
 - `/verbosity (high|medium|low)`: change text verbosity.
 - `/model`: choose your default model.
 - `/reasoning (minimal|low|medium|high)`: change reasoning effort.

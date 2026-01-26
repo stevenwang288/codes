@@ -30,8 +30,6 @@ pub(crate) struct AutoDriveSettingsView {
 }
 
 impl AutoDriveSettingsView {
-    const PANEL_TITLE: &'static str = "Auto Drive Settings";
-
     pub fn new(
         app_event_tx: AppEventSender,
         model: String,
@@ -98,12 +96,12 @@ impl AutoDriveSettingsView {
 
     fn reasoning_label(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::XHigh => "XHigh",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Minimal => "Minimal",
-            ReasoningEffort::None => "None",
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
         }
     }
 
@@ -191,17 +189,17 @@ impl AutoDriveSettingsView {
         let indicator = if selected { "›" } else { " " };
         let prefix = format!("{indicator} ");
         let (label, enabled) = match index {
-            0 => ("Auto Drive model", true),
+            0 => (code_i18n::tr_plain("tui.auto_drive_settings.option.model"), true),
             1 => (
-                "Agents enabled (uses multiple agents to speed up complex tasks)",
+                code_i18n::tr_plain("tui.auto_drive_settings.option.agents_enabled"),
                 self.agents_enabled,
             ),
             2 => (
-                "Diagnostics enabled (monitors and adjusts system in real time)",
+                code_i18n::tr_plain("tui.auto_drive_settings.option.diagnostics_enabled"),
                 self.diagnostics_enabled,
             ),
             3 => (
-                "Auto-continue delay",
+                code_i18n::tr_plain("tui.auto_drive_settings.option.auto_continue_delay"),
                 matches!(self.continue_mode, AutoContinueMode::Manual),
             ),
             _ => ("", false),
@@ -219,14 +217,20 @@ impl AutoDriveSettingsView {
         match index {
             0 => {
                 if self.use_chat_model {
-                    spans.push(Span::styled("Follow Chat Mode", label_style));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.model_selection.follow_chat.title"),
+                        label_style,
+                    ));
                     if selected {
-                        spans.push(Span::raw("  (Enter to change)"));
+                        spans.push(Span::raw(format!(
+                            "  {}",
+                            code_i18n::tr_plain("tui.auto_drive_settings.enter_to_change")
+                        )));
                     }
                 } else {
                     let model_label = self.model.trim();
                     let display = if model_label.is_empty() {
-                        "(not set)".to_string()
+                        code_i18n::tr_plain("tui.auto_drive_settings.not_set").to_string()
                     } else {
                         format!(
                             "{} · {}",
@@ -236,7 +240,10 @@ impl AutoDriveSettingsView {
                     };
                     spans.push(Span::styled(display, label_style));
                     if selected {
-                        spans.push(Span::raw("  (Enter to change)"));
+                        spans.push(Span::raw(format!(
+                            "  {}",
+                            code_i18n::tr_plain("tui.auto_drive_settings.enter_to_change")
+                        )));
                     }
                 }
             }
@@ -251,7 +258,7 @@ impl AutoDriveSettingsView {
                 spans.push(Span::styled(label.to_string(), label_style));
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled(
-                    self.continue_mode.label().to_string(),
+                    Self::continue_mode_label(self.continue_mode).to_string(),
                     Style::default()
                         .fg(colors::text_dim())
                         .add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() }),
@@ -274,19 +281,34 @@ impl AutoDriveSettingsView {
         let footer_style = Style::default().fg(colors::text_dim());
         lines.push(Line::from(vec![
             Span::styled("Enter", Style::default().fg(colors::primary())),
-            Span::styled(" select/toggle", footer_style),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.auto_drive_settings.footer.select_toggle")),
+                footer_style,
+            ),
             Span::raw("   "),
             Span::styled("←/→", Style::default().fg(colors::primary())),
-            Span::styled(" adjust delay", footer_style),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.auto_drive_settings.footer.adjust_delay")),
+                footer_style,
+            ),
             Span::raw("   "),
             Span::styled("Esc", Style::default().fg(colors::primary())),
-            Span::styled(" close", footer_style),
+            Span::styled(format!(" {}", code_i18n::tr_plain("tui.common.close")), footer_style),
             Span::raw("   "),
             Span::styled("Ctrl+S", Style::default().fg(colors::primary())),
-            Span::styled(" close", footer_style),
+            Span::styled(format!(" {}", code_i18n::tr_plain("tui.common.close")), footer_style),
         ]));
 
         lines
+    }
+
+    fn continue_mode_label(mode: AutoContinueMode) -> &'static str {
+        match mode {
+            AutoContinueMode::Immediate => code_i18n::tr_plain("tui.auto_continue.immediate"),
+            AutoContinueMode::TenSeconds => code_i18n::tr_plain("tui.auto_continue.ten_seconds"),
+            AutoContinueMode::SixtySeconds => code_i18n::tr_plain("tui.auto_continue.sixty_seconds"),
+            AutoContinueMode::Manual => code_i18n::tr_plain("tui.auto_continue.manual"),
+        }
     }
 
     pub fn handle_key_event_direct(&mut self, key_event: KeyEvent) {
@@ -403,7 +425,7 @@ impl<'a> BottomPaneView<'a> for AutoDriveSettingsView {
         render_panel(
             area,
             buf,
-            Self::PANEL_TITLE,
+            code_i18n::tr_plain("tui.settings.panel_title.auto_drive"),
             PanelFrameStyle::bottom_pane(),
             |inner, buf| self.render_panel_body(inner, buf),
         );

@@ -1,13 +1,28 @@
 //! Help overlay key handling similar to the diff overlay, but simpler.
 
 use super::ChatWidget;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 // Returns true if the key was handled by the guide overlay (or toggled it closed).
 pub(super) fn handle_help_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
     // If no guide overlay, only intercept Ctrl+G to open it.
     if chat.help.overlay.is_none() {
-        if let KeyEvent { code: KeyCode::Char('g'), modifiers: crossterm::event::KeyModifiers::CONTROL, .. } = key_event {
+        let is_ctrl_g = matches!(
+            key_event,
+            KeyEvent {
+                code: KeyCode::Char('g'),
+                modifiers: KeyModifiers::CONTROL,
+                ..
+            }
+        ) || matches!(
+            key_event,
+            KeyEvent {
+                code: KeyCode::Char('\u{7}'),
+                modifiers,
+                ..
+            } if modifiers.is_empty()
+        );
+        if is_ctrl_g {
             chat.toggle_help_popup();
             return true;
         }
@@ -56,8 +71,8 @@ pub(super) fn handle_help_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) ->
             chat.request_redraw();
             true
         }
-        KeyCode::Esc | KeyCode::Char('g') => {
-            // Close on Esc or Ctrl+G
+        KeyCode::Esc => {
+            // Close on Esc
             chat.help.overlay = None;
             chat.request_redraw();
             true

@@ -925,6 +925,13 @@ pub(super) async fn submission_loop(
                     send_no_session_event(sub.id).await;
                 }
             }
+            Op::UpdateValidationHarness { enable } => {
+                if let Some(sess) = sess.as_ref() {
+                    sess.update_validation_harness(enable);
+                } else {
+                    send_no_session_event(sub.id).await;
+                }
+            }
             Op::AddToHistory { text } => {
                 // TODO: What should we do if we got AddToHistory before ConfigureSession?
                 // currently, if ConfigureSession has resume path, this history will be ignored
@@ -2053,6 +2060,11 @@ async fn run_turn(
             }
             Err(CodexErr::UsageNotIncluded) => return Err(CodexErr::UsageNotIncluded),
             Err(CodexErr::QuotaExceeded) => return Err(CodexErr::QuotaExceeded),
+            Err(CodexErr::AuthRefreshPermanent(msg)) => {
+                // Permanent auth failures should not participate in stream retry loops.
+                // Retrying here leads to a noisy "Auto-retrying…" loop that feels like the app cannot start.
+                return Err(CodexErr::AuthRefreshPermanent(msg));
+            }
             Err(e) => {
                 // Detect context-window overflow and auto-run a compact summarization once
                 if !did_auto_compact {

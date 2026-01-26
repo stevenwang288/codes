@@ -1014,6 +1014,28 @@ pub fn set_validation_tool_enabled(
     Ok(())
 }
 
+/// Persist `[validation].patch_harness = <enabled>`.
+pub fn set_validation_patch_harness_enabled(
+    code_home: &Path,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let config_path = code_home.join(CONFIG_TOML_FILE);
+    let read_path = resolve_code_path_for_read(code_home, Path::new(CONFIG_TOML_FILE));
+    let mut doc = match std::fs::read_to_string(&read_path) {
+        Ok(s) => s.parse::<DocumentMut>()?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => DocumentMut::new(),
+        Err(e) => return Err(e.into()),
+    };
+
+    doc["validation"]["patch_harness"] = toml_edit::value(enabled);
+
+    std::fs::create_dir_all(code_home)?;
+    let tmp = NamedTempFile::new_in(code_home)?;
+    std::fs::write(tmp.path(), doc.to_string())?;
+    tmp.persist(config_path)?;
+    Ok(())
+}
+
 /// Persist per-project access mode under `[projects."<path>"]` with
 /// `approval_policy` and `sandbox_mode`.
 pub fn set_project_access_mode(

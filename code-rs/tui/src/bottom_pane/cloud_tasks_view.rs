@@ -44,9 +44,10 @@ impl CloudTasksView {
             tasks,
             rows,
             state,
-            env_label: env_label.unwrap_or_else(|| "All environments".to_string()),
+            env_label: env_label
+                .unwrap_or_else(|| code_i18n::tr_plain("tui.cloud.env.all").to_string()),
             env_filter,
-            footer_hint: "↑↓ select · Enter actions · r refresh · n new · e environments · Esc close".to_string(),
+            footer_hint: code_i18n::tr_plain("tui.cloud.footer_hint").to_string(),
             app_event_tx,
             complete: false,
         };

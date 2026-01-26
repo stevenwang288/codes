@@ -1,0 +1,20 @@
+[package]
+name = "code-utils-i18n-scan"
+version = { workspace = true }
+edition = { workspace = true }
+
+[[bin]]
+name = "code-i18n-scan"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+proc-macro2 = "1"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+syn = { version = "2", features = ["full", "visit"] }
+walkdir = { workspace = true }

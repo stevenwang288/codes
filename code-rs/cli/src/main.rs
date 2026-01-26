@@ -28,6 +28,7 @@ use code_responses_api_proxy::Args as ResponsesApiProxyArgs;
 use code_tui::Cli as TuiCli;
 use code_tui::ExitSummary;
 use code_tui::resume_command_name;
+use code_i18n;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fs;
@@ -453,9 +454,12 @@ async fn cli_main(code_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()>
             }
             if let Some(session_id) = session_id {
                 println!(
-                    "To continue this session, run {} resume {}",
-                    resume_command_name(),
-                    session_id
+                    "{}",
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "cli.resume.continue",
+                        &[("cmd", resume_command_name()), ("session_id", &session_id.to_string())],
+                    )
                 );
             }
         }
@@ -518,9 +522,12 @@ async fn cli_main(code_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()>
             }
             if let Some(session_id) = session_id {
                 println!(
-                    "To continue this session, run {} resume {}",
-                    resume_command_name(),
-                    session_id
+                    "{}",
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "cli.resume.continue",
+                        &[("cmd", resume_command_name()), ("session_id", &session_id.to_string())],
+                    )
                 );
             }
         }
@@ -543,7 +550,8 @@ async fn cli_main(code_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()>
                         .await;
                     } else if login_cli.api_key.is_some() {
                         eprintln!(
-                            "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`."
+                            "{}",
+                            code_i18n::tr_plain("cli.login.api_key_flag_deprecated"),
                         );
                         std::process::exit(1);
                     } else if login_cli.with_api_key {
@@ -667,22 +675,61 @@ fn run_bridge_subscription(cmd: BridgeSubscriptionCommand) -> anyhow::Result<()>
         if override_path.exists() {
             fs::remove_file(&override_path).context("failed to remove subscription override")?;
             println!(
-                "Removed {}. The running Code session will revert to defaults (errors only) within a few seconds.",
-                override_path.display()
+                "{}",
+                code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "cli.bridge.subscription.removed_override",
+                    &[("path", &override_path.display().to_string())],
+                )
             );
         } else {
-            println!("No override file to remove at {}", override_path.display());
+            println!(
+                "{}",
+                code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "cli.bridge.subscription.no_override_file",
+                    &[("path", &override_path.display().to_string())],
+                )
+            );
         }
         return Ok(());
     }
 
     if cmd.show && cmd.levels.is_none() && cmd.capabilities.is_none() && cmd.filter.is_none() {
         let sub = read_subscription_file(&override_path)?;
-        println!("Subscription override path: {}", override_path.display());
-        println!("levels       : {}", sub.levels.join(", "));
-        println!("capabilities : {}", sub.capabilities.join(", "));
-        println!("llm_filter   : {}", sub.llm_filter);
-        println!("(Running Code picks up changes every ~5s.)");
+        println!(
+            "{}",
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "cli.bridge.subscription.override_path",
+                &[("path", &override_path.display().to_string())],
+            )
+        );
+        println!(
+            "{}",
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "cli.bridge.subscription.levels",
+                &[("value", &sub.levels.join(", "))],
+            )
+        );
+        println!(
+            "{}",
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "cli.bridge.subscription.capabilities",
+                &[("value", &sub.capabilities.join(", "))],
+            )
+        );
+        println!(
+            "{}",
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "cli.bridge.subscription.llm_filter",
+                &[("value", sub.llm_filter.as_str())],
+            )
+        );
+        println!("{}", code_i18n::tr_plain("cli.bridge.subscription.note_resubscribe"));
         return Ok(());
     }
 
@@ -704,11 +751,39 @@ fn run_bridge_subscription(cmd: BridgeSubscriptionCommand) -> anyhow::Result<()>
     let data = serde_json::to_string_pretty(&sub).context("serialize subscription")?;
     fs::write(&override_path, data).context("write subscription override")?;
 
-    println!("Updated {}", override_path.display());
-    println!("levels       : {}", sub.levels.join(", "));
-    println!("capabilities : {}", sub.capabilities.join(", "));
-    println!("llm_filter   : {}", sub.llm_filter);
-    println!("Running Code session will resubscribe within ~5s.");
+    println!(
+        "{}",
+        code_i18n::tr_args(
+            code_i18n::current_language(),
+            "cli.bridge.subscription.updated",
+            &[("path", &override_path.display().to_string())],
+        )
+    );
+    println!(
+        "{}",
+        code_i18n::tr_args(
+            code_i18n::current_language(),
+            "cli.bridge.subscription.levels",
+            &[("value", &sub.levels.join(", "))],
+        )
+    );
+    println!(
+        "{}",
+        code_i18n::tr_args(
+            code_i18n::current_language(),
+            "cli.bridge.subscription.capabilities",
+            &[("value", &sub.capabilities.join(", "))],
+        )
+    );
+    println!(
+        "{}",
+        code_i18n::tr_args(
+            code_i18n::current_language(),
+            "cli.bridge.subscription.llm_filter",
+            &[("value", sub.llm_filter.as_str())],
+        )
+    );
+    println!("{}", code_i18n::tr_plain("cli.bridge.subscription.resubscribe_soon"));
     Ok(())
 }
 
@@ -716,9 +791,7 @@ async fn run_bridge_list(_cmd: BridgeListCommand) -> anyhow::Result<()> {
     let cwd = std::env::current_dir().context("cannot read current dir")?;
     let targets = bridge::discover_bridge_targets(&cwd)?;
     if targets.is_empty() {
-        println!(
-            "No Code Bridge metadata found. Start `code-bridge-host` in this workspace and try again."
-        );
+        println!("{}", code_i18n::tr_plain("cli.bridge.list.none_found"));
         return Ok(());
     }
 
@@ -730,13 +803,44 @@ async fn run_bridge_list(_cmd: BridgeListCommand) -> anyhow::Result<()> {
         };
         let indent = if targets.len() > 1 { "   " } else { "" };
 
-        println!("{}Bridge metadata : {}", prefix, target.meta_path.display());
-        println!("{}url             : {}", indent, target.meta.url);
+        println!(
+            "{}",
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "cli.bridge.list.meta_path",
+                &[
+                    ("prefix", prefix.as_str()),
+                    ("path", &target.meta_path.display().to_string())
+                ],
+            )
+        );
+        println!(
+            "{}",
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "cli.bridge.list.url",
+                &[("indent", indent), ("url", target.meta.url.as_str())],
+            )
+        );
         if let Some(ws) = target.meta.workspace_path.as_deref() {
-            println!("{}workspace       : {ws}", indent);
+            println!(
+                "{}",
+                code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "cli.bridge.list.workspace",
+                    &[("indent", indent), ("ws", ws)],
+                )
+            );
         }
         if let Some(pid) = target.meta.pid {
-            println!("{}host pid        : {pid}", indent);
+            println!(
+                "{}",
+                code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "cli.bridge.list.host_pid",
+                    &[("indent", indent), ("pid", &pid.to_string())],
+                )
+            );
         }
 
         let hb = match target.heartbeat_age_ms {

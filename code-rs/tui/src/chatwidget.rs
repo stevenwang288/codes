@@ -62,6 +62,8 @@ use serde_json::Value as JsonValue;
 
 
 mod diff_handlers;
+mod lang_handlers;
+mod mode_handlers;
 mod agent_summary;
 mod esc;
 mod modals;
@@ -218,16 +220,26 @@ use crate::history::compat::{
     ContextRecord,
 };
 
-pub(crate) const DOUBLE_ESC_HINT: &str = "undo timeline";
-const AUTO_ESC_EXIT_HINT: &str = "Press Esc to exit Auto Drive";
-const AUTO_ESC_EXIT_HINT_DOUBLE: &str = "Press Esc again to exit Auto Drive";
 const AUTO_COMPLETION_CELEBRATION_DURATION: Duration = Duration::from_secs(5);
 const HISTORY_ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(120);
 const AUTO_BOOTSTRAP_GOAL_PLACEHOLDER: &str = "Deriving goal from recent conversation";
-const AUTO_DRIVE_SESSION_SUMMARY_NOTICE: &str = "Summarizing session";
 const AUTO_DRIVE_SESSION_SUMMARY_PROMPT: &str =
     include_str!("../prompt_for_auto_drive_session_summary.md");
 const CONTEXT_DELTA_HISTORY: usize = 10;
+
+fn is_auto_drive_exit_hint(hint: &str) -> bool {
+    hint == code_i18n::tr(code_i18n::Language::En, "tui.auto_drive.exit_hint")
+        || hint == code_i18n::tr(code_i18n::Language::En, "tui.auto_drive.exit_hint_double")
+        || hint == code_i18n::tr(code_i18n::Language::ZhCn, "tui.auto_drive.exit_hint")
+        || hint == code_i18n::tr(code_i18n::Language::ZhCn, "tui.auto_drive.exit_hint_double")
+}
+
+fn is_cancelled_by_user_message(text: &str) -> bool {
+    let trimmed = text.trim();
+    trimmed == "Cancelled by user."
+        || trimmed == code_i18n::tr(code_i18n::Language::En, "tui.common.cancelled_by_user")
+        || trimmed == code_i18n::tr(code_i18n::Language::ZhCn, "tui.common.cancelled_by_user")
+}
 
 struct MergeRepoState {
     git_root: PathBuf,
@@ -1479,6 +1491,12 @@ struct RenderRequestSeed {
     kind: RenderRequestKind,
 }
 
+#[derive(Clone, Debug)]
+struct OpenClickTarget {
+    rect: Rect,
+    target: String,
+}
+
 pub(crate) struct ChatWidget<'a> {
     app_event_tx: AppEventSender,
     code_op_tx: UnboundedSender<Op>,
@@ -1639,6 +1657,15 @@ pub(crate) struct ChatWidget<'a> {
 
     // Accumulated diff/session state
     diffs: DiffsState,
+
+    // Language picker state
+    lang: LangState,
+
+    // Mode picker state
+    mode: ModeState,
+
+    // Click targets for the current frame (e.g. [OPEN] buttons)
+    open_click_targets: RefCell<Vec<OpenClickTarget>>,
 
     // Help overlay state
     help: HelpState,
@@ -2567,11 +2594,11 @@ fn agent_status_from_str(status: &str) -> AgentStatus {
 
 fn agent_status_label(status: AgentStatus) -> &'static str {
     match status {
-        AgentStatus::Pending => "Pending",
-        AgentStatus::Running => "Running",
-        AgentStatus::Completed => "Completed",
-        AgentStatus::Failed => "Failed",
-        AgentStatus::Cancelled => "Cancelled",
+        AgentStatus::Pending => code_i18n::tr_plain("tui.state.pending"),
+        AgentStatus::Running => code_i18n::tr_plain("tui.state.running"),
+        AgentStatus::Completed => code_i18n::tr_plain("tui.state.completed"),
+        AgentStatus::Failed => code_i18n::tr_plain("tui.state.failed"),
+        AgentStatus::Cancelled => code_i18n::tr_plain("tui.state.cancelled"),
     }
 }
 
@@ -2607,10 +2634,10 @@ fn agent_status_color(status: AgentStatus) -> ratatui::style::Color {
 
 fn agent_log_label(kind: AgentLogKind) -> &'static str {
     match kind {
-        AgentLogKind::Status => "status",
-        AgentLogKind::Progress => "progress",
-        AgentLogKind::Result => "result",
-        AgentLogKind::Error => "error",
+        AgentLogKind::Status => code_i18n::tr_plain("tui.agent.log.status"),
+        AgentLogKind::Progress => code_i18n::tr_plain("tui.agent.log.progress"),
+        AgentLogKind::Result => code_i18n::tr_plain("tui.agent.log.result"),
+        AgentLogKind::Error => code_i18n::tr_plain("tui.agent.log.error"),
     }
 }
 
@@ -3140,7 +3167,7 @@ impl ChatWidget<'_> {
             return;
         }
 
-        self.push_background_tail(AUTO_DRIVE_SESSION_SUMMARY_NOTICE.to_string());
+        self.push_background_tail(code_i18n::tr_plain("tui.auto_drive.session_summary_notice").to_string());
         self.request_redraw();
         self.submit_hidden_text_message_with_preface(prompt.to_string(), String::new());
     }
@@ -3703,33 +3730,52 @@ impl ChatWidget<'_> {
             return false;
         }
 
+        let ui_language = code_i18n::current_language();
+        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
+
         let mut status_parts = Vec::new();
         if !batch_ids.is_empty() {
             let count = batch_ids.len();
-            status_parts.push(if count == 1 {
-                "1 batch".to_string()
-            } else {
-                format!("{count} batches")
-            });
+            let word = match ui_language {
+                code_i18n::Language::En => {
+                    if count == 1 { "batch" } else { "batches" }
+                }
+                code_i18n::Language::ZhCn => "批次",
+            };
+            status_parts.push(code_i18n::tr_args(
+                ui_language,
+                "tui.auto_drive.cancel.batch_count",
+                &[("count", &count.to_string()), ("word", word)],
+            ));
         }
         if !agent_ids.is_empty() {
             let count = agent_ids.len();
-            status_parts.push(if count == 1 {
-                "1 agent".to_string()
-            } else {
-                format!("{count} agents")
-            });
+            let word = match ui_language {
+                code_i18n::Language::En => {
+                    if count == 1 { "agent" } else { "agents" }
+                }
+                code_i18n::Language::ZhCn => "个代理",
+            };
+            status_parts.push(code_i18n::tr_args(
+                ui_language,
+                "tui.auto_drive.cancel.agent_count",
+                &[("count", &count.to_string()), ("word", word)],
+            ));
         }
 
         let descriptor = if status_parts.is_empty() {
-            "agents".to_string()
+            code_i18n::tr_plain("tui.auto_drive.cancel.descriptor_default").to_string()
         } else {
-            status_parts.join(", ")
+            status_parts.join(joiner)
         };
         let auto_active = self.auto_state.is_active();
-        self.push_background_tail(format!("Cancelling {descriptor}…"));
+        self.push_background_tail(code_i18n::tr_args(
+            ui_language,
+            "tui.auto_drive.cancel.cancelling",
+            &[("descriptor", &descriptor)],
+        ));
         self.bottom_pane
-            .update_status_text("Cancelling agents…".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.auto_drive.cancel.cancelling_agents_status").to_string());
         self.bottom_pane.set_task_running(true);
         self.submit_op(Op::CancelAgents { batch_ids, agent_ids });
 
@@ -3740,7 +3786,7 @@ impl ChatWidget<'_> {
         } else if self
             .bottom_pane
             .standard_terminal_hint()
-            .is_some_and(|hint| hint == AUTO_ESC_EXIT_HINT || hint == AUTO_ESC_EXIT_HINT_DOUBLE)
+            .is_some_and(|hint| is_auto_drive_exit_hint(hint))
         {
             self.bottom_pane.set_standard_terminal_hint(None);
         }
@@ -3824,8 +3870,8 @@ impl ChatWidget<'_> {
         }
 
         let sections = [
-            "Hello! How can I help you today?",
-            "I can help with various tasks including:\n\n- Writing code\n- Reading files\n- Running commands",
+            code_i18n::tr_plain("tui.chatwidget.hello"),
+            code_i18n::tr_plain("tui.chatwidget.test_mode_intro"),
         ];
 
         for markdown in sections {
@@ -3895,7 +3941,11 @@ impl ChatWidget<'_> {
                 entry.status = AgentStatus::Completed;
                 entry.push_log(
                     AgentLogKind::Status,
-                    format!("Status → {}", agent_status_label(AgentStatus::Completed)),
+                    format!(
+                        "{}{}",
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        agent_status_label(AgentStatus::Completed)
+                    ),
                 );
             }
         }
@@ -5606,13 +5656,13 @@ impl ChatWidget<'_> {
     pub(crate) fn toggle_context_expansion(&mut self) {
         if !self.context_ui_enabled() {
             self.bottom_pane
-                .update_status_text("Context UI disabled".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.context_ui_disabled").to_string());
             return;
         }
 
         let Some(mut summary) = self.context_summary.clone() else {
             self.bottom_pane
-                .update_status_text("No context available yet".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.no_context_available_yet").to_string());
             return;
         };
 
@@ -5624,9 +5674,9 @@ impl ChatWidget<'_> {
         self.request_redraw();
 
         let status = if expanded {
-            "Context expanded"
+            code_i18n::tr_plain("tui.status.context_expanded")
         } else {
-            "Context collapsed"
+            code_i18n::tr_plain("tui.status.context_collapsed")
         };
         self.bottom_pane.update_status_text(status.to_string());
 
@@ -6223,11 +6273,17 @@ impl ChatWidget<'_> {
     fn mark_reconnecting(&mut self, message: String) {
         // Keep task running and surface a concise status in the input header.
         self.bottom_pane.set_task_running(true);
-        self.bottom_pane.update_status_text("Retrying...".to_string());
+        self.bottom_pane
+            .update_status_text(code_i18n::tr_plain("tui.status.retrying").to_string());
 
         if !self.reconnect_notice_active {
             self.reconnect_notice_active = true;
-            self.push_background_tail(format!("Auto-retrying… ({message})"));
+            let ui_language = code_i18n::current_language();
+            self.push_background_tail(code_i18n::tr_args(
+                ui_language,
+                "tui.status.auto_retrying",
+                &[("message", message.as_str())],
+            ));
         }
 
         // Do NOT clear running state or streams; the retry will resume them.
@@ -6241,7 +6297,10 @@ impl ChatWidget<'_> {
         self.reconnect_notice_active = false;
         self.bottom_pane.update_status_text(String::new());
         self.bottom_pane
-            .flash_footer_notice_for("Resuming".to_string(), Duration::from_secs(2));
+            .flash_footer_notice_for(
+                code_i18n::tr_plain("tui.status.resuming").to_string(),
+                Duration::from_secs(2),
+            );
         self.request_redraw();
     }
 
@@ -6295,7 +6354,7 @@ impl ChatWidget<'_> {
         self.stream_state.drop_streaming = true;
         // Surface an explicit notice in history so users see confirmation.
         if !has_wait_running {
-            self.push_background_tail("Cancelled by user.".to_string());
+            self.push_background_tail(code_i18n::tr_plain("tui.common.cancelled_by_user").to_string());
         }
         self.submit_op(Op::Interrupt);
         // Immediately drop the running status so the next message can be typed/run,
@@ -6535,6 +6594,9 @@ impl ChatWidget<'_> {
                 confirm: None,
                 body_visible_rows: std::cell::Cell::new(0),
             },
+            lang: LangState::default(),
+            mode: ModeState::default(),
+            open_click_targets: RefCell::new(Vec::new()),
             help: HelpState {
                 overlay: None,
                 body_visible_rows: std::cell::Cell::new(0),
@@ -6644,6 +6706,10 @@ impl ChatWidget<'_> {
             resume_placeholder_visible: false,
             resume_picker_loading: false,
         };
+
+        new_widget
+            .bottom_pane
+            .set_validation_harness_enabled(new_widget.validation_harness_enabled());
         new_widget.load_auto_review_baseline_marker();
         new_widget.spawn_conversation_runtime(config.clone(), auth_manager.clone(), code_op_rx);
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.code_home) {
@@ -6908,6 +6974,9 @@ impl ChatWidget<'_> {
                 confirm: None,
                 body_visible_rows: std::cell::Cell::new(0),
             },
+            lang: LangState::default(),
+            mode: ModeState::default(),
+            open_click_targets: RefCell::new(Vec::new()),
             help: HelpState {
                 overlay: None,
                 body_visible_rows: std::cell::Cell::new(0),
@@ -7017,6 +7086,8 @@ impl ChatWidget<'_> {
             resume_placeholder_visible: false,
             resume_picker_loading: false,
         };
+        w.bottom_pane
+            .set_validation_harness_enabled(w.validation_harness_enabled());
         w.load_auto_review_baseline_marker();
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.code_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.code_home) {
@@ -7758,6 +7829,20 @@ impl ChatWidget<'_> {
             // Block background input while the terminal overlay is visible.
             return;
         }
+        // Intercept keys for the language quick-pick overlay.
+        if lang_handlers::handle_lang_key(self, key_event) {
+            return;
+        }
+        if self.lang.overlay.is_some() {
+            return;
+        }
+        // Intercept keys for the mode quick-pick overlay.
+        if mode_handlers::handle_mode_key(self, key_event) {
+            return;
+        }
+        if self.mode.overlay.is_some() {
+            return;
+        }
         // Intercept keys for overlays when active (help first, then diff)
         if help_handlers::handle_help_key(self, key_event) {
             return;
@@ -7828,13 +7913,24 @@ impl ChatWidget<'_> {
             self.toggle_browser_overlay();
             return;
         }
-        if let KeyEvent {
-            code: crossterm::event::KeyCode::Char('a'),
-            modifiers: crossterm::event::KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press | KeyEventKind::Repeat,
-            ..
-        } = key_event
-        {
+        let is_ctrl_a = matches!(
+            key_event,
+            KeyEvent {
+                code: crossterm::event::KeyCode::Char('a'),
+                modifiers: crossterm::event::KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            }
+        ) || matches!(
+            key_event,
+            KeyEvent {
+                code: crossterm::event::KeyCode::Char('\u{1}'),
+                modifiers,
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            } if modifiers.is_empty()
+        );
+        if is_ctrl_a {
             self.toggle_agents_hud();
             return;
         }
@@ -8091,7 +8187,7 @@ impl ChatWidget<'_> {
                     if trimmed.is_empty() {
                         self.bottom_pane.set_task_running(true);
                         self.bottom_pane
-                            .update_status_text("Auto Drive Goal".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.status.auto_drive_goal").to_string());
                         self.clear_composer();
                         self.request_redraw();
                         return;
@@ -10506,7 +10602,13 @@ impl ChatWidget<'_> {
     /// Push a cell using a synthetic key at the TOP of the NEXT request.
     fn history_push_top_next_req(&mut self, cell: impl HistoryCell + 'static) {
         let key = self.next_req_key_top();
-        let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "prelude", None);
+        let cell: Box<dyn HistoryCell> = Box::new(cell);
+        let tag = if cell.kind() == HistoryCellType::BackgroundEvent {
+            "background"
+        } else {
+            "prelude"
+        };
+        let _ = self.history_insert_with_key_global_tagged(cell, key, tag, None);
     }
     fn history_replace_with_record(
         &mut self,
@@ -10956,7 +11058,7 @@ impl ChatWidget<'_> {
 
         self.clear_composer();
         self.bottom_pane
-            .update_status_text("waiting for model".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_model").to_string());
         self.request_redraw();
     }
 
@@ -11023,19 +11125,23 @@ impl ChatWidget<'_> {
 
         self.clear_composer();
         self.bottom_pane
-            .update_status_text("waiting for model".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_model").to_string());
         self.request_redraw();
     }
 
     fn submit_user_message(&mut self, user_message: UserMessage) {
-        // If the user submits new input while a turn is actively running (streaming/tool/agent),
-        // prioritize responsiveness by interrupting the current task immediately.
+        // If the user submits new input while a turn is actively running
+        // (streaming/tool/exec/agent), prioritize responsiveness by interrupting the
+        // current run immediately.
         //
-        // The submit path already supports mid-turn queueing via Op::QueueUserInput, but in
-        // practice users usually mean "stop what you're doing and respond to this".
-        // We keep long-running wait/kill tools as background work.
+        // The submit path supports mid-turn queueing via Op::QueueUserInput, but for
+        // interactive use the expected semantics are: "stop what you're doing and
+        // respond to this".
+        //
+        // Exception: treat long-running wait/kill tools as background work.
         let wait_only_active = self.wait_only_activity();
-        if !wait_only_active && (self.is_task_running() || !self.active_task_ids.is_empty()) {
+        let should_preempt = !wait_only_active && self.is_task_running();
+        if should_preempt {
             self.interrupt_running_task();
         }
 
@@ -11550,7 +11656,8 @@ impl ChatWidget<'_> {
         }
 
         let wait_only_active = self.wait_only_activity();
-        let turn_active = (self.is_task_running()
+        let turn_active = !should_preempt
+            && (self.is_task_running()
             || !self.active_task_ids.is_empty()
             || self.stream.is_write_cycle_active()
             || !self.queued_user_messages.is_empty())
@@ -11587,7 +11694,7 @@ impl ChatWidget<'_> {
             // Keep long waits running but do not block user input.
             self.bottom_pane.set_task_running(false);
             self.bottom_pane
-                .update_status_text("Waiting in background".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.waiting_in_background").to_string());
         }
 
         tracing::info!(
@@ -11884,16 +11991,18 @@ impl ChatWidget<'_> {
                         return;
                     }
                     _ = &mut notice_sleep, if !notice_sent => {
-                        notice_sent = true;
-                        let elapsed = started_at.elapsed();
-                        let message = format!(
-                            "Git snapshot still running… {} elapsed.",
-                            format_duration(elapsed)
+                         notice_sent = true;
+                         let elapsed = started_at.elapsed();
+                        let ui_language = code_i18n::current_language();
+                        let message = code_i18n::tr_args(
+                            ui_language,
+                            "tui.git_snapshot.still_running",
+                            &[("elapsed", &format_duration(elapsed))],
                         );
                         app_event_tx.send_background_event_with_ticket(&notice_ticket, message);
-                    }
-                }
-            };
+                     }
+                 }
+             };
 
             let elapsed = started_at.elapsed();
             let event = match join_result {
@@ -11949,20 +12058,24 @@ impl ChatWidget<'_> {
                 if self.ghost_snapshots.len() > MAX_TRACKED_GHOST_COMMITS {
                     self.ghost_snapshots.remove(0);
                 }
-                if elapsed >= GHOST_SNAPSHOT_NOTICE_THRESHOLD {
-                    self.push_background_tail(format!(
-                        "Git snapshot captured in {}.",
-                        format_duration(elapsed)
+                 if elapsed >= GHOST_SNAPSHOT_NOTICE_THRESHOLD {
+                    let ui_language = code_i18n::current_language();
+                    self.push_background_tail(code_i18n::tr_args(
+                        ui_language,
+                        "tui.git_snapshot.captured_in",
+                        &[("elapsed", &format_duration(elapsed))],
                     ));
-                }
-                Some(snapshot)
-            }
-            Err(err) => {
-                if let GitToolingError::Io(io_err) = &err {
-                    if io_err.kind() == io::ErrorKind::TimedOut {
-                        self.push_background_tail(format!(
-                            "Git snapshot timed out after {}. Try again once the repository is less busy.",
-                            format_duration(elapsed)
+                 }
+                 Some(snapshot)
+             }
+             Err(err) => {
+                 if let GitToolingError::Io(io_err) = &err {
+                     if io_err.kind() == io::ErrorKind::TimedOut {
+                        let ui_language = code_i18n::current_language();
+                        self.push_background_tail(code_i18n::tr_args(
+                            ui_language,
+                            "tui.git_snapshot.timed_out",
+                            &[("elapsed", &format_duration(elapsed))],
                         ));
                         tracing::warn!(
                             elapsed = %format_duration(elapsed),
@@ -11972,16 +12085,19 @@ impl ChatWidget<'_> {
                     }
                 }
                 self.ghost_snapshots_disabled = true;
+                let ui_language = code_i18n::current_language();
                 let (message, hint) = match &err {
                     GitToolingError::NotAGitRepository { .. } => (
-                        "Snapshots disabled: this workspace is not inside a Git repository.".to_string(),
+                        code_i18n::tr_plain("tui.git_snapshot.disabled_not_git").to_string(),
                         None,
                     ),
                     _ => (
-                        format!("Snapshots disabled after Git error: {err}"),
-                        Some(
-                            "Restart Code after resolving the issue to re-enable snapshots.".to_string(),
+                        code_i18n::tr_args(
+                            ui_language,
+                            "tui.git_snapshot.disabled_after_error",
+                            &[("error", &err.to_string())],
                         ),
+                        Some(code_i18n::tr_plain("tui.git_snapshot.restart_hint").to_string()),
                     ),
                 };
                 self.ghost_snapshots_disabled_reason = Some(GhostSnapshotsDisabledReason {
@@ -12138,21 +12254,27 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn handle_undo_command(&mut self) {
+        let ui_language = code_i18n::current_language();
         if self.ghost_snapshots_disabled {
             let reason = self
                 .ghost_snapshots_disabled_reason
                 .as_ref()
                 .map(|reason| reason.message.clone())
-                .unwrap_or_else(|| "Snapshots are currently disabled.".to_string());
-            self.push_background_tail(format!("/undo unavailable: {reason}"));
+                .unwrap_or_else(|| {
+                    code_i18n::tr_plain("tui.undo.disabled.default_reason").to_string()
+                });
+            let message = code_i18n::tr_args(
+                ui_language,
+                "tui.undo.unavailable.with_reason",
+                &[("reason", &reason)],
+            );
+            self.push_background_tail(message);
             self.show_undo_snapshots_disabled();
             return;
         }
 
         if self.ghost_snapshots.is_empty() {
-            self.push_background_tail(
-                "/undo unavailable: no snapshots captured yet. Run a file-modifying command to create one.".to_string(),
-            );
+            self.push_background_tail(code_i18n::tr_plain("tui.undo.unavailable.no_snapshots").to_string());
             self.show_undo_empty_state();
             return;
         }
@@ -12169,30 +12291,30 @@ impl ChatWidget<'_> {
             }
         } else {
             lines.push(
-                "Snapshots are currently disabled. Resolve the Git issue and restart Code to re-enable them.".to_string(),
+                code_i18n::tr_plain("tui.undo.disabled.fallback_details").to_string(),
             );
         }
 
         self.show_undo_status_popup(
-            "Snapshots unavailable",
+            code_i18n::tr_plain("tui.undo.disabled.title"),
             Some(
-                "Restores workspace files only. Conversation history remains unchanged.".to_string(),
+                code_i18n::tr_plain("tui.undo.scope_hint").to_string(),
             ),
-            Some("Automatic snapshotting failed, so /undo cannot restore the workspace.".to_string()),
+            Some(code_i18n::tr_plain("tui.undo.disabled.subtitle").to_string()),
             lines,
         );
     }
 
     fn show_undo_empty_state(&mut self) {
         self.show_undo_status_popup(
-            "No snapshots yet",
+            code_i18n::tr_plain("tui.undo.empty.title"),
             Some(
-                "Restores workspace files only. Conversation history remains unchanged.".to_string(),
+                code_i18n::tr_plain("tui.undo.scope_hint").to_string(),
             ),
-            Some("Snapshots appear once Code captures a Git checkpoint.".to_string()),
+            Some(code_i18n::tr_plain("tui.undo.empty.subtitle").to_string()),
             vec![
-                "No snapshot is available to restore.".to_string(),
-                "Run a command that modifies files to create the first snapshot.".to_string(),
+                code_i18n::tr_plain("tui.undo.empty.line1").to_string(),
+                code_i18n::tr_plain("tui.undo.empty.line2").to_string(),
             ],
         );
     }
@@ -12205,7 +12327,7 @@ impl ChatWidget<'_> {
         mut lines: Vec<String>,
     ) {
         if lines.is_empty() {
-            lines.push("No snapshot information available.".to_string());
+            lines.push(code_i18n::tr_plain("tui.undo.common.no_snapshot_info").to_string());
         }
 
         let headline = lines.remove(0);
@@ -12238,7 +12360,7 @@ impl ChatWidget<'_> {
         let view = ListSelectionView::new(
             format!(" {title} "),
             subtitle_for_view,
-            Some("Esc close".to_string()),
+            Some(code_i18n::tr_plain("tui.common.esc_close").to_string()),
             items,
             self.app_event_tx.clone(),
             1,
@@ -12247,7 +12369,7 @@ impl ChatWidget<'_> {
         self.bottom_pane.show_list_selection(
             title.to_string(),
             None,
-            Some("Esc close".to_string()),
+            Some(code_i18n::tr_plain("tui.common.esc_close").to_string()),
             view,
         );
     }
@@ -12255,9 +12377,7 @@ impl ChatWidget<'_> {
     fn show_undo_snapshot_picker(&mut self) {
         let entries = self.build_undo_timeline_entries();
         if entries.len() <= 1 {
-            self.push_background_tail(
-                "/undo unavailable: no snapshots captured yet. Run a file-modifying command to create one.".to_string(),
-            );
+            self.push_background_tail(code_i18n::tr_plain("tui.undo.unavailable.no_snapshots").to_string());
             self.show_undo_empty_state();
             return;
         }
@@ -12277,29 +12397,50 @@ impl ChatWidget<'_> {
     }
 
     fn timeline_entry_for_snapshot(&self, snapshot: &GhostSnapshot) -> UndoTimelineEntry {
+        let ui_language = code_i18n::current_language();
         let short_id = snapshot.short_id();
-        let label = format!("Snapshot {short_id}");
+        let label = code_i18n::tr_args(
+            ui_language,
+            "tui.undo.timeline.snapshot_label",
+            &[("id", &short_id)],
+        );
         let summary = snapshot.summary.clone();
         let timestamp_line = Some(snapshot.captured_at.format("%Y-%m-%d %H:%M:%S").to_string());
         let relative_time = snapshot
             .age_from(Local::now())
-            .map(|age| format!("captured {} ago", format_duration(age)));
+            .map(|age| {
+                let elapsed = format_duration(age);
+                code_i18n::tr_args(
+                    ui_language,
+                    "tui.undo.timeline.captured_ago",
+                    &[("elapsed", &elapsed)],
+                )
+            });
         let (user_delta, assistant_delta) = self.conversation_delta_since(&snapshot.conversation);
         let stats_line = if user_delta == 0 && assistant_delta == 0 {
-            Some("conversation already matches current state".to_string())
+            Some(code_i18n::tr_plain("tui.undo.timeline.stats.same_conversation").to_string())
         } else if assistant_delta == 0 {
-            Some(format!(
-                "rewind {} user turn{}",
-                user_delta,
-                if user_delta == 1 { "" } else { "s" }
+            let user_word = if user_delta == 1 { "turn" } else { "turns" };
+            Some(code_i18n::tr_args(
+                ui_language,
+                "tui.undo.timeline.stats.rewind_user",
+                &[
+                    ("user_delta", &user_delta.to_string()),
+                    ("user_word", user_word),
+                ],
             ))
         } else {
-            Some(format!(
-                "rewind {} user turn{} and {} assistant repl{}",
-                user_delta,
-                if user_delta == 1 { "" } else { "s" },
-                assistant_delta,
-                if assistant_delta == 1 { "y" } else { "ies" }
+            let user_word = if user_delta == 1 { "turn" } else { "turns" };
+            let assistant_word = if assistant_delta == 1 { "reply" } else { "replies" };
+            Some(code_i18n::tr_args(
+                ui_language,
+                "tui.undo.timeline.stats.rewind_both",
+                &[
+                    ("user_delta", &user_delta.to_string()),
+                    ("user_word", user_word),
+                    ("assistant_delta", &assistant_delta.to_string()),
+                    ("assistant_word", assistant_word),
+                ],
             ))
         };
 
@@ -12312,7 +12453,11 @@ impl ChatWidget<'_> {
             timestamp_line,
             relative_time,
             stats_line,
-            commit_line: Some(format!("commit {short_id}")),
+            commit_line: Some(code_i18n::tr_args(
+                ui_language,
+                "tui.undo.timeline.commit_line",
+                &[("id", &short_id)],
+            )),
             conversation_lines,
             file_lines,
             conversation_available: user_delta > 0,
@@ -12328,11 +12473,11 @@ impl ChatWidget<'_> {
         let conversation_lines = Self::conversation_preview_lines_from_snapshot(&history_snapshot);
         let file_lines = self.timeline_file_lines_for_current();
         UndoTimelineEntry {
-            label: "Current workspace".to_string(),
+            label: code_i18n::tr_plain("tui.undo.timeline.current_workspace").to_string(),
             summary: None,
             timestamp_line: Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()),
-            relative_time: Some("current point".to_string()),
-            stats_line: Some("Already at this point in time".to_string()),
+            relative_time: Some(code_i18n::tr_plain("tui.undo.timeline.current_point").to_string()),
+            stats_line: Some(code_i18n::tr_plain("tui.undo.timeline.current_already_here").to_string()),
             commit_line: None,
             conversation_lines,
             file_lines,
@@ -12375,7 +12520,7 @@ impl ChatWidget<'_> {
 
         if messages.is_empty() {
             return vec![Line::from(Span::styled(
-                "No conversation captured in this snapshot.",
+                code_i18n::tr_plain("tui.undo.preview.no_conversation"),
                 Style::default().fg(crate::colors::text_dim()),
             ))];
         }
@@ -12390,7 +12535,10 @@ impl ChatWidget<'_> {
 
     fn conversation_line(role: UndoPreviewRole, text: &str) -> Line<'static> {
         let (label, color) = match role {
-            UndoPreviewRole::User => ("You", crate::colors::text_bright()),
+            UndoPreviewRole::User => (
+                code_i18n::tr_plain("tui.undo.preview.role_you"),
+                crate::colors::text_bright(),
+            ),
             UndoPreviewRole::Assistant => ("Code", crate::colors::primary()),
         };
         let label_span = Span::styled(
@@ -12472,7 +12620,7 @@ impl ChatWidget<'_> {
             Ok(entries) => {
                 if entries.is_empty() {
                     vec![Line::from(Span::styled(
-                        "Working tree clean",
+                        code_i18n::tr_plain("tui.undo.files.working_tree_clean"),
                         Style::default().fg(crate::colors::text_dim()),
                     ))]
                 } else {
@@ -13041,6 +13189,7 @@ impl ChatWidget<'_> {
 
     pub(crate) fn handle_mouse_event(&mut self, mouse_event: crossterm::event::MouseEvent) {
         use crossterm::event::KeyModifiers;
+        use crossterm::event::MouseButton;
         use crossterm::event::MouseEventKind;
 
         // Check if Shift is held - if so, let the terminal handle selection
@@ -13053,9 +13202,56 @@ impl ChatWidget<'_> {
         match mouse_event.kind {
             MouseEventKind::ScrollUp => layout_scroll::mouse_scroll(self, true),
             MouseEventKind::ScrollDown => layout_scroll::mouse_scroll(self, false),
+            MouseEventKind::Down(MouseButton::Left) => {
+                let x = mouse_event.column;
+                let y = mouse_event.row;
+                let target = {
+                    let targets = self.open_click_targets.borrow();
+                    targets
+                        .iter()
+                        .find(|t| {
+                            x >= t.rect.x
+                                && x < t.rect.x.saturating_add(t.rect.width)
+                                && y >= t.rect.y
+                                && y < t.rect.y.saturating_add(t.rect.height)
+                        })
+                        .map(|t| t.target.clone())
+                };
+                if let Some(target) = target {
+                    self.open_external_target(&target);
+                }
+            }
             _ => {
                 // Ignore other mouse events for now
             }
+        }
+    }
+
+    fn open_external_target(&mut self, target: &str) {
+        use std::process::Command;
+
+        let result = (|| {
+            #[cfg(target_os = "windows")]
+            {
+                let mut cmd = Command::new("cmd");
+                cmd.args(["/C", "start", "", target]);
+                cmd.spawn().map(|_| ())
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                Command::new("open").arg(target).spawn().map(|_| ())
+            }
+
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                Command::new("xdg-open").arg(target).spawn().map(|_| ())
+            }
+        })();
+
+        if let Err(err) = result {
+            self.bottom_pane
+                .flash_footer_notice(format!("打开失败：{err}"));
         }
     }
 
@@ -13487,7 +13683,7 @@ impl ChatWidget<'_> {
                 self.reasoning_index.clear();
                 self.bottom_pane.set_task_running(true);
                 self.bottom_pane
-                    .update_status_text("waiting for model".to_string());
+                    .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_model").to_string());
                 self.ensure_spinner_for_activity("task-started");
                 tracing::info!("[order] EventMsg::TaskStarted id={}", id);
 
@@ -13911,8 +14107,9 @@ impl ChatWidget<'_> {
                         tracing::error!("failed to send Op::UserInputAnswer: {e}");
                     }
 
-                    self.bottom_pane
-                        .update_status_text("waiting for model".to_string());
+                    self.bottom_pane.update_status_text(
+                        code_i18n::tr_plain("tui.status.waiting_for_model").to_string(),
+                    );
                     self.bottom_pane.set_task_running(true);
                 } else {
                     self.pending_request_user_input = Some(PendingRequestUserInput {
@@ -13921,8 +14118,9 @@ impl ChatWidget<'_> {
                         anchor_key: key,
                         questions: ev.questions.clone(),
                     });
-                    self.bottom_pane
-                        .update_status_text("waiting for user input".to_string());
+                    self.bottom_pane.update_status_text(
+                        code_i18n::tr_plain("tui.status.waiting_for_user_input").to_string(),
+                    );
                     self.bottom_pane.set_task_running(true);
                     self.bottom_pane.ensure_input_focus();
                     self.bottom_pane
@@ -14406,7 +14604,7 @@ impl ChatWidget<'_> {
                         let wait_missing_job = wait_result_missing_background_job(trimmed);
                         let wait_interrupted = wait_result_interrupted(trimmed);
                         let mut wait_still_pending =
-                            !success && trimmed != "Cancelled by user." && !wait_missing_job;
+                            !success && !is_cancelled_by_user_message(trimmed) && !wait_missing_job;
                         let mut exec_running = false;
                         let mut exec_completed = false;
                         let mut note_lines: Vec<(String, bool)> = Vec::new();
@@ -14426,7 +14624,7 @@ impl ChatWidget<'_> {
                                 if note_text.is_empty() {
                                     continue;
                                 }
-                                let is_error_note = note_text == "Cancelled by user.";
+                                let is_error_note = is_cancelled_by_user_message(note_text);
                                 note_lines.push((note_text.to_string(), is_error_note));
                             }
                         }
@@ -14526,7 +14724,7 @@ impl ChatWidget<'_> {
                             self.bottom_pane
                                 .update_status_text("responding".to_string());
                             self.maybe_hide_spinner();
-                        } else if trimmed == "Cancelled by user." {
+                        } else if is_cancelled_by_user_message(trimmed) {
                             self.bottom_pane
                                 .update_status_text("wait cancelled".to_string());
                         } else if wait_missing_job || (wait_interrupted && !exec_running) {
@@ -14604,7 +14802,7 @@ impl ChatWidget<'_> {
                     self.maybe_hide_spinner();
                     return;
                 }
-                if tool_name == "wait" && !success && content.trim() == "Cancelled by user." {
+                if tool_name == "wait" && !success && is_cancelled_by_user_message(&content) {
                     let mut emphasis = TextEmphasis::default();
                     emphasis.bold = true;
                     let wait_state = PlainMessageState {
@@ -14615,7 +14813,7 @@ impl ChatWidget<'_> {
                         lines: vec![MessageLine {
                             kind: MessageLineKind::Paragraph,
                             spans: vec![InlineSpan {
-                                text: "Wait cancelled".into(),
+                                text: code_i18n::tr_plain("tui.wait.cancelled").into(),
                                 tone: TextTone::Error,
                                 emphasis,
                                 entity: None,
@@ -15529,7 +15727,8 @@ impl ChatWidget<'_> {
         let mut running_read = history_cell::AgentStatusPreview::default();
         running_read.id = "demo-read-running".to_string();
         running_read.name = "Spec Parser".to_string();
-        running_read.status = "Running".to_string();
+        running_read.status =
+            code_i18n::tr(code_i18n::current_language(), "tui.state.running").to_string();
         running_read.model = Some("code-gpt-3.5".to_string());
         running_read.details = vec![history_cell::AgentDetail::Progress(
             "Scanning RFC summaries".to_string(),
@@ -15541,7 +15740,7 @@ impl ChatWidget<'_> {
         agent_read_card.record_action("Fetching documentation excerpts");
         agent_read_card.set_duration(Some(Duration::from_secs(54)));
         agent_read_card.set_write_mode(Some(false));
-        agent_read_card.set_status_label("Running");
+        agent_read_card.set_status_label(code_i18n::tr_plain("tui.state.running"));
         self.history_push(agent_read_card);
 
         let mut browser_card = history_cell::BrowserSessionCell::new();
@@ -16057,6 +16256,69 @@ impl ChatWidget<'_> {
         }
     }
 
+    pub(crate) fn handle_lang_command(&mut self, args: String) {
+        let raw = args.trim();
+        if raw.is_empty() {
+            self.show_lang_popup();
+            return;
+        }
+
+        let language = match raw {
+            "1" => Some(code_i18n::Language::ZhCn),
+            "2" => Some(code_i18n::Language::En),
+            _ => code_i18n::parse_language(raw),
+        };
+        let Some(language) = language else {
+            let ui_language = code_i18n::current_language();
+            let message =
+                code_i18n::tr_args(ui_language, "tui.lang.invalid", &[("value", raw)]);
+            self.history_push_plain_state(history_cell::new_error_event(message));
+            self.request_redraw();
+            return;
+        };
+
+        self.apply_language_selection(language);
+        self.request_redraw();
+    }
+
+    fn show_lang_popup(&mut self) {
+        self.lang.overlay = Some(LangOverlay::new());
+        self.request_redraw();
+    }
+
+    fn show_mode_popup(&mut self) {
+        self.mode.overlay = Some(ModeOverlay::new(self.validation_harness_enabled()));
+        self.request_redraw();
+    }
+
+    fn apply_mode_selection(&mut self, selection: ModeOption) {
+        match selection {
+            ModeOption::DevFast => self.apply_validation_harness_toggle(false),
+            ModeOption::Strict => self.apply_validation_harness_toggle(true),
+        }
+
+        let ui_language = code_i18n::current_language();
+        let label_key = match selection {
+            ModeOption::DevFast => "tui.mode.option.fast",
+            ModeOption::Strict => "tui.mode.option.strict",
+        };
+        let label = code_i18n::tr(ui_language, label_key);
+        let message = code_i18n::tr_args(ui_language, "tui.mode.changed", &[("label", label)]);
+        self.history_push_plain_state(history_cell::new_text_line(ratatui::text::Line::from(
+            message,
+        )));
+    }
+
+    fn apply_language_selection(&mut self, language: code_i18n::Language) {
+        code_i18n::set_language(language);
+        let ui_language = language;
+        let label = code_i18n::language_name(ui_language, language);
+        let message = code_i18n::tr_args(ui_language, "tui.lang.changed", &[("label", label)]);
+        self.history_push_plain_state(history_cell::new_text_line(ratatui::text::Line::from(
+            message,
+        )));
+    }
+
     pub(crate) fn handle_notifications_command(&mut self, args: String) {
         let trimmed = args.trim();
         if trimmed.is_empty() {
@@ -16092,32 +16354,34 @@ impl ChatWidget<'_> {
                 match &self.config.tui.notifications {
                     Notifications::Enabled(current) => {
                         if *current == enable {
-                            self.push_background_tail(format!(
-                                "TUI notifications already {}.",
-                                if enable { "enabled" } else { "disabled" }
-                            ));
+                            let key = if enable {
+                                "tui.notifications.already_enabled"
+                            } else {
+                                "tui.notifications.already_disabled"
+                            };
+                            self.push_background_tail(code_i18n::tr_plain(key).to_string());
                         } else {
                             self.app_event_tx
                                 .send(AppEvent::UpdateTuiNotifications(enable));
                         }
                     }
                     Notifications::Custom(entries) => {
+                        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
                         let filters = if entries.is_empty() {
-                            "<none>".to_string()
+                            code_i18n::tr_plain("tui.common.none").to_string()
                         } else {
-                            entries.join(", ")
+                            entries.join(joiner)
                         };
-                        self.push_background_tail(format!(
-                            "TUI notifications use custom filters ([{}]); edit ~/.code/config.toml to change them.",
-                            filters
+                        self.push_background_tail(code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.notifications.custom_filters",
+                            &[("filters", &filters)],
                         ));
                     }
                 }
             }
             _ => {
-                self.push_background_tail(
-                    "Usage: /notifications [status|on|off]".to_string(),
-                );
+                self.push_background_tail(code_i18n::tr_plain("tui.notifications.usage").to_string());
             }
         }
     }
@@ -17274,7 +17538,11 @@ impl ChatWidget<'_> {
                 new_entry.source_kind = info.source_kind.clone();
                 new_entry.push_log(
                     AgentLogKind::Status,
-                    format!("Status → {}", agent_status_label(status.clone())),
+                    format!(
+                        "{}{}",
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        agent_status_label(status.clone())
+                    ),
                 );
                 new_entry
             });
@@ -17286,7 +17554,10 @@ impl ChatWidget<'_> {
 
             let AgentBatchMetadata { label, prompt: meta_prompt, context: meta_context } = batch_metadata;
             let auto_review_label = matches!(entry.source_kind, Some(AgentSourceKind::AutoReview))
-                .then(|| "Auto Review".to_string());
+                .then(|| {
+                    code_i18n::tr(code_i18n::current_language(), "tui.agent.source.auto_review")
+                        .to_string()
+                });
             let previous_label = entry.batch_label.clone();
             entry.batch_label = label
                 .or(auto_review_label)
@@ -17317,7 +17588,11 @@ impl ChatWidget<'_> {
                 entry.status = status.clone();
                 entry.push_log(
                     AgentLogKind::Status,
-                    format!("Status → {}", agent_status_label(status.clone())),
+                    format!(
+                        "{}{}",
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        agent_status_label(status.clone())
+                    ),
                 );
             }
 
@@ -17581,7 +17856,9 @@ impl ChatWidget<'_> {
                 && matches!(agent.status, AgentStatus::Pending | AgentStatus::Running)
             {
                 agent.status = AgentStatus::Cancelled;
-                agent.error.get_or_insert_with(|| "Cancelled by user".to_string());
+                agent
+                    .error
+                    .get_or_insert_with(|| code_i18n::tr_plain("tui.common.cancelled_by_user").to_string());
             }
         }
 
@@ -18955,14 +19232,21 @@ Have we met every part of this goal and is there no further work to do?"#
                     reason,
                 } => {
                     let human_delay = format_duration(delay);
+                    let ui_language = code_i18n::current_language();
                     self.bottom_pane.set_task_running(false);
                     self.bottom_pane
-                        .update_status_text("Auto Drive paused".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.auto_drive.paused").to_string());
                     self.bottom_pane.set_standard_terminal_hint(Some(
-                        AUTO_ESC_EXIT_HINT.to_string(),
+                        code_i18n::tr_plain("tui.auto_drive.exit_hint").to_string(),
                     ));
-                    let message = format!(
-                        "Auto Drive will retry automatically in {human_delay} (attempt {attempt}). Last error: {reason}"
+                    let message = code_i18n::tr_args(
+                        ui_language,
+                        "tui.auto_drive.retry_message",
+                        &[
+                            ("human_delay", &human_delay),
+                            ("attempt", &attempt.to_string()),
+                            ("reason", reason.as_str()),
+                        ],
                     );
                     self.auto_card_add_action(message, AutoDriveActionKind::Warning);
                     self.auto_card_set_status(AutoDriveStatus::Paused);
@@ -19267,7 +19551,11 @@ Have we met every part of this goal and is there no further work to do?"#
 
         #[cfg(test)]
         {
-            if CAPTURE_AUTO_TURN_COMMIT_STUB.lock().unwrap().is_some() {
+            if CAPTURE_AUTO_TURN_COMMIT_STUB
+                .lock()
+                .unwrap_or_else(|err| err.into_inner())
+                .is_some()
+            {
                 return;
             }
         }
@@ -19291,7 +19579,11 @@ Have we met every part of this goal and is there no further work to do?"#
         parent: Option<&GhostCommit>,
     ) -> Result<GhostCommit, GitToolingError> {
         #[cfg(test)]
-        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB.lock().unwrap().as_ref() {
+        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_ref()
+        {
             let parent_id = parent.map(|commit| commit.id().to_string());
             return stub(message, parent_id);
         }
@@ -19312,7 +19604,11 @@ Have we met every part of this goal and is there no further work to do?"#
         repo_path: PathBuf,
     ) -> Result<GhostCommit, GitToolingError> {
         #[cfg(test)]
-        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB.lock().unwrap().as_ref() {
+        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_ref()
+        {
             return stub("auto review baseline snapshot", None);
         }
         let hook_repo = repo_path.clone();
@@ -19392,7 +19688,11 @@ Have we met every part of this goal and is there no further work to do?"#
         head_commit: &str,
     ) -> Result<Vec<String>, String> {
         #[cfg(test)]
-        if let Some(stub) = GIT_DIFF_NAME_ONLY_BETWEEN_STUB.lock().unwrap().as_ref() {
+        if let Some(stub) = GIT_DIFF_NAME_ONLY_BETWEEN_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_ref()
+        {
             return stub(base_commit.to_string(), head_commit.to_string());
         }
         self.run_git_command(
@@ -19565,7 +19865,7 @@ Have we met every part of this goal and is there no further work to do?"#
         self.bottom_pane.ensure_input_focus();
         self.bottom_pane.set_task_running(true);
         self.bottom_pane
-            .update_status_text("Auto Drive paused".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.auto_drive.paused").to_string());
         self.show_auto_drive_exit_hint();
         self.auto_rebuild_live_ring();
         self.request_redraw();
@@ -21797,10 +22097,11 @@ Have we met every part of this goal and is there no further work to do?"#
     pub(crate) fn show_help_popup(&mut self) {
         let t_dim = Style::default().fg(crate::colors::text_dim());
         let t_fg = Style::default().fg(crate::colors::text());
+        let ui_language = code_i18n::current_language();
 
         let mut lines: Vec<RtLine<'static>> = Vec::new();
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Keyboard shortcuts",
+            code_i18n::tr(ui_language, "tui.help.title"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
 
@@ -21815,70 +22116,105 @@ Have we met every part of this goal and is there no further work to do?"#
         // Top quick action
         lines.push(kv(
             "Shift+Tab",
-            "Rotate agent between Read Only / Write with Approval / Full Access",
+            code_i18n::tr(ui_language, "tui.help.desc.shift_tab"),
         ));
 
         // Global
-        lines.push(kv("Ctrl+G", "Guide overlay"));
-        lines.push(kv("Ctrl+R", "Toggle reasoning"));
-        lines.push(kv("Ctrl+T", "Toggle screen"));
-        lines.push(kv("Ctrl+D", "Diff viewer"));
-        lines.push(kv("Esc", &format!("{} / close popups", Self::double_esc_hint_label())));
+        lines.push(kv("Ctrl+G", code_i18n::tr(ui_language, "tui.help.desc.ctrl_g")));
+        lines.push(kv("Ctrl+S", code_i18n::tr(ui_language, "tui.help.desc.ctrl_s")));
+        lines.push(kv("Ctrl+L", code_i18n::tr(ui_language, "tui.help.desc.ctrl_l")));
+        lines.push(kv("Tab", code_i18n::tr(ui_language, "tui.help.desc.tab_mode")));
+        lines.push(kv("Ctrl+R", code_i18n::tr(ui_language, "tui.help.desc.ctrl_r")));
+        lines.push(kv("Ctrl+T", code_i18n::tr(ui_language, "tui.help.desc.ctrl_t")));
+        lines.push(kv("Ctrl+D", code_i18n::tr(ui_language, "tui.help.desc.ctrl_d")));
+        let double_esc = Self::double_esc_hint_label();
+        let esc_hint = code_i18n::tr_args(ui_language, "tui.help.desc.esc", &[("hint", &double_esc)]);
+        lines.push(kv("Esc", &esc_hint));
         // Task control shortcuts
-        lines.push(kv("Esc", "End current task"));
-        lines.push(kv("Ctrl+C", "End current task"));
-        lines.push(kv("Ctrl+C twice", "Quit"));
+        lines.push(kv("Esc", code_i18n::tr(ui_language, "tui.help.desc.end_task")));
+        lines.push(kv("Ctrl+C", code_i18n::tr(ui_language, "tui.help.desc.end_task")));
+        lines.push(kv(
+            code_i18n::tr(ui_language, "tui.help.key.ctrl_c_twice"),
+            code_i18n::tr(ui_language, "tui.help.desc.quit"),
+        ));
         lines.push(RtLine::from(""));
 
         // Composer
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Compose field",
+            code_i18n::tr(ui_language, "tui.help.section.compose"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
-        lines.push(kv("Enter", "Send message"));
-        lines.push(kv("Ctrl+J", "Insert newline"));
-        lines.push(kv("Shift+Enter", "Insert newline"));
+        lines.push(kv("Enter", code_i18n::tr(ui_language, "tui.help.desc.enter")));
+        lines.push(kv("Ctrl+J", code_i18n::tr(ui_language, "tui.help.desc.newline")));
+        lines.push(kv("Shift+Enter", code_i18n::tr(ui_language, "tui.help.desc.newline")));
         // Split combined shortcuts into separate rows for readability
-        lines.push(kv("Shift+Up", "Browse input history"));
-        lines.push(kv("Shift+Down", "Browse input history"));
-        lines.push(kv("Ctrl+B", "Move left"));
-        lines.push(kv("Ctrl+F", "Move right"));
-        lines.push(kv("Alt+Left", "Move by word"));
-        lines.push(kv("Alt+Right", "Move by word"));
+        lines.push(kv(
+            "Shift+Up",
+            code_i18n::tr(ui_language, "tui.help.desc.input_history"),
+        ));
+        lines.push(kv(
+            "Shift+Down",
+            code_i18n::tr(ui_language, "tui.help.desc.input_history"),
+        ));
+        lines.push(kv("Ctrl+B", code_i18n::tr(ui_language, "tui.help.desc.move_left")));
+        lines.push(kv("Ctrl+F", code_i18n::tr(ui_language, "tui.help.desc.move_right")));
+        lines.push(kv("Alt+Left", code_i18n::tr(ui_language, "tui.help.desc.move_word")));
+        lines.push(kv("Alt+Right", code_i18n::tr(ui_language, "tui.help.desc.move_word")));
         // Simplify delete shortcuts; remove Alt+Backspace/Backspace/Delete variants
-        lines.push(kv("Ctrl+W", "Delete previous word"));
-        lines.push(kv("Ctrl+H", "Delete previous char"));
-        lines.push(kv("Ctrl+D", "Delete next char"));
-        lines.push(kv("Ctrl+Backspace", "Delete current line"));
-        lines.push(kv("Ctrl+U", "Delete to line start"));
-        lines.push(kv("Ctrl+K", "Delete to line end"));
+        lines.push(kv("Ctrl+W", code_i18n::tr(ui_language, "tui.help.desc.del_prev_word")));
+        lines.push(kv("Ctrl+H", code_i18n::tr(ui_language, "tui.help.desc.del_prev_char")));
+        lines.push(kv("Ctrl+D", code_i18n::tr(ui_language, "tui.help.desc.del_next_char")));
+        lines.push(kv(
+            "Ctrl+Backspace",
+            code_i18n::tr(ui_language, "tui.help.desc.del_line"),
+        ));
+        lines.push(kv(
+            "Ctrl+U",
+            code_i18n::tr(ui_language, "tui.help.desc.del_to_line_start"),
+        ));
+        lines.push(kv(
+            "Ctrl+K",
+            code_i18n::tr(ui_language, "tui.help.desc.del_to_line_end"),
+        ));
         lines.push(kv(
             "Home/End",
-            "Jump to line start/end (jump to history start/end when input is empty)",
+            code_i18n::tr(ui_language, "tui.help.desc.home_end"),
         ));
         lines.push(RtLine::from(""));
 
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Terminal",
+            code_i18n::tr(ui_language, "tui.help.section.terminal"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
-        lines.push(kv("$", "Open shell terminal without a preset command"));
-        lines.push(kv("$ <command>", "Run shell command immediately"));
-        lines.push(kv("$$ <prompt>", "Request guided shell command help"));
+        lines.push(kv("$", code_i18n::tr(ui_language, "tui.help.desc.dollar")));
+        lines.push(kv(
+            "$ <command>",
+            code_i18n::tr(ui_language, "tui.help.desc.dollar_command"),
+        ));
+        lines.push(kv(
+            "$$ <prompt>",
+            code_i18n::tr(ui_language, "tui.help.desc.dollar_dollar"),
+        ));
         lines.push(RtLine::from(""));
 
         // Panels
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Panels",
+            code_i18n::tr(ui_language, "tui.help.section.panels"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
-        lines.push(kv("Ctrl+B", "Toggle Browser overlay"));
-        lines.push(kv("Ctrl+A", "Open Agents terminal"));
+        lines.push(kv(
+            "Ctrl+B",
+            code_i18n::tr(ui_language, "tui.help.desc.ctrl_b"),
+        ));
+        lines.push(kv(
+            "Ctrl+A",
+            code_i18n::tr(ui_language, "tui.help.desc.ctrl_a"),
+        ));
 
         // Slash command reference
         lines.push(RtLine::from(""));
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Slash commands",
+            code_i18n::tr(ui_language, "tui.help.section.slash"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
         for (cmd_str, cmd) in crate::slash_command::built_in_slash_commands() {
@@ -23976,7 +24312,12 @@ Have we met every part of this goal and is there no further work to do?"#
             &model_display_storage
         };
         let effort = Self::format_reasoning_effort(self.config.model_reasoning_effort);
-        let mut parts: Vec<String> = vec![format!("Model: {} ({})", model_display, effort)];
+        let mut parts: Vec<String> = vec![format!(
+            "{}: {} ({})",
+            code_i18n::tr_plain("tui.settings.summary.field.model"),
+            model_display,
+            effort
+        )];
         if let Some(profile) = self
             .config
             .active_profile
@@ -23984,77 +24325,111 @@ Have we met every part of this goal and is there no further work to do?"#
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            parts.push(format!("Profile: {}", profile));
+            parts.push(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.profile"),
+                profile
+            ));
         }
         Some(parts.join(" · "))
     }
 
     fn settings_summary_planning(&self) -> Option<String> {
         if self.config.planning_use_chat_model {
-            return Some("Model: Follow Chat Mode".to_string());
+            return Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.model"),
+                code_i18n::tr_plain("tui.settings.summary.value.follow_chat_mode")
+            ));
         }
         let model = self.config.planning_model.trim();
         let model_display_storage;
         let model_display = if model.is_empty() {
-            "(default)"
+            code_i18n::tr_plain("tui.settings.summary.value.default")
         } else {
             model_display_storage = Self::format_model_label(model);
             &model_display_storage
         };
         let effort = Self::format_reasoning_effort(self.config.planning_model_reasoning_effort);
-        Some(format!("Model: {} ({})", model_display, effort))
+        Some(format!(
+            "{}: {} ({})",
+            code_i18n::tr_plain("tui.settings.summary.field.model"),
+            model_display,
+            effort
+        ))
     }
 
     fn settings_summary_theme(&self) -> Option<String> {
         let theme_label = Self::theme_display_name(self.config.tui.theme.name);
         let spinner_name = &self.config.tui.spinner.name;
         let spinner_label = spinner::spinner_label_for(spinner_name);
-        Some(format!("Theme: {} · Spinner: {}", theme_label, spinner_label))
+        Some(format!(
+            "{}: {} · {}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.theme"),
+            theme_label,
+            code_i18n::tr_plain("tui.settings.summary.field.spinner"),
+            spinner_label
+        ))
     }
 
     fn settings_summary_updates(&self) -> Option<String> {
         if !crate::updates::upgrade_ui_enabled() {
-            return Some("Auto update: Disabled".to_string());
+            return Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.auto_update"),
+                code_i18n::tr_plain("tui.common.disabled")
+            ));
         }
         let status = if self.config.auto_upgrade_enabled {
-            "Enabled"
+            code_i18n::tr_plain("tui.common.enabled")
         } else {
-            "Disabled"
+            code_i18n::tr_plain("tui.common.disabled")
         };
-        let mut parts = vec![format!("Auto update: {}", status)];
+        let mut parts = vec![format!(
+            "{}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.auto_update"),
+            status
+        )];
         if let Some(latest) = self
             .latest_upgrade_version
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            parts.push(format!("Latest available: {}", latest));
+            parts.push(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.latest_available"),
+                latest
+            ));
         }
         Some(parts.join(" · "))
     }
 
     fn settings_summary_accounts(&self) -> Option<String> {
-        let auto_switch = if self.config.auto_switch_accounts_on_rate_limit {
-            "Auto-switch: On"
-        } else {
-            "Auto-switch: Off"
-        };
-
-        let api_key_fallback = if self.config.api_key_fallback_on_all_accounts_limited {
-            "API key fallback: On"
-        } else {
-            "API key fallback: Off"
-        };
-
-        Some(format!("{auto_switch} · {api_key_fallback}"))
+        Some(format!(
+            "{}: {} · {}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.auto_switch"),
+            Self::on_off_label(self.config.auto_switch_accounts_on_rate_limit),
+            code_i18n::tr_plain("tui.settings.summary.field.api_key_fallback"),
+            Self::on_off_label(self.config.api_key_fallback_on_all_accounts_limited)
+        ))
     }
 
     fn settings_summary_agents(&self) -> Option<String> {
         let (enabled, total) = agent_summary_counts(&self.config.agents);
         let commands = self.config.subagent_commands.len();
-        let mut parts = vec![format!("Enabled: {}/{}", enabled, total)];
+        let mut parts = vec![format!(
+            "{}: {}/{}",
+            code_i18n::tr_plain("tui.settings.summary.field.enabled"),
+            enabled,
+            total
+        )];
         if commands > 0 {
-            parts.push(format!("Custom commands: {}", commands));
+            parts.push(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.custom_commands"),
+                commands
+            ));
         }
         Some(parts.join(" · "))
     }
@@ -24063,10 +24438,13 @@ Have we met every part of this goal and is there no further work to do?"#
         let diagnostics_enabled = self.auto_state.qa_automation_enabled
             && (self.auto_state.review_enabled || self.auto_state.cross_check_enabled);
         let (model_text, effort_text) = if self.config.auto_drive_use_chat_model {
-            ("Follow Chat Mode".to_string(), None)
+            (
+                code_i18n::tr_plain("tui.settings.summary.value.follow_chat_mode").to_string(),
+                None,
+            )
         } else {
             let model_label = if self.config.auto_drive.model.trim().is_empty() {
-                "(default)".to_string()
+                code_i18n::tr_plain("tui.settings.summary.value.default").to_string()
             } else {
                 Self::format_model_label(&self.config.auto_drive.model)
             };
@@ -24074,24 +24452,38 @@ Have we met every part of this goal and is there no further work to do?"#
             (model_label, Some(effort))
         };
         let model_segment = if let Some(effort) = effort_text {
-            format!("Model: {} ({})", model_text, effort)
+            format!(
+                "{}: {} ({})",
+                code_i18n::tr_plain("tui.settings.summary.field.model"),
+                model_text,
+                effort
+            )
         } else {
-            format!("Model: {}", model_text)
+            format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.model"),
+                model_text
+            )
         };
         Some(format!(
-            "{} · Agents: {} · Diagnostics: {} · Continue: {}",
+            "{} · {}: {} · {}: {} · {}: {}",
             model_segment,
+            code_i18n::tr_plain("tui.settings.summary.field.agents"),
             Self::on_off_label(self.auto_state.subagents_enabled),
+            code_i18n::tr_plain("tui.settings.summary.field.diagnostics"),
             Self::on_off_label(diagnostics_enabled),
-            self.auto_state.continue_mode.label()
+            code_i18n::tr_plain("tui.settings.summary.field.continue"),
+            Self::format_auto_continue_mode(self.auto_state.continue_mode)
         ))
     }
 
     fn settings_summary_validation(&self) -> Option<String> {
         let groups = &self.config.validation.groups;
         Some(format!(
-            "Functional: {} · Stylistic: {}",
+            "{}: {} · {}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.functional"),
             Self::on_off_label(groups.functional),
+            code_i18n::tr_plain("tui.settings.summary.field.stylistic"),
             Self::on_off_label(groups.stylistic)
         ))
     }
@@ -24101,7 +24493,7 @@ Have we met every part of this goal and is there no further work to do?"#
         let auto_followups = self.config.auto_drive.auto_review_followup_attempts.get();
 
         let review_model_label = if self.config.review_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24111,7 +24503,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         let review_resolve_label = if self.config.review_resolve_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24121,7 +24513,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         let auto_review_model_label = if self.config.auto_review_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24131,7 +24523,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         let auto_review_resolve_label = if self.config.auto_review_resolve_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24141,13 +24533,18 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         Some(format!(
-            "/review: {} · Resolve: {} · Follow-ups: {} · Auto Review: {} ({} · resolve {} · follow-ups {})",
+            "/review: {} · {}: {} · {}: {} · {}: {} ({} · {}: {} · {}: {})",
             review_model_label,
+            code_i18n::tr_plain("tui.settings.summary.field.resolve"),
             review_resolve_label,
+            code_i18n::tr_plain("tui.settings.summary.field.followups"),
             attempts,
+            code_i18n::tr_plain("tui.settings.summary.field.auto_review"),
             Self::on_off_label(self.config.tui.auto_review_enabled),
             auto_review_model_label,
+            code_i18n::tr_plain("tui.settings.summary.field.resolve"),
             auto_review_resolve_label,
+            code_i18n::tr_plain("tui.settings.summary.field.followups"),
             auto_followups
         ))
     }
@@ -24156,25 +24553,40 @@ Have we met every part of this goal and is there no further work to do?"#
         if let Some(snapshot) = &self.rate_limit_snapshot {
             let primary = snapshot.primary_used_percent.clamp(0.0, 100.0).round() as i64;
             let secondary = snapshot.secondary_used_percent.clamp(0.0, 100.0).round() as i64;
-            Some(format!("Primary: {}% · Secondary: {}%", primary, secondary))
+            Some(format!(
+                "{}: {}% · {}: {}%",
+                code_i18n::tr_plain("tui.settings.summary.field.primary"),
+                primary,
+                code_i18n::tr_plain("tui.settings.summary.field.secondary"),
+                secondary
+            ))
         } else if self.rate_limit_fetch_inflight {
-            Some("Refreshing usage...".to_string())
+            Some(code_i18n::tr_plain("tui.settings.summary.value.refreshing_usage").to_string())
         } else {
-            Some("Usage data not loaded".to_string())
+            Some(code_i18n::tr_plain("tui.settings.summary.value.usage_not_loaded").to_string())
         }
     }
 
     fn settings_summary_chrome(&self) -> Option<String> {
         if self.browser_is_external {
-            Some("Browser: external".to_string())
+            Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.browser"),
+                code_i18n::tr_plain("tui.settings.summary.value.external")
+            ))
         } else {
-            Some("Browser: available".to_string())
+            Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.browser"),
+                code_i18n::tr_plain("tui.settings.summary.value.available")
+            ))
         }
     }
 
     fn settings_summary_mcp(&self) -> Option<String> {
         Some(format!(
-            "Servers configured: {}",
+            "{}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.servers_configured"),
             self.config.mcp_servers.len()
         ))
     }
@@ -24182,20 +24594,35 @@ Have we met every part of this goal and is there no further work to do?"#
     fn settings_summary_notifications(&self) -> Option<String> {
         match &self.config.tui.notifications {
             Notifications::Enabled(enabled) => {
-                Some(format!("Desktop alerts: {}", Self::on_off_label(*enabled)))
+                Some(format!(
+                    "{}: {}",
+                    code_i18n::tr_plain("tui.settings.summary.field.desktop_alerts"),
+                    Self::on_off_label(*enabled)
+                ))
             }
-            Notifications::Custom(entries) => Some(format!("Custom rules: {}", entries.len())),
+            Notifications::Custom(entries) => Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.custom_rules"),
+                entries.len()
+            )),
         }
     }
 
     fn settings_summary_prompts(&self) -> Option<String> {
         let count = self.bottom_pane.custom_prompts().len();
-        Some(format!("Prompts enabled: {}", count))
+        Some(format!(
+            "{}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.prompts_enabled"),
+            count
+        ))
     }
 
     fn settings_summary_skills(&self) -> Option<String> {
         let count = self.bottom_pane.skills().len();
-        Some(format!("Skills loaded: {count}"))
+        Some(format!(
+            "{}: {count}",
+            code_i18n::tr_plain("tui.settings.summary.field.skills_loaded")
+        ))
     }
 
     fn refresh_settings_overview_rows(&mut self) {
@@ -24211,11 +24638,12 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn format_reasoning_effort(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::Minimal | ReasoningEffort::None => "Minimal",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::XHigh => "XHigh",
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
         }
     }
 
@@ -24256,50 +24684,75 @@ Have we met every part of this goal and is there no further work to do?"#
     }
 
     fn on_off_label(value: bool) -> &'static str {
-        if value { "On" } else { "Off" }
+        if value {
+            code_i18n::tr_plain("tui.common.on")
+        } else {
+            code_i18n::tr_plain("tui.common.off")
+        }
+    }
+
+    fn format_auto_continue_mode(mode: AutoContinueMode) -> &'static str {
+        match mode {
+            AutoContinueMode::Immediate => code_i18n::tr_plain("tui.auto_continue.immediate"),
+            AutoContinueMode::TenSeconds => code_i18n::tr_plain("tui.auto_continue.ten_seconds"),
+            AutoContinueMode::SixtySeconds => code_i18n::tr_plain("tui.auto_continue.sixty_seconds"),
+            AutoContinueMode::Manual => code_i18n::tr_plain("tui.auto_continue.manual"),
+        }
     }
 
     fn theme_display_name(theme: code_core::config_types::ThemeName) -> String {
         match theme {
-            code_core::config_types::ThemeName::LightPhoton => "Light - Photon".to_string(),
+            code_core::config_types::ThemeName::LightPhoton => {
+                code_i18n::tr_plain("tui.theme.light_photon").to_string()
+            }
             code_core::config_types::ThemeName::LightPhotonAnsi16 => {
-                "Light - Photon (16-color)".to_string()
+                code_i18n::tr_plain("tui.theme.light_photon_ansi16").to_string()
             }
             code_core::config_types::ThemeName::LightPrismRainbow => {
-                "Light - Prism Rainbow".to_string()
+                code_i18n::tr_plain("tui.theme.light_prism_rainbow").to_string()
             }
             code_core::config_types::ThemeName::LightVividTriad => {
-                "Light - Vivid Triad".to_string()
+                code_i18n::tr_plain("tui.theme.light_vivid_triad").to_string()
             }
-            code_core::config_types::ThemeName::LightPorcelain => "Light - Porcelain".to_string(),
-            code_core::config_types::ThemeName::LightSandbar => "Light - Sandbar".to_string(),
-            code_core::config_types::ThemeName::LightGlacier => "Light - Glacier".to_string(),
+            code_core::config_types::ThemeName::LightPorcelain => {
+                code_i18n::tr_plain("tui.theme.light_porcelain").to_string()
+            }
+            code_core::config_types::ThemeName::LightSandbar => {
+                code_i18n::tr_plain("tui.theme.light_sandbar").to_string()
+            }
+            code_core::config_types::ThemeName::LightGlacier => {
+                code_i18n::tr_plain("tui.theme.light_glacier").to_string()
+            }
             code_core::config_types::ThemeName::DarkCarbonNight => {
-                "Dark - Carbon Night".to_string()
+                code_i18n::tr_plain("tui.theme.dark_carbon_night").to_string()
             }
             code_core::config_types::ThemeName::DarkCarbonAnsi16 => {
-                "Dark - Carbon (16-color)".to_string()
+                code_i18n::tr_plain("tui.theme.dark_carbon_ansi16").to_string()
             }
             code_core::config_types::ThemeName::DarkShinobiDusk => {
-                "Dark - Shinobi Dusk".to_string()
+                code_i18n::tr_plain("tui.theme.dark_shinobi_dusk").to_string()
             }
             code_core::config_types::ThemeName::DarkOledBlackPro => {
-                "Dark - OLED Black Pro".to_string()
+                code_i18n::tr_plain("tui.theme.dark_oled_black_pro").to_string()
             }
             code_core::config_types::ThemeName::DarkAmberTerminal => {
-                "Dark - Amber Terminal".to_string()
+                code_i18n::tr_plain("tui.theme.dark_amber_terminal").to_string()
             }
-            code_core::config_types::ThemeName::DarkAuroraFlux => "Dark - Aurora Flux".to_string(),
+            code_core::config_types::ThemeName::DarkAuroraFlux => {
+                code_i18n::tr_plain("tui.theme.dark_aurora_flux").to_string()
+            }
             code_core::config_types::ThemeName::DarkCharcoalRainbow => {
-                "Dark - Charcoal Rainbow".to_string()
+                code_i18n::tr_plain("tui.theme.dark_charcoal_rainbow").to_string()
             }
-            code_core::config_types::ThemeName::DarkZenGarden => "Dark - Zen Garden".to_string(),
+            code_core::config_types::ThemeName::DarkZenGarden => {
+                code_i18n::tr_plain("tui.theme.dark_zen_garden").to_string()
+            }
             code_core::config_types::ThemeName::DarkPaperLightPro => {
-                "Dark - Paper Light Pro".to_string()
+                code_i18n::tr_plain("tui.theme.dark_paper_light_pro").to_string()
             }
             code_core::config_types::ThemeName::Custom => {
                 let mut label =
-                    crate::theme::custom_theme_label().unwrap_or_else(|| "Custom".to_string());
+                    crate::theme::custom_theme_label().unwrap_or_else(|| code_i18n::tr_plain("tui.theme.custom").to_string());
                 for pref in ["Light - ", "Dark - ", "Light ", "Dark "] {
                     if label.starts_with(pref) {
                         label = label[pref.len()..].trim().to_string();
@@ -24307,9 +24760,17 @@ Have we met every part of this goal and is there no further work to do?"#
                     }
                 }
                 if crate::theme::custom_theme_is_dark().unwrap_or(false) {
-                    format!("Dark - {}", label)
+                    format!(
+                        "{} {}",
+                        code_i18n::tr_plain("tui.theme.prefix.dark"),
+                        label
+                    )
                 } else {
-                    format!("Light - {}", label)
+                    format!(
+                        "{} {}",
+                        code_i18n::tr_plain("tui.theme.prefix.light"),
+                        label
+                    )
                 }
             }
         }
@@ -24994,15 +25455,19 @@ Have we met every part of this goal and is there no further work to do?"#
 
         self.bottom_pane.set_task_running(false);
         self.bottom_pane
-            .update_status_text("Waiting in background".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.status.waiting_in_background").to_string());
 
         if !wait_ids.is_empty() {
-            self.push_background_tail(format!(
-                "Input unblocked after 10s; wait still running ({}).",
-                wait_ids.join(", ")
+            let ids = wait_ids.join(", ");
+            self.push_background_tail(code_i18n::tr_args(
+                code_i18n::current_language(),
+                "tui.status.input_unblocked_wait_running_list",
+                &[("ids", ids.as_str())],
             ));
         } else {
-            self.push_background_tail("Input unblocked after 10s; wait still running.".to_string());
+            self.push_background_tail(
+                code_i18n::tr_plain("tui.status.input_unblocked_wait_running").to_string(),
+            );
         }
 
         if let Some(front) = self.queued_user_messages.front().cloned() {
@@ -27522,6 +27987,10 @@ Have we met every part of this goal and is there no further work to do?"#
         }
     }
 
+    fn validation_harness_enabled(&self) -> bool {
+        self.config.validation.patch_harness
+    }
+
     fn validation_tool_requested(&self, name: &str) -> bool {
         let tools = &self.config.validation.tools;
         match name {
@@ -27594,6 +28063,49 @@ Have we met every part of this goal and is there no further work to do?"#
         self.refresh_settings_overview_rows();
     }
 
+    fn apply_validation_harness_toggle(&mut self, enable: bool) {
+        if self.config.validation.patch_harness == enable {
+            return;
+        }
+
+        self.config.validation.patch_harness = enable;
+        self.bottom_pane.set_validation_harness_enabled(enable);
+
+        if let Err(err) = self
+            .code_op_tx
+            .send(Op::UpdateValidationHarness { enable })
+        {
+            tracing::warn!("failed to send validation harness update: {err}");
+        }
+
+        let persist_result = match find_code_home() {
+            Ok(home) => {
+                code_core::config::set_validation_patch_harness_enabled(&home, enable)
+                    .map_err(|e| e.to_string())
+            }
+            Err(err) => Err(err.to_string()),
+        };
+
+        if let Err(err) = persist_result {
+            self.push_background_tail(format!(
+                "⚠️ 校验总开关 {}（写入配置失败: {err}）",
+                if enable { "开启" } else { "关闭" }
+            ));
+        }
+
+        self.refresh_settings_overview_rows();
+    }
+
+    pub(crate) fn toggle_validation_harness_mode(&mut self) {
+        let next = if self.validation_harness_enabled() {
+            ModeOption::DevFast
+        } else {
+            ModeOption::Strict
+        };
+        self.apply_mode_selection(next);
+        self.request_redraw();
+    }
+
     fn apply_validation_tool_toggle(&mut self, name: &str, enable: bool) {
         if name == "actionlint" {
             if self.config.github.actionlint_on_patch == enable {
@@ -27657,6 +28169,15 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn build_validation_status_message(&self) -> String {
         let mut lines = Vec::new();
+        lines.push(format!(
+            "Validation harness: {}",
+            if self.validation_harness_enabled() {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        ));
+        lines.push("".to_string());
         lines.push("Validation groups:".to_string());
         for group in [ValidationGroup::Functional, ValidationGroup::Stylistic] {
             let enabled = self.validation_group_enabled(group);
@@ -28795,7 +29316,7 @@ Have we met every part of this goal and is there no further work to do?"#
             let mut spans: Vec<Span> = Vec::new();
             // Title follows theme text color
             spans.push(Span::styled(
-                "Every Code",
+                code_i18n::tr_plain("tui.header.title"),
                 Style::default()
                     .fg(crate::colors::text())
                     .add_modifier(Modifier::BOLD),
@@ -28807,7 +29328,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
-                    "Model: ",
+                    code_i18n::tr_plain("tui.header.label.model"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
@@ -28822,7 +29343,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
-                    "Reasoning: ",
+                    code_i18n::tr_plain("tui.header.label.reasoning"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
@@ -28837,7 +29358,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
-                    "Directory: ",
+                    code_i18n::tr_plain("tui.header.label.directory"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
@@ -28853,7 +29374,7 @@ Have we met every part of this goal and is there no further work to do?"#
                         Style::default().fg(crate::colors::text_dim()),
                     ));
                     spans.push(Span::styled(
-                        "Branch: ",
+                        code_i18n::tr_plain("tui.header.label.branch"),
                         Style::default().fg(crate::colors::text_dim()),
                     ));
                     spans.push(Span::styled(
@@ -29344,8 +29865,10 @@ struct AutoReviewStubGuard;
 #[cfg(test)]
 impl AutoReviewStubGuard {
     fn install<F: FnMut() + Send + 'static>(f: F) -> Self {
-        let mut guard = AUTO_REVIEW_STUB.lock().unwrap();
+        let mut guard = AUTO_REVIEW_STUB.lock().unwrap_or_else(|err| err.into_inner());
+        assert!(guard.is_none(), "AutoReviewStubGuard already installed");
         *guard = Some(Box::new(f));
+        drop(guard);
         AutoReviewStubGuard
     }
 }
@@ -29502,6 +30025,7 @@ use code_core::protocol::OrderMeta;
 
     #[test]
     fn auto_review_triggers_when_enabled_and_diff_seen() {
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let _guard = AutoReviewStubGuard::install(|| {});
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
@@ -29516,6 +30040,7 @@ use code_core::protocol::OrderMeta;
 
     #[test]
     fn auto_review_does_not_duplicate_while_running() {
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_clone = calls.clone();
         let _guard = AutoReviewStubGuard::install(move || {
@@ -29539,6 +30064,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn auto_review_skips_when_no_changes_since_reviewed_snapshot() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_clone = calls.clone();
         let _guard = AutoReviewStubGuard::install(move || {
@@ -29584,7 +30110,7 @@ use code_core::protocol::OrderMeta;
 
     #[test]
     fn task_started_defers_auto_review_baseline_capture() {
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let _rt = enter_test_runtime_guard();
         let _capture_guard = CaptureCommitStubGuard::install(|_, _| {
             Ok(GhostCommit::new("baseline".to_string(), None))
@@ -29889,6 +30415,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn skipped_auto_review_with_findings_defers_to_next_turn() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -29960,6 +30487,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn skipped_auto_review_clean_runs_immediately() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30012,6 +30540,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn multiple_skipped_auto_reviews_collapse_to_first_base() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30075,6 +30604,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn stale_background_review_is_reclaimed() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30122,12 +30652,17 @@ use code_core::protocol::OrderMeta;
 
         harness.open_auto_drive_settings();
         let frame_with_settings = crate::test_helpers::render_chat_widget_to_vt100(&mut harness, 90, 24);
-        assert!(frame_with_settings.contains("Auto Drive Settings"));
+        let title_en = code_i18n::tr(code_i18n::Language::En, "tui.settings.panel_title.auto_drive");
+        let title_zh = code_i18n::tr(code_i18n::Language::ZhCn, "tui.settings.panel_title.auto_drive");
+        assert!(
+            frame_with_settings.contains(title_en) || frame_with_settings.contains(title_zh),
+            "expected settings title; got:\n{frame_with_settings}"
+        );
         assert!(!frame_with_settings.contains('\u{fffd}'));
 
         harness.close_auto_drive_settings();
         let frame_after_close = crate::test_helpers::render_chat_widget_to_vt100(&mut harness, 90, 24);
-        assert!(!frame_after_close.contains("Auto Drive Settings"));
+        assert!(!frame_after_close.contains(title_en) && !frame_after_close.contains(title_zh));
         assert!(!frame_after_close.contains('\u{fffd}'));
     }
 
@@ -31371,7 +31906,7 @@ use code_core::protocol::OrderMeta;
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
         chat.auto_state.set_phase(AutoRunPhase::Active);
         chat.auto_state.review_enabled = true;
@@ -31450,7 +31985,7 @@ use code_core::protocol::OrderMeta;
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
         chat.auto_state.set_phase(AutoRunPhase::Active);
         chat.auto_state.review_enabled = true;
@@ -31914,7 +32449,7 @@ use code_core::protocol::OrderMeta;
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
         chat.auto_state.set_phase(AutoRunPhase::Active);
         chat.auto_state.review_enabled = true;
@@ -34020,7 +34555,11 @@ impl ChatWidget<'_> {
         );
 
         #[cfg(test)]
-        if let Some(stub) = AUTO_REVIEW_STUB.lock().unwrap().as_mut() {
+        if let Some(stub) = AUTO_REVIEW_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_mut()
+        {
             (stub)();
             return;
         }
@@ -34334,7 +34873,7 @@ impl ChatWidget<'_> {
             line.push(' ');
             line.push_str(&format!("Merge {path_text} to apply fixes."));
         }
-        line.push_str(" [Ctrl+A] Show");
+        line.push_str(code_i18n::tr_plain("tui.auto_review.show_agents_hint"));
 
         let message_lines = vec![MessageLine {
             kind: MessageLineKind::Paragraph,
@@ -36674,7 +37213,7 @@ impl ChatWidget<'_> {
                     Style::default().fg(crate::colors::text()),
                 ),
                 Span::styled(
-                    "— Ctrl+B to close",
+                    code_i18n::tr_plain("tui.browser_overlay.ctrl_b_close"),
                     Style::default().fg(crate::colors::text_dim()),
                 ),
             ]))
@@ -37038,11 +37577,274 @@ impl ChatWidget<'_> {
         overlay.render(overlay_area, buf);
     }
 
+    fn render_lang_overlay(
+        &self,
+        frame_area: Rect,
+        history_area: Rect,
+        bottom_pane_area: Rect,
+        buf: &mut Buffer,
+        overlay: &LangOverlay,
+    ) {
+        use ratatui::layout::{Constraint, Layout, Margin};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+
+        let scrim_style = Style::default()
+            .bg(crate::colors::overlay_scrim())
+            .fg(crate::colors::text_dim());
+        fill_rect(buf, frame_area, None, scrim_style);
+
+        let padding = 1u16;
+        let footer_reserved = bottom_pane_area.height.min(1);
+        let overlay_bottom =
+            (bottom_pane_area.y + bottom_pane_area.height).saturating_sub(footer_reserved);
+        let overlay_height = overlay_bottom
+            .saturating_sub(history_area.y)
+            .max(1)
+            .min(frame_area.height);
+
+        let window_area = Rect {
+            x: history_area.x + padding,
+            y: history_area.y,
+            width: history_area.width.saturating_sub(padding * 2),
+            height: overlay_height,
+        };
+
+        Clear.render(window_area, buf);
+
+        let t_dim = Style::default().fg(crate::colors::text_dim());
+        let t_fg = Style::default().fg(crate::colors::text());
+
+        let title_text = code_i18n::tr_plain("tui.lang.title");
+        let select_label = code_i18n::tr_plain("tui.common.select_label");
+        let apply_label = code_i18n::tr_plain("tui.common.apply_label");
+        let close_label = code_i18n::tr_plain("tui.common.close_label");
+        let title = Line::from(vec![
+            Span::styled(" ", t_dim),
+            Span::styled(title_text, t_fg),
+            Span::styled(" ——— ", t_dim),
+            Span::styled("↑/↓", t_fg),
+            Span::styled(format!(" {select_label} "), t_dim),
+            Span::styled("Enter", t_fg),
+            Span::styled(format!(" {apply_label} "), t_dim),
+            Span::styled("Esc", t_fg),
+            Span::styled(format!(" {close_label} "), t_dim),
+        ]);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(Style::default().bg(crate::colors::background()))
+            .border_style(
+                Style::default()
+                    .fg(crate::colors::border())
+                    .bg(crate::colors::background()),
+            );
+
+        let inner = block.inner(window_area);
+        block.render(window_area, buf);
+
+        let inner_bg = Style::default().bg(crate::colors::background());
+        for y in inner.y..inner.y + inner.height {
+            for x in inner.x..inner.x + inner.width {
+                buf[(x, y)].set_style(inner_bg);
+            }
+        }
+
+        let padded = inner.inner(Margin::new(1, 1));
+        let footer_height = padded.height.min(2);
+        let list_height = padded.height.saturating_sub(footer_height).max(1);
+        let [list_area, footer_area] =
+            Layout::vertical([Constraint::Length(list_height), Constraint::Length(footer_height)])
+                .areas(padded);
+
+        let options = LangOption::all();
+        let items: Vec<ListItem<'static>> = options
+            .into_iter()
+            .enumerate()
+            .map(|(idx, option)| {
+                let prefix = format!("{} ", idx + 1);
+                let line = Line::from(vec![
+                    Span::styled(prefix, t_dim),
+                    Span::styled(code_i18n::language_self_name(option.to_language()), t_fg),
+                ]);
+                ListItem::new(line)
+            })
+            .collect();
+
+        let list = List::new(items)
+            .highlight_style(
+                Style::default()
+                    .fg(crate::colors::text())
+                    .bg(crate::colors::overlay_scrim())
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("▶ ");
+
+        let mut state = ListState::default();
+        state.select(Some(overlay.selected.min(options.len().saturating_sub(1))));
+        ratatui::widgets::StatefulWidget::render(list, list_area, buf, &mut state);
+
+        let hint = code_i18n::tr_plain("tui.lang.hint");
+        if footer_height == 1 {
+            Paragraph::new(vec![Line::from(vec![Span::styled(hint, t_dim)])]).render(footer_area, buf);
+        } else {
+            let shortcuts_label = code_i18n::tr_plain("tui.common.shortcuts_prefix");
+            Paragraph::new(vec![
+                Line::from(vec![Span::styled(hint, t_dim)]),
+                Line::from(vec![
+                    Span::styled(shortcuts_label, t_dim),
+                    Span::styled("1", t_fg),
+                    Span::styled("/", t_dim),
+                    Span::styled("2", t_fg),
+                ]),
+            ])
+            .render(footer_area, buf);
+        }
+    }
+
     fn browser_title(&self) -> &'static str {
         if self.browser_is_external {
             "Chrome"
         } else {
             "Browser"
+        }
+    }
+
+    fn render_mode_overlay(
+        &self,
+        frame_area: Rect,
+        history_area: Rect,
+        bottom_pane_area: Rect,
+        buf: &mut Buffer,
+        overlay: &ModeOverlay,
+    ) {
+        use ratatui::layout::{Constraint, Layout, Margin};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+
+        let scrim_style = Style::default()
+            .bg(crate::colors::overlay_scrim())
+            .fg(crate::colors::text_dim());
+        fill_rect(buf, frame_area, None, scrim_style);
+
+        let padding = 1u16;
+        let footer_reserved = bottom_pane_area.height.min(1);
+        let overlay_bottom =
+            (bottom_pane_area.y + bottom_pane_area.height).saturating_sub(footer_reserved);
+        let overlay_height = overlay_bottom
+            .saturating_sub(history_area.y)
+            .max(1)
+            .min(frame_area.height);
+
+        let window_area = Rect {
+            x: history_area.x + padding,
+            y: history_area.y,
+            width: history_area.width.saturating_sub(padding * 2),
+            height: overlay_height,
+        };
+
+        Clear.render(window_area, buf);
+
+        let t_dim = Style::default().fg(crate::colors::text_dim());
+        let t_fg = Style::default().fg(crate::colors::text());
+        let ui_language = code_i18n::current_language();
+
+        let title_text = code_i18n::tr(ui_language, "tui.mode.title");
+        let title = Line::from(vec![
+            Span::styled(" ", t_dim),
+            Span::styled(title_text, t_fg),
+            Span::styled(" — ", t_dim),
+            Span::styled("↑/↓", t_fg),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.common.select")),
+                t_dim,
+            ),
+            Span::styled("Enter", t_fg),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.common.apply")),
+                t_dim,
+            ),
+            Span::styled("Esc", t_fg),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.common.close")),
+                t_dim,
+            ),
+        ]);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(Style::default().bg(crate::colors::background()))
+            .border_style(
+                Style::default()
+                    .fg(crate::colors::border())
+                    .bg(crate::colors::background()),
+            );
+
+        let inner = block.inner(window_area);
+        block.render(window_area, buf);
+
+        let inner_bg = Style::default().bg(crate::colors::background());
+        for y in inner.y..inner.y + inner.height {
+            for x in inner.x..inner.x + inner.width {
+                buf[(x, y)].set_style(inner_bg);
+            }
+        }
+
+        let padded = inner.inner(Margin::new(1, 1));
+        let footer_height = padded.height.min(2);
+        let list_height = padded.height.saturating_sub(footer_height).max(1);
+        let [list_area, footer_area] =
+            Layout::vertical([Constraint::Length(list_height), Constraint::Length(footer_height)])
+                .areas(padded);
+
+        let options = ModeOption::all();
+        let items: Vec<ListItem<'static>> = options
+            .into_iter()
+            .enumerate()
+            .map(|(idx, option)| {
+                let prefix = format!("{} ", idx + 1);
+                let label_key = match option {
+                    ModeOption::DevFast => "tui.mode.option.fast",
+                    ModeOption::Strict => "tui.mode.option.strict",
+                };
+                let line = Line::from(vec![
+                    Span::styled(prefix, t_dim),
+                    Span::styled(code_i18n::tr(ui_language, label_key), t_fg),
+                ]);
+                ListItem::new(line)
+            })
+            .collect();
+
+        let list = List::new(items)
+            .highlight_style(
+                Style::default()
+                    .fg(crate::colors::text())
+                    .bg(crate::colors::overlay_scrim())
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("▶ ");
+
+        let mut state = ListState::default();
+        state.select(Some(overlay.selected.min(1)));
+        ratatui::widgets::StatefulWidget::render(list, list_area, buf, &mut state);
+
+        let hint = code_i18n::tr(ui_language, "tui.mode.hint");
+        if footer_height == 1 {
+            Paragraph::new(vec![Line::from(vec![Span::styled(hint, t_dim)])]).render(footer_area, buf);
+        } else {
+            let shortcuts_label = code_i18n::tr(ui_language, "tui.common.shortcuts_prefix");
+            Paragraph::new(vec![
+                Line::from(vec![Span::styled(hint, t_dim)]),
+                Line::from(vec![
+                    Span::styled(shortcuts_label, t_dim),
+                    Span::styled("1", t_fg),
+                    Span::styled("/", t_dim),
+                    Span::styled("2", t_fg),
+                ]),
+            ])
+            .render(footer_area, buf);
         }
     }
 
@@ -37081,9 +37883,16 @@ impl ChatWidget<'_> {
         };
         Clear.render(window_area, buf);
 
+        let ui_language = code_i18n::current_language();
         let title_spans = vec![
-            Span::styled(" Agents ", Style::default().fg(crate::colors::text())),
-            Span::styled("— Ctrl+A to close", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.agents.title")),
+                Style::default().fg(crate::colors::text()),
+            ),
+            Span::styled(
+                code_i18n::tr(ui_language, "tui.agents.title.close_hint"),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ];
 
         let block = Block::default()
@@ -37149,14 +37958,37 @@ impl ChatWidget<'_> {
         if tab_height > 0 {
             let filter_row = tabs_area;
             let mut spans: Vec<Span> = Vec::new();
-            spans.push(Span::styled("Filter", filter_title_style));
+            spans.push(Span::styled(
+                code_i18n::tr(ui_language, "tui.agents.filter.label"),
+                filter_title_style,
+            ));
             spans.push(Span::raw("   "));
             let tabs = [
-                (AgentsTerminalTab::All, "1", "All"),
-                (AgentsTerminalTab::Running, "2", "Running"),
-                (AgentsTerminalTab::Failed, "3", "Failed"),
-                (AgentsTerminalTab::Completed, "4", "Done"),
-                (AgentsTerminalTab::Review, "5", "Review"),
+                (
+                    AgentsTerminalTab::All,
+                    "1",
+                    code_i18n::tr(ui_language, "tui.agents.tab.all"),
+                ),
+                (
+                    AgentsTerminalTab::Running,
+                    "2",
+                    code_i18n::tr(ui_language, "tui.agents.tab.running"),
+                ),
+                (
+                    AgentsTerminalTab::Failed,
+                    "3",
+                    code_i18n::tr(ui_language, "tui.agents.tab.failed"),
+                ),
+                (
+                    AgentsTerminalTab::Completed,
+                    "4",
+                    code_i18n::tr(ui_language, "tui.agents.tab.done"),
+                ),
+                (
+                    AgentsTerminalTab::Review,
+                    "5",
+                    code_i18n::tr(ui_language, "tui.agents.tab.review"),
+                ),
             ];
             for (idx, (tab, number, label)) in tabs.iter().enumerate() {
                 if idx > 0 {
@@ -37176,12 +38008,17 @@ impl ChatWidget<'_> {
                 spans.push(Span::styled(format!("{number} {label}"), style));
             }
             let sort_label = match self.agents_terminal.sort_mode {
-                AgentsSortMode::Recent => "Recent",
-                AgentsSortMode::RunningFirst => "Running",
-                AgentsSortMode::Name => "Name",
+                AgentsSortMode::Recent => code_i18n::tr(ui_language, "tui.agents.sort.recent"),
+                AgentsSortMode::RunningFirst => {
+                    code_i18n::tr(ui_language, "tui.agents.sort.running")
+                }
+                AgentsSortMode::Name => code_i18n::tr(ui_language, "tui.agents.sort.name"),
             };
             let sort_spans = vec![
-                Span::styled("Sort: ", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.agents.sort.label"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ),
                 Span::raw("( "),
                 Span::styled(
                     format!("{sort_label} ▼"),
@@ -37318,9 +38155,9 @@ impl ChatWidget<'_> {
 
         if items.is_empty() {
             let empty_text = if self.agents_terminal.order.is_empty() {
-                "No agents yet"
+                code_i18n::tr(ui_language, "tui.agents.empty.none")
             } else {
-                "No agents match filters"
+                code_i18n::tr(ui_language, "tui.agents.empty.no_match")
             };
             items.push(ListItem::new(Line::from(vec![Span::styled(
                 empty_text,
@@ -37402,6 +38239,10 @@ impl ChatWidget<'_> {
 
                     let id_short = format!("#{}", agent_id.chars().take(7).collect::<String>());
                     let status_chip = format!("{} {}", agent_status_icon(status.clone()), agent_status_label(status));
+                    let ui_language = code_i18n::current_language();
+                    let status_prefix = code_i18n::tr(ui_language, "tui.agents.meta.status_prefix");
+                    let model_prefix = code_i18n::tr(ui_language, "tui.agents.meta.model_prefix");
+                    let id_prefix = code_i18n::tr(ui_language, "tui.agents.meta.id_prefix");
                     let model_meta = entry
                         .model
                         .as_ref()
@@ -37409,25 +38250,32 @@ impl ChatWidget<'_> {
                         .unwrap_or_else(|| display_name.clone());
                     let mut meta_line: Vec<Span> = vec![
                         Span::raw(" "),
-                        Span::styled("Status:", Style::default().fg(crate::colors::text_dim())),
+                        Span::styled(
+                            status_prefix,
+                            Style::default().fg(crate::colors::text_dim()),
+                        ),
                         Span::raw(" "),
                         Span::styled(status_chip, Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
                         Span::raw("   "),
-                        Span::styled("Model:", Style::default().fg(crate::colors::text_dim())),
+                        Span::styled(model_prefix, Style::default().fg(crate::colors::text_dim())),
                         Span::raw(" "),
                         Span::styled(
                             model_meta,
                             Style::default().fg(crate::colors::text()),
                         ),
                         Span::raw("   "),
-                        Span::styled("ID:", Style::default().fg(crate::colors::text_dim())),
+                        Span::styled(id_prefix, Style::default().fg(crate::colors::text_dim())),
                         Span::raw(" "),
                         Span::styled(id_short, Style::default().fg(crate::colors::text_dim())),
                     ];
                     if let Some(batch_id) = entry.batch_id.as_ref() {
                         meta_line.push(Span::raw("   "));
                         meta_line.push(Span::styled(
-                            format!("Batch: {}", short_batch_label(batch_id)),
+                            code_i18n::tr_args(
+                                ui_language,
+                                "tui.agents.meta.batch_prefix",
+                                &[("label", &short_batch_label(batch_id))],
+                            ),
                             Style::default().fg(crate::colors::text_dim()),
                         ));
                     }
@@ -37577,7 +38425,7 @@ impl ChatWidget<'_> {
             let hint_line = if let Some(pending) = self.agents_terminal.pending_stop.as_ref() {
                 Line::from(vec![
                     Span::styled(
-                        "Stop agent? ",
+                        code_i18n::tr(ui_language, "tui.agents.stop.prompt"),
                         Style::default()
                             .fg(crate::colors::error())
                             .add_modifier(Modifier::BOLD),
@@ -37587,28 +38435,49 @@ impl ChatWidget<'_> {
                         Style::default().fg(crate::colors::text()),
                     ),
                     Span::styled(
-                        " — Enter/Y stop  ",
+                        code_i18n::tr(ui_language, "tui.agents.stop.confirm"),
                         Style::default().fg(crate::colors::text_dim()),
                     ),
                     Span::styled(
-                        "Esc/N cancel",
+                        code_i18n::tr(ui_language, "tui.agents.stop.cancel"),
                         Style::default().fg(crate::colors::text_dim()),
                     ),
                 ])
             } else {
                 Line::from(vec![
                     Span::styled("[↑/↓/←/→]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Navigate   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.navigate")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[1-5]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Filter   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.filter")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[S]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Sort   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.sort")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[H/A]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Toggle Details   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(
+                            " {}   ",
+                            code_i18n::tr(ui_language, "tui.agents.footer.toggle_details")
+                        ),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[X]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Stop   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.stop")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[Ctrl+A]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Exit", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}", code_i18n::tr(ui_language, "tui.agents.footer.exit")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                 ])
             };
             Paragraph::new(hint_line)
@@ -37643,7 +38512,7 @@ impl ChatWidget<'_> {
         // Agent status block
         let agent_block = Block::default()
             .borders(Borders::ALL)
-            .title(" Agents ")
+            .title(format!(" {} ", code_i18n::tr_plain("tui.agents.title")))
             .border_style(Style::default().fg(crate::colors::border()));
 
         let inner_agent = agent_block.inner(area);
@@ -38143,6 +39012,10 @@ impl WidgetRef for &ChatWidget<'_> {
         let status_bar_area = layout_areas.get(0).copied().unwrap_or(area);
         let history_area = layout_areas.get(1).copied().unwrap_or(area);
         let bottom_pane_area = layout_areas.get(2).copied().unwrap_or(area);
+
+        // Click targets are per-frame (e.g. [OPEN] buttons in history cells).
+        // Clear before rendering so stale targets can't be clicked after scroll/layout changes.
+        self.open_click_targets.borrow_mut().clear();
 
         // Record the effective bottom pane height for buffer-mode scrollback inserts.
         self.layout
@@ -39121,6 +39994,39 @@ impl WidgetRef for &ChatWidget<'_> {
                     }
                 }
 
+                // Collect per-frame click targets (e.g. [OPEN] buttons) for mouse handling.
+                if let Some(plain) = item
+                    .as_any()
+                    .downcast_ref::<crate::history_cell::PlainHistoryCell>()
+                {
+                    let requested_width = item_area.width;
+                    let effective_width = if matches!(item.kind(), crate::history_cell::HistoryCellType::User) {
+                        requested_width.saturating_sub(crate::layout_consts::USER_HISTORY_RIGHT_PAD.into())
+                    } else {
+                        requested_width
+                    };
+                    let buttons = plain.open_buttons_for_area(requested_width, effective_width);
+                    for btn in buttons {
+                        if btn.y < skip_rows {
+                            continue;
+                        }
+                        let local_y = btn.y.saturating_sub(skip_rows);
+                        if local_y >= item_area.height {
+                            continue;
+                        }
+                        let width = btn.x_end.saturating_sub(btn.x_start).max(1);
+                        self.open_click_targets.borrow_mut().push(OpenClickTarget {
+                            rect: Rect {
+                                x: item_area.x.saturating_add(btn.x_start),
+                                y: item_area.y.saturating_add(local_y),
+                                width,
+                                height: 1,
+                            },
+                            target: btn.target,
+                        });
+                    }
+                }
+
                 // Debug: overlay order info on the spacing row below (or above if needed).
                 if self.show_order_overlay {
                     if let Some(Some(info)) = self.cell_order_dbg.get(idx) {
@@ -39686,6 +40592,10 @@ impl WidgetRef for &ChatWidget<'_> {
         if terminal_overlay_none && !agents_terminal_active {
             if let Some(overlay) = self.settings.overlay.as_ref() {
                 self.render_settings_overlay(area, history_area, buf, overlay);
+            } else if let Some(overlay) = &self.lang.overlay {
+                self.render_lang_overlay(area, history_area, bottom_pane_area, buf, overlay);
+            } else if let Some(overlay) = &self.mode.overlay {
+                self.render_mode_overlay(area, history_area, bottom_pane_area, buf, overlay);
             } else if let Some(overlay) = &self.diffs.overlay {
                 // Global scrim: dim the whole background to draw focus to the viewer
                 // We intentionally do this across the entire widget area rather than just the
@@ -39983,9 +40893,10 @@ impl WidgetRef for &ChatWidget<'_> {
                             height: h,
                         };
                         Clear.render(dialog, buf);
+                        let ui_language = code_i18n::current_language();
                         let dlg_block = Block::default()
                             .borders(Borders::ALL)
-                            .title("Confirm Undo")
+                            .title(code_i18n::tr(ui_language, "tui.undo.confirm.title"))
                             .style(
                                 Style::default()
                                     .bg(crate::colors::background())
@@ -40002,9 +40913,9 @@ impl WidgetRef for &ChatWidget<'_> {
                             }
                         }
                         let lines = vec![
-                            ratatui::text::Line::from("Are you sure you want to undo this diff?"),
+                            ratatui::text::Line::from(code_i18n::tr(ui_language, "tui.undo.confirm.question")),
                             ratatui::text::Line::from(
-                                "Press Enter to confirm • Esc to cancel".to_string().dim(),
+                                code_i18n::tr(ui_language, "tui.undo.confirm.hint").dim(),
                             ),
                         ];
                         let para = Paragraph::new(RtText::from(lines))
@@ -40022,6 +40933,7 @@ impl WidgetRef for &ChatWidget<'_> {
             // Render help overlay (covering the history area) if active
             if self.settings.overlay.is_none() {
                 if let Some(overlay) = &self.help.overlay {
+                    let ui_language = code_i18n::current_language();
                     // Global scrim across widget
                     let scrim_bg = Style::default()
                         .bg(crate::colors::overlay_scrim())
@@ -40039,6 +40951,8 @@ impl WidgetRef for &ChatWidget<'_> {
                         height: history_area.height,
                     };
                     Clear.render(window_area, buf);
+                    let guide_title = code_i18n::tr(ui_language, "tui.help.title");
+                    let close_label = code_i18n::tr(ui_language, "tui.common.close");
                     let block = Block::default()
                         .borders(Borders::ALL)
                         .title(ratatui::text::Line::from(vec![
@@ -40047,7 +40961,7 @@ impl WidgetRef for &ChatWidget<'_> {
                                 Style::default().fg(crate::colors::text_dim()),
                             ),
                             ratatui::text::Span::styled(
-                                "Guide",
+                                guide_title,
                                 Style::default().fg(crate::colors::text()),
                             ),
                             ratatui::text::Span::styled(
@@ -40059,7 +40973,7 @@ impl WidgetRef for &ChatWidget<'_> {
                                 Style::default().fg(crate::colors::text()),
                             ),
                             ratatui::text::Span::styled(
-                                " close ",
+                                format!(" {close_label} "),
                                 Style::default().fg(crate::colors::text_dim()),
                             ),
                         ]))
@@ -40317,6 +41231,16 @@ struct DiffsState {
 }
 
 #[derive(Default)]
+struct LangState {
+    overlay: Option<LangOverlay>,
+}
+
+#[derive(Default)]
+struct ModeState {
+    overlay: Option<ModeOverlay>,
+}
+
+#[derive(Default)]
 struct HelpState {
     overlay: Option<HelpOverlay>,
     body_visible_rows: std::cell::Cell<u16>,
@@ -40409,6 +41333,72 @@ struct HelpOverlay {
 impl HelpOverlay {
     fn new(lines: Vec<RtLine<'static>>) -> Self {
         Self { lines, scroll: 0 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LangOption {
+    ZhCn,
+    En,
+}
+
+impl LangOption {
+    fn all() -> [Self; 2] {
+        [Self::ZhCn, Self::En]
+    }
+
+    fn to_language(self) -> code_i18n::Language {
+        match self {
+            Self::En => code_i18n::Language::En,
+            Self::ZhCn => code_i18n::Language::ZhCn,
+        }
+    }
+}
+
+struct LangOverlay {
+    selected: usize,
+}
+
+impl LangOverlay {
+    fn new() -> Self {
+        let current = code_i18n::current_language();
+        let selected = LangOption::all()
+            .iter()
+            .position(|opt| opt.to_language() == current)
+            .unwrap_or(0);
+        Self { selected }
+    }
+
+    fn current(&self) -> LangOption {
+        LangOption::all()[self.selected.min(1)]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ModeOption {
+    DevFast,
+    Strict,
+}
+
+impl ModeOption {
+    fn all() -> [Self; 2] {
+        [Self::DevFast, Self::Strict]
+    }
+}
+
+struct ModeOverlay {
+    selected: usize,
+}
+
+impl ModeOverlay {
+    fn new(validation_enabled: bool) -> Self {
+        Self {
+            selected: if validation_enabled { 1 } else { 0 },
+        }
+    }
+
+    fn current(&self) -> ModeOption {
+        ModeOption::all()[self.selected.min(1)]
     }
 }
 

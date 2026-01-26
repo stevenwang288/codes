@@ -211,7 +211,7 @@ fn sentinel_style() -> AutoDriveStyle {
         variant: AutoDriveVariant::Sentinel,
         frame: FrameStyle {
             title_prefix: " ▶ ",
-            title_text: "Auto Drive",
+            title_text: code_i18n::tr_plain("tui.settings.section.auto_drive"),
             title_suffix: "",
             title_style: Style::default()
                 .fg(colors::text())
@@ -253,7 +253,7 @@ fn whisper_style() -> AutoDriveStyle {
         variant: AutoDriveVariant::Whisper,
         frame: FrameStyle {
             title_prefix: " ∙ ",
-            title_text: "Auto Drive",
+            title_text: code_i18n::tr_plain("tui.settings.section.auto_drive"),
             title_suffix: " ∙",
             title_style: Style::default()
                 .fg(colors::text_dim())
@@ -292,7 +292,7 @@ fn beacon_style() -> AutoDriveStyle {
         variant: AutoDriveVariant::Beacon,
         frame: FrameStyle {
             title_prefix: "",
-            title_text: "Auto Drive",
+            title_text: code_i18n::tr_plain("tui.settings.section.auto_drive"),
             title_suffix: "",
             title_style: Style::default()
                 .fg(colors::keyword())
@@ -340,7 +340,7 @@ fn horizon_style() -> AutoDriveStyle {
         variant: AutoDriveVariant::Horizon,
         frame: FrameStyle {
             title_prefix: "━━ ",
-            title_text: "Auto Drive",
+            title_text: code_i18n::tr_plain("tui.settings.section.auto_drive"),
             title_suffix: " ━━",
             title_style: Style::default()
                 .fg(info)
@@ -384,7 +384,7 @@ fn pulse_style() -> AutoDriveStyle {
         variant: AutoDriveVariant::Pulse,
         frame: FrameStyle {
             title_prefix: " ◆ ",
-            title_text: "Auto Drive",
+            title_text: code_i18n::tr_plain("tui.settings.section.auto_drive"),
             title_suffix: " ◆",
             title_style: Style::default()
                 .fg(success)

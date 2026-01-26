@@ -41,7 +41,7 @@ fn set_nonblocking(_tty: &std::fs::File) {
     #[cfg(unix)]
     {
         use std::os::unix::io::AsRawFd;
-        let fd = tty.as_raw_fd();
+        let fd = _tty.as_raw_fd();
         if fd != -1 {
             let flags = unsafe { libc::fcntl(fd, libc::F_GETFL, 0) };
             if flags != -1 {

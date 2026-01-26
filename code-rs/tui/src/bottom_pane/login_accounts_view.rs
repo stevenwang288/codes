@@ -494,7 +494,7 @@ impl LoginAccountsState {
                 if account.is_active {
                     spans.push(Span::raw(" "));
                     spans.push(Span::styled(
-                        "(current)",
+                        code_i18n::tr_plain("tui.common.current"),
                         Style::default()
                             .fg(crate::colors::success())
                             .add_modifier(Modifier::BOLD),
@@ -531,25 +531,40 @@ impl LoginAccountsState {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled(if add_selected { "› " } else { "  " }, add_arrow_style),
-            Span::styled("Add account…", add_label_style),
+            Span::styled(code_i18n::tr_plain("tui.login.add_account"), add_label_style),
         ]));
 
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("↑↓", Style::default().fg(crate::colors::function())),
-            Span::styled(" Navigate  ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::styled(" Select  ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.select_label")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("d", Style::default().fg(crate::colors::warning()).add_modifier(Modifier::BOLD)),
-            Span::styled(" Disconnect  ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.login.disconnect")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Esc", Style::default().fg(crate::colors::error()).add_modifier(Modifier::BOLD)),
-            Span::styled(" Close", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ]));
 
         if matches!(self.mode, ViewMode::ConfirmRemove { .. }) {
             lines.push(Line::from(""));
-            lines.push(Line::from(vec![Span::styled("Confirm removal?", Style::default().add_modifier(Modifier::BOLD))]));
-            lines.push(Line::from("Press Enter to disconnect or Esc to cancel."));
+            lines.push(Line::from(vec![Span::styled(
+                code_i18n::tr_plain("tui.login.confirm_removal"),
+                Style::default().add_modifier(Modifier::BOLD),
+            )]));
+            lines.push(Line::from(code_i18n::tr_plain("tui.login.confirm_removal_hint")));
         }
 
         Paragraph::new(lines)
@@ -832,9 +847,12 @@ impl LoginAddAccountState {
 
         match &self.step {
             AddStep::Choose { selected } => {
-                lines.push(Line::from("Choose how you’d like to add an account:"));
+                lines.push(Line::from(code_i18n::tr_plain("tui.login.add.choose_method")));
                 lines.push(Line::from(""));
-                let options = ["ChatGPT sign-in", "API key"];
+                let options = [
+                    code_i18n::tr_plain("tui.login.add.option.chatgpt"),
+                    code_i18n::tr_plain("tui.login.add.option.api_key"),
+                ];
                 for (idx, option) in options.iter().enumerate() {
                     let mut spans = Vec::new();
                     if idx == *selected {
@@ -851,30 +869,48 @@ impl LoginAddAccountState {
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![
                     Span::styled("↑↓", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Navigate  ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("Enter", Style::default().fg(crate::colors::success())),
-                    Span::styled(" Select  ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}  ", code_i18n::tr_plain("tui.common.select_label")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("Esc", Style::default().fg(crate::colors::error()).add_modifier(Modifier::BOLD)),
-                    Span::styled(" Back", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}", code_i18n::tr_plain("tui.common.back")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                 ]));
             }
             AddStep::ApiKey { field } => {
-                lines.push(Line::from("Paste your OpenAI API key:"));
+                lines.push(Line::from(code_i18n::tr_plain("tui.login.add.api_key.prompt")));
                 lines.push(Line::from(field.render_line()));
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![
                     Span::styled("Enter", Style::default().fg(crate::colors::success())),
-                    Span::styled(" Save  ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}  ", code_i18n::tr_plain("tui.common.save")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("Esc", Style::default().fg(crate::colors::error()).add_modifier(Modifier::BOLD)),
-                    Span::styled(" Cancel", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}", code_i18n::tr_plain("tui.common.cancel")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                 ]));
             }
             AddStep::Waiting { auth_url } => {
-                lines.push(Line::from("Finish signing in with ChatGPT in your browser."));
+                lines.push(Line::from(code_i18n::tr_plain("tui.login.add.waiting.prompt")));
                 lines.push(Line::from(vec![
-                    Span::styled("Not seeing a browser? ", Style::default().fg(crate::colors::text_dim())),
                     Span::styled(
-                        "Press C to switch to code authentication.",
+                        code_i18n::tr_plain("tui.login.add.waiting.no_browser_prefix"),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.login.add.waiting.press_c_hint"),
                         Style::default().fg(crate::colors::primary()),
                     ),
                 ]));
@@ -889,19 +925,27 @@ impl LoginAddAccountState {
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![
                     Span::styled("Esc", Style::default().fg(crate::colors::error()).add_modifier(Modifier::BOLD)),
-                    Span::styled(" Cancel login", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}", code_i18n::tr_plain("tui.login.cancel_login")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                 ]));
             }
             AddStep::DeviceCode(state) => {
-                lines.push(Line::from("Complete sign-in using a verification code."));
+                lines.push(Line::from(code_i18n::tr_plain("tui.login.add.device_code.prompt")));
                 match state.status {
                     DeviceCodeStatus::Generating => {
-                        lines.push(Line::from("Generating a secure code and link…"));
+                        lines.push(Line::from(code_i18n::tr_plain(
+                            "tui.login.add.device_code.generating",
+                        )));
                     }
                     DeviceCodeStatus::WaitingForApproval => {
                         if let Some(code) = &state.user_code {
                             lines.push(Line::from(vec![
-                                Span::styled("Code: ", Style::default().fg(crate::colors::text_dim())),
+                                Span::styled(
+                                    code_i18n::tr_plain("tui.login.add.device_code.code_label"),
+                                    Style::default().fg(crate::colors::text_dim()),
+                                ),
                                 Span::styled(
                                     code.clone(),
                                     Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD),
@@ -909,7 +953,9 @@ impl LoginAddAccountState {
                             ]));
                         }
                         if let Some(url) = &state.authorize_url {
-                            lines.push(Line::from("Visit this link on any device:"));
+                            lines.push(Line::from(code_i18n::tr_plain(
+                                "tui.login.add.device_code.visit_link",
+                            )));
                             for chunk in wrap_url_segments(url, content_width) {
                                 lines.push(Line::from(vec![Span::styled(
                                     chunk,
@@ -917,13 +963,18 @@ impl LoginAddAccountState {
                                 )]));
                             }
                         }
-                        lines.push(Line::from("Keep this code private. It expires after 15 minutes."));
+                        lines.push(Line::from(code_i18n::tr_plain(
+                            "tui.login.add.device_code.keep_private",
+                        )));
                     }
                 }
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![
                     Span::styled("Esc", Style::default().fg(crate::colors::error()).add_modifier(Modifier::BOLD)),
-                    Span::styled(" Cancel login", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}", code_i18n::tr_plain("tui.login.cancel_login")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                 ]));
             }
         }
@@ -938,7 +989,7 @@ impl LoginAddAccountState {
     pub fn acknowledge_chatgpt_started(&mut self, auth_url: String) {
         self.step = AddStep::Waiting { auth_url: Some(auth_url) };
         self.feedback = Some(Feedback {
-            message: "Browser opened. Complete sign-in to finish.".to_string(),
+            message: code_i18n::tr_plain("tui.login.add.browser_opened").to_string(),
             is_error: false,
         });
     }

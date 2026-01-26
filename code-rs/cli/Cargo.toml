@@ -35,6 +35,7 @@ code-responses-api-proxy = { workspace = true }
 code-tui = { workspace = true }
 code-version = { path = "../code-version" }
 code-cloud-tasks = { workspace = true }
+code-i18n = { workspace = true }
 ctor = { workspace = true }
 futures = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "json"] }

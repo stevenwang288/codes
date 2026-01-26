@@ -776,18 +776,21 @@ impl<'a> BottomPaneView<'a> for ReviewSettingsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(colors::border()))
             .style(Style::default().bg(colors::background()).fg(colors::text()))
-            .title(" Review Settings ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.settings.review.title")
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
 
         let header_lines = vec![
             Line::from(Span::styled(
-                "Configure /review and Auto Review models, resolve models, and follow-ups.",
+                code_i18n::tr_plain("tui.settings.review.desc"),
                 Style::default().fg(colors::text_dim()),
             )),
             Line::from(Span::styled(
-                "Use ↑↓ to navigate · Enter select/open · Space toggle · ←→ adjust values · Esc close",
+                code_i18n::tr_plain("tui.settings.review.hint"),
                 Style::default().fg(colors::text_dim()),
             )),
             Line::from(""),
@@ -795,15 +798,30 @@ impl<'a> BottomPaneView<'a> for ReviewSettingsView {
         let footer_lines = {
             let mut lines = vec![Line::from(vec![
                 Span::styled("↑↓", Style::default().fg(colors::function())),
-                Span::styled(" Navigate  ", Style::default().fg(colors::text_dim())),
+                Span::styled(
+                    format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
+                    Style::default().fg(colors::text_dim()),
+                ),
                 Span::styled("Enter", Style::default().fg(colors::success())),
-                Span::styled(" Select  ", Style::default().fg(colors::text_dim())),
+                Span::styled(
+                    format!(" {}  ", code_i18n::tr_plain("tui.common.select_label")),
+                    Style::default().fg(colors::text_dim()),
+                ),
                 Span::styled("Space", Style::default().fg(colors::success())),
-                Span::styled(" Toggle  ", Style::default().fg(colors::text_dim())),
+                Span::styled(
+                    format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")),
+                    Style::default().fg(colors::text_dim()),
+                ),
                 Span::styled("←→", Style::default().fg(colors::function())),
-                Span::styled(" Adjust  ", Style::default().fg(colors::text_dim())),
+                Span::styled(
+                    format!(" {}  ", code_i18n::tr_plain("tui.common.adjust")),
+                    Style::default().fg(colors::text_dim()),
+                ),
                 Span::styled("Esc", Style::default().fg(colors::error())),
-                Span::styled(" Close", Style::default().fg(colors::text_dim())),
+                Span::styled(
+                    format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                    Style::default().fg(colors::text_dim()),
+                ),
             ])];
             if let Some(notice) = &self.pending_notice {
                 lines.push(Line::from(vec![Span::styled(

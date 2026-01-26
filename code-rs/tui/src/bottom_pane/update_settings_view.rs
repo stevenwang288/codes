@@ -168,7 +168,7 @@ impl UpdateSettingsView {
         let run_prefix = if run_selected { "› " } else { "  " };
         lines.push(Line::from(vec![
             Span::styled(run_prefix, run_style),
-            Span::styled("Run Upgrade", run_style),
+            Span::styled(code_i18n::tr_plain("tui.updates.run_upgrade"), run_style),
             Span::raw("  "),
             Span::styled(version_summary, Style::default().fg(colors::text_dim())),
         ]));
@@ -192,15 +192,23 @@ impl UpdateSettingsView {
         };
         lines.push(Line::from(vec![
             Span::styled(toggle_prefix, toggle_label_style),
-            Span::styled("Automatic Upgrades", toggle_label_style),
+            Span::styled(code_i18n::tr_plain("tui.updates.automatic_upgrades"), toggle_label_style),
             Span::raw("  "),
             Span::styled(
-                format!("[{}] Enabled", if self.auto_enabled { "x" } else { " " }),
+                format!(
+                    "[{}] {}",
+                    if self.auto_enabled { "x" } else { " " },
+                    code_i18n::tr_plain("tui.common.enabled")
+                ),
                 enabled_box_style,
             ),
             Span::raw("  "),
             Span::styled(
-                format!("[{}] Disabled", if self.auto_enabled { " " } else { "x" }),
+                format!(
+                    "[{}] {}",
+                    if self.auto_enabled { " " } else { "x" },
+                    code_i18n::tr_plain("tui.common.disabled")
+                ),
                 disabled_box_style,
             ),
         ]));
@@ -214,17 +222,26 @@ impl UpdateSettingsView {
         };
         lines.push(Line::from(vec![
             Span::styled(close_prefix, close_style),
-            Span::styled("Close", close_style),
+            Span::styled(code_i18n::tr_plain("tui.common.close_label"), close_style),
         ]));
 
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled(" ↑↓", Style::default().fg(colors::function())),
-            Span::styled(" Navigate  ", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
+                Style::default().fg(colors::text_dim()),
+            ),
             Span::styled("Enter", Style::default().fg(colors::success())),
-            Span::styled(" Configure  ", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.configure")),
+                Style::default().fg(colors::text_dim()),
+            ),
             Span::styled("Esc", Style::default().fg(colors::error())),
-            Span::styled(" Close", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(colors::text_dim()),
+            ),
         ]));
 
         // Colors for the enabled/disabled boxes already set; no extra lines needed.

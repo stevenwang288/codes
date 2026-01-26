@@ -33,7 +33,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use super::onboarding_screen::StepState;
-// no additional imports
+use code_i18n;
 
 #[derive(Debug)]
 pub(crate) enum SignInState {
@@ -113,14 +113,14 @@ impl AuthModeWidget {
             Line::from(vec![
                 Span::raw("> "),
                 Span::styled(
-                    "Sign in with ChatGPT to use your paid OpenAI plan",
+                    code_i18n::tr_plain("tui.onboarding.auth.intro.line1"),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
                 Span::raw("  "),
                 Span::styled(
-                    "or connect an API key for usage-based billing",
+                    code_i18n::tr_plain("tui.onboarding.auth.intro.line2"),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
             ]),
@@ -136,9 +136,15 @@ impl AuthModeWidget {
                     AuthMode::ChatGPT => "ChatGPT",
                 };
                 let msg = format!(
-                    "  You’re currently using {} while your preferred method is {}.",
-                    to_label(current),
-                    to_label(self.preferred_auth_method)
+                    "  {}",
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.onboarding.auth.current_vs_preferred",
+                        &[
+                            ("current", to_label(current)),
+                            ("preferred", to_label(self.preferred_auth_method)),
+                        ],
+                    )
                 );
                 lines.push(
                     Line::from(msg)
@@ -181,34 +187,37 @@ impl AuthModeWidget {
         };
         let chatgpt_label = if matches!(self.login_status, LoginStatus::AuthMode(AuthMode::ChatGPT))
         {
-            "Continue using ChatGPT"
+            code_i18n::tr_plain("tui.onboarding.auth.option.chatgpt.continue")
         } else {
-            "Sign in with ChatGPT"
+            code_i18n::tr_plain("tui.onboarding.auth.option.chatgpt.sign_in")
         };
 
         lines.extend(create_mode_item(
             0,
             AuthMode::ChatGPT,
             chatgpt_label,
-            "Usage included with Plus, Pro, and Team plans",
+            code_i18n::tr_plain("tui.onboarding.auth.option.chatgpt.desc"),
         ));
         let api_key_label = if matches!(self.login_status, LoginStatus::AuthMode(AuthMode::ApiKey))
         {
-            "Continue using API key"
+            code_i18n::tr_plain("tui.onboarding.auth.option.api_key.continue")
         } else {
-            "Provide your own API key"
+            code_i18n::tr_plain("tui.onboarding.auth.option.api_key.provide")
         };
         lines.extend(create_mode_item(
             1,
             AuthMode::ApiKey,
             api_key_label,
-            "Pay for what you use",
+            code_i18n::tr_plain("tui.onboarding.auth.option.api_key.desc"),
         ));
         lines.push(Line::from(""));
         lines.push(
             // AE: Following styles.md, this should probably be Cyan because it's a user input tip.
             //     But leaving this for a future cleanup.
-            Line::from("  Press Enter to continue")
+            Line::from(format!(
+                "  {}",
+                code_i18n::tr_plain("tui.onboarding.common.press_enter_to_continue")
+            ))
                 .style(Style::default().fg(crate::colors::text_dim())),
         );
         if let Some(err) = &self.error {
@@ -231,11 +240,16 @@ impl AuthModeWidget {
             .send(AppEvent::ScheduleFrameIn(std::time::Duration::from_millis(
                 100,
             )));
-        spans.extend(shimmer_spans("Finish signing in via your browser"));
+        spans.extend(shimmer_spans(code_i18n::tr_plain(
+            "tui.onboarding.auth.browser.title",
+        )));
         let mut lines = vec![Line::from(spans), Line::from("")];
         if let SignInState::ChatGptContinueInBrowser(state) = &self.sign_in_state {
             if !state.auth_url.is_empty() {
-                lines.push(Line::from("  If the link doesn't open automatically, open the following link to authenticate:"));
+                lines.push(Line::from(format!(
+                    "  {}",
+                    code_i18n::tr_plain("tui.onboarding.auth.browser.link_hint")
+                )));
                 lines.push(Line::from(vec![
                     Span::raw("  "),
                     state.auth_url
@@ -410,7 +424,7 @@ async fn spawn_completion_poller(
             event_tx.send(AppEvent::OnboardingAuthComplete(Ok(())));
         } else {
             event_tx.send(AppEvent::OnboardingAuthComplete(Err(
-                "login failed".to_string()
+                code_i18n::tr_plain("tui.onboarding.auth.login_failed").to_string(),
             )));
         }
     })

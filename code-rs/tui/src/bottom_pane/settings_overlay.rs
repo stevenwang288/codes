@@ -1,3 +1,5 @@
+use code_i18n;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SettingsSection {
     Model,
@@ -36,63 +38,63 @@ impl SettingsSection {
         SettingsSection::Limits,
     ];
 
-    pub(crate) const fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
-            SettingsSection::Model => "Model",
-            SettingsSection::Theme => "Theme",
-        SettingsSection::Planning => "Planning",
-        SettingsSection::Updates => "Updates",
-        SettingsSection::Accounts => "Accounts",
-        SettingsSection::Agents => "Agents",
-        SettingsSection::AutoDrive => "Auto Drive",
-        SettingsSection::Review => "Review",
-            SettingsSection::Validation => "Validation",
-            SettingsSection::Limits => "Limits",
-            SettingsSection::Chrome => "Chrome",
-        SettingsSection::Mcp => "MCP",
-        SettingsSection::Notifications => "Notifications",
-        SettingsSection::Prompts => "Prompts",
-        SettingsSection::Skills => "Skills",
+            SettingsSection::Model => code_i18n::tr_plain("tui.settings.section.model"),
+            SettingsSection::Theme => code_i18n::tr_plain("tui.settings.section.theme"),
+            SettingsSection::Planning => code_i18n::tr_plain("tui.settings.section.planning"),
+            SettingsSection::Updates => code_i18n::tr_plain("tui.settings.section.updates"),
+            SettingsSection::Accounts => code_i18n::tr_plain("tui.settings.section.accounts"),
+            SettingsSection::Agents => code_i18n::tr_plain("tui.settings.section.agents"),
+            SettingsSection::AutoDrive => code_i18n::tr_plain("tui.settings.section.auto_drive"),
+            SettingsSection::Review => code_i18n::tr_plain("tui.settings.section.review"),
+            SettingsSection::Validation => code_i18n::tr_plain("tui.settings.section.validation"),
+            SettingsSection::Limits => code_i18n::tr_plain("tui.settings.section.limits"),
+            SettingsSection::Chrome => code_i18n::tr_plain("tui.settings.section.chrome"),
+            SettingsSection::Mcp => code_i18n::tr_plain("tui.settings.section.mcp"),
+            SettingsSection::Notifications => code_i18n::tr_plain("tui.settings.section.notifications"),
+            SettingsSection::Prompts => code_i18n::tr_plain("tui.settings.section.prompts"),
+            SettingsSection::Skills => code_i18n::tr_plain("tui.settings.section.skills"),
         }
     }
 
-    pub(crate) const fn help_line(self) -> &'static str {
+    pub(crate) fn help_line(self) -> &'static str {
         match self {
-            SettingsSection::Model => "Choose the language model used for new completions.",
-            SettingsSection::Theme => "Switch between preset color palettes and adjust contrast.",
-        SettingsSection::Planning => "Choose the model used in Plan Mode (Read Only).",
-        SettingsSection::Updates => "Control CLI auto-update cadence and release channels.",
-        SettingsSection::Accounts => "Configure account switching behavior under rate and usage limits.",
-        SettingsSection::Agents => "Configure linked agents and default task permissions.",
-        SettingsSection::AutoDrive => "Manage Auto Drive defaults for review and cadence.",
-        SettingsSection::Review => "Adjust Auto Review and Auto Resolve automation for /review.",
-            SettingsSection::Validation => "Toggle validation groups and tool availability.",
-            SettingsSection::Limits => "Inspect API usage, rate limits, and reset windows.",
-            SettingsSection::Chrome => "Connect to Chrome or switch browser integrations.",
-        SettingsSection::Mcp => "Enable and manage local MCP servers for tooling.",
-        SettingsSection::Notifications => "Adjust desktop and terminal notification preferences.",
-        SettingsSection::Prompts => "Create and edit custom prompt snippets.",
-        SettingsSection::Skills => "Manage project-scoped and global skills.",
+            SettingsSection::Model => code_i18n::tr_plain("tui.settings.help.model"),
+            SettingsSection::Theme => code_i18n::tr_plain("tui.settings.help.theme"),
+            SettingsSection::Planning => code_i18n::tr_plain("tui.settings.help.planning"),
+            SettingsSection::Updates => code_i18n::tr_plain("tui.settings.help.updates"),
+            SettingsSection::Accounts => code_i18n::tr_plain("tui.settings.help.accounts"),
+            SettingsSection::Agents => code_i18n::tr_plain("tui.settings.help.agents"),
+            SettingsSection::AutoDrive => code_i18n::tr_plain("tui.settings.help.auto_drive"),
+            SettingsSection::Review => code_i18n::tr_plain("tui.settings.help.review"),
+            SettingsSection::Validation => code_i18n::tr_plain("tui.settings.help.validation"),
+            SettingsSection::Limits => code_i18n::tr_plain("tui.settings.help.limits"),
+            SettingsSection::Chrome => code_i18n::tr_plain("tui.settings.help.chrome"),
+            SettingsSection::Mcp => code_i18n::tr_plain("tui.settings.help.mcp"),
+            SettingsSection::Notifications => code_i18n::tr_plain("tui.settings.help.notifications"),
+            SettingsSection::Prompts => code_i18n::tr_plain("tui.settings.help.prompts"),
+            SettingsSection::Skills => code_i18n::tr_plain("tui.settings.help.skills"),
         }
     }
 
-    pub(crate) const fn placeholder(self) -> &'static str {
+    pub(crate) fn placeholder(self) -> &'static str {
         match self {
-            SettingsSection::Model => "Model settings coming soon.",
-            SettingsSection::Theme => "Theme settings coming soon.",
-        SettingsSection::Planning => "Planning settings coming soon.",
-        SettingsSection::Updates => "Upgrade Codex and manage automatic updates.",
-        SettingsSection::Accounts => "Account switching settings coming soon.",
-        SettingsSection::Agents => "Agents configuration coming soon.",
-        SettingsSection::AutoDrive => "Auto Drive controls coming soon.",
-            SettingsSection::Review => "Adjust Auto Review and Auto Resolve automation for /review.",
-            SettingsSection::Validation => "Toggle validation groups and tools.",
-            SettingsSection::Limits => "Limits usage visualization coming soon.",
-            SettingsSection::Chrome => "Chrome integration settings coming soon.",
-        SettingsSection::Mcp => "MCP server management coming soon.",
-        SettingsSection::Notifications => "Notification preferences coming soon.",
-        SettingsSection::Prompts => "Manage custom prompts.",
-        SettingsSection::Skills => "Manage skills.",
+            SettingsSection::Model => code_i18n::tr_plain("tui.settings.placeholder.model"),
+            SettingsSection::Theme => code_i18n::tr_plain("tui.settings.placeholder.theme"),
+            SettingsSection::Planning => code_i18n::tr_plain("tui.settings.placeholder.planning"),
+            SettingsSection::Updates => code_i18n::tr_plain("tui.settings.placeholder.updates"),
+            SettingsSection::Accounts => code_i18n::tr_plain("tui.settings.placeholder.accounts"),
+            SettingsSection::Agents => code_i18n::tr_plain("tui.settings.placeholder.agents"),
+            SettingsSection::AutoDrive => code_i18n::tr_plain("tui.settings.placeholder.auto_drive"),
+            SettingsSection::Review => code_i18n::tr_plain("tui.settings.placeholder.review"),
+            SettingsSection::Validation => code_i18n::tr_plain("tui.settings.placeholder.validation"),
+            SettingsSection::Limits => code_i18n::tr_plain("tui.settings.placeholder.limits"),
+            SettingsSection::Chrome => code_i18n::tr_plain("tui.settings.placeholder.chrome"),
+            SettingsSection::Mcp => code_i18n::tr_plain("tui.settings.placeholder.mcp"),
+            SettingsSection::Notifications => code_i18n::tr_plain("tui.settings.placeholder.notifications"),
+            SettingsSection::Prompts => code_i18n::tr_plain("tui.settings.placeholder.prompts"),
+            SettingsSection::Skills => code_i18n::tr_plain("tui.settings.placeholder.skills"),
         }
     }
 

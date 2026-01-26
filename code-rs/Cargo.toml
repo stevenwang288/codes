@@ -32,7 +32,9 @@ members = [
     "otel",
     "tui",
     "git-apply",
+    "i18n",
     "utils/json-to-toml",
+    "utils/i18n-scan",
     "utils/readiness",
 ]
 resolver = "2"
@@ -64,6 +66,7 @@ code-exec = { path = "exec" }
 code-file-search = { path = "file-search" }
 code-git-tooling = { path = "git-tooling" }
 code-git-apply = { path = "git-apply" }
+code-i18n = { path = "i18n" }
 code-linux-sandbox = { path = "linux-sandbox" }
 code-login = { path = "login" }
 code-mcp-client = { path = "mcp-client" }

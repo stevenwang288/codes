@@ -23,6 +23,13 @@ pub fn run_patch_harness(
     cfg: &ValidationConfig,
     github: &GithubConfig,
 ) -> Option<(Vec<HarnessFinding>, Vec<String>)> {
+    // Allow older config fields to disable the harness entirely.
+    // `ValidationConfig.patch_harness` is kept for compatibility; when set to false
+    // we skip all checks to optimize for speed.
+    if !cfg.patch_harness {
+        return None;
+    }
+
     let functional_enabled = cfg.groups.functional;
     let stylistic_enabled = cfg.groups.stylistic;
 

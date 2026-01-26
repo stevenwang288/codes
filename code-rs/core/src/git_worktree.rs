@@ -337,6 +337,36 @@ pub async fn prepare_reusable_worktree(
     let worktree_path = code_dir.join(worktree_name);
 
     if worktree_path.exists() {
+        // The reusable worktree directory may exist while its git registration
+        // is missing or corrupt (e.g., interrupted creation, deleted
+        // `.git/worktrees/<name>`, or switching a folder into a new git repo).
+        // In that case `git` commands inside the worktree fail with:
+        //   fatal: not a git repository: <git_root>/.git/worktrees/<name>
+        // Recover by removing the stale directory and re-creating the worktree.
+        let is_valid = Command::new("git")
+            .current_dir(&worktree_path)
+            .args(["rev-parse", "--is-inside-work-tree"])
+            .output()
+            .await
+            .ok()
+            .is_some_and(|out| out.status.success());
+        if !is_valid {
+            // Best effort: try to unregister, then delete the directory.
+            let _ = Command::new("git")
+                .current_dir(git_root)
+                .args([
+                    "worktree",
+                    "remove",
+                    "--force",
+                    worktree_path
+                        .to_str()
+                        .unwrap_or_default(),
+                ])
+                .output()
+                .await;
+            let _ = tokio::fs::remove_dir_all(&worktree_path).await;
+            prune_stale_worktrees(git_root).await?;
+        } else {
         // Reset to requested snapshot and clean tracked files; keep gitignored
         // outputs (e.g., target/) when desired.
         let reset = Command::new("git")
@@ -347,7 +377,26 @@ pub async fn prepare_reusable_worktree(
             .map_err(|e| format!("Failed to reset reusable worktree: {}", e))?;
         if !reset.status.success() {
             let stderr = String::from_utf8_lossy(&reset.stderr);
-            return Err(format!("Failed to reset reusable worktree: {stderr}"));
+            // If the worktree is present but no longer a valid git checkout,
+            // rebuild it instead of hard-failing.
+            if stderr.contains("not a git repository") {
+                let _ = Command::new("git")
+                    .current_dir(git_root)
+                    .args([
+                        "worktree",
+                        "remove",
+                        "--force",
+                        worktree_path
+                            .to_str()
+                            .unwrap_or_default(),
+                    ])
+                    .output()
+                    .await;
+                let _ = tokio::fs::remove_dir_all(&worktree_path).await;
+                prune_stale_worktrees(git_root).await?;
+            } else {
+                return Err(format!("Failed to reset reusable worktree: {stderr}"));
+            }
         }
 
         let clean_args = if keep_gitignored {
@@ -369,6 +418,7 @@ pub async fn prepare_reusable_worktree(
         bump_snapshot_epoch_for(&worktree_path);
         record_worktree_in_session(git_root, &worktree_path).await;
         return Ok(worktree_path);
+        }
     }
 
     // Create detached worktree at the snapshot commit.

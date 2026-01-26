@@ -228,17 +228,13 @@ pub async fn run_main(cli: Cli, _code_linux_sandbox_exe: Option<PathBuf>) -> any
                         t
                     }
                     _ => {
-                        eprintln!(
-                            "Not signed in. Please run 'codex login' to sign in with ChatGPT, then re-run 'codex cloud'."
-                        );
+                        eprintln!("{}", code_i18n::tr_plain("cli.cloud.not_signed_in"));
                         std::process::exit(1);
                     }
                 }
             }
             None => {
-                eprintln!(
-                    "Not signed in. Please run 'codex login' to sign in with ChatGPT, then re-run 'codex cloud'."
-                );
+                eprintln!("{}", code_i18n::tr_plain("cli.cloud.not_signed_in"));
                 std::process::exit(1);
             }
         };
@@ -1558,12 +1554,12 @@ async fn run_submit(args: crate::cli::SubmitArgs) -> anyhow::Result<()> {
                     t
                 }
                 _ => {
-                    eprintln!("Not signed in. Run 'codex login' and retry.");
+                    eprintln!("{}", code_i18n::tr_plain("cli.cloud.not_signed_in_short"));
                     std::process::exit(1);
                 }
             },
             None => {
-                eprintln!("Not signed in. Run 'codex login' and retry.");
+                eprintln!("{}", code_i18n::tr_plain("cli.cloud.not_signed_in_short"));
                 std::process::exit(1);
             }
         };

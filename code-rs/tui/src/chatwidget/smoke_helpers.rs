@@ -18,6 +18,8 @@ use chrono::Utc;
 use ratatui::text::Line;
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver};
+#[cfg(test)]
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
@@ -28,6 +30,9 @@ static TEST_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
         .build()
         .expect("test runtime")
 });
+
+#[cfg(test)]
+static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 pub fn enter_test_runtime_guard() -> tokio::runtime::EnterGuard<'static> {
     TEST_RUNTIME.enter()
@@ -70,16 +75,15 @@ impl AutoContinueModeFixture {
 
 impl ChatWidgetHarness {
     pub fn new() -> Self {
-        // Stabilize time-of-day dependent greeting so VT100 snapshots remain deterministic.
-        // Safe: tests run single-threaded by design.
-        unsafe { std::env::set_var("CODEX_TUI_FAKE_HOUR", "12"); }
+        #[cfg(test)]
+        {
+            let _env_guard = ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
-        unsafe {
-            std::env::set_var("CODEX_TUI_FORCE_MINIMAL_HEADER", "1");
-        }
-
-        unsafe {
-            std::env::set_var("CODE_TUI_TEST_MODE", "1");
+            // Stabilize time-of-day dependent greeting so VT100 snapshots remain deterministic.
+            // Safe: tests use process-wide env vars for determinism.
+            unsafe { std::env::set_var("CODEX_TUI_FAKE_HOUR", "12"); }
+            unsafe { std::env::set_var("CODEX_TUI_FORCE_MINIMAL_HEADER", "1"); }
+            unsafe { std::env::set_var("CODE_TUI_TEST_MODE", "1"); }
         }
 
         let cfg = Config::load_from_base_config_with_overrides(
@@ -181,6 +185,9 @@ impl ChatWidgetHarness {
                 AppEvent::ShowAgentsOverview => {
                     self.chat.ensure_settings_overlay_section(SettingsSection::Agents);
                     self.chat.show_agents_overview_ui();
+                }
+                AppEvent::ToggleValidationHarnessMode => {
+                    self.chat.toggle_validation_harness_mode();
                 }
                 AppEvent::CommitTick => {
                     self.chat.on_commit_tick();
@@ -321,6 +328,27 @@ impl ChatWidgetHarness {
         self.flush_into_widget();
     }
 
+    pub fn open_lang_overlay(&mut self) {
+        self.chat().show_lang_popup();
+        self.flush_into_widget();
+    }
+
+    pub fn is_lang_overlay_visible(&self) -> bool {
+        self.chat.lang.overlay.is_some()
+    }
+
+    pub fn is_help_overlay_visible(&self) -> bool {
+        self.chat.help.overlay.is_some()
+    }
+
+    pub fn is_mode_overlay_visible(&self) -> bool {
+        self.chat.mode.overlay.is_some()
+    }
+
+    pub fn is_agents_terminal_active(&self) -> bool {
+        self.chat.agents_terminal.active
+    }
+
     pub fn close_auto_drive_settings(&mut self) {
         self.chat().close_auto_drive_settings();
         self.flush_into_widget();
@@ -359,6 +387,12 @@ impl ChatWidgetHarness {
     pub fn open_review_settings_overlay(&mut self) {
         self.chat.ensure_settings_overlay_section(SettingsSection::Review);
         self.chat.show_settings_overlay(Some(SettingsSection::Review));
+        self.flush_into_widget();
+    }
+
+    pub fn open_model_settings_overlay(&mut self) {
+        self.chat.ensure_settings_overlay_section(SettingsSection::Model);
+        self.chat.show_settings_overlay(Some(SettingsSection::Model));
         self.flush_into_widget();
     }
 
@@ -787,6 +821,24 @@ impl ChatWidgetHarness {
         let next = self.helper_seq;
         self.helper_seq = self.helper_seq.saturating_add(1);
         next
+    }
+}
+
+#[cfg(test)]
+mod prelude_background_tag_regression {
+    use super::*;
+
+    #[test]
+    fn prelude_insert_allows_background_event_cells() {
+        // This regression test covers a startup panic seen in dev-fast builds:
+        // "Background events must use the background helper (tag=prelude)"
+        // triggered when a BackgroundEvent cell was inserted via the "prelude" tag.
+        let mut harness = ChatWidgetHarness::new();
+        let chat = harness.chat();
+
+        // A BackgroundEvent cell inserted via the "prelude" path used to trip a
+        // debug assertion. This must not panic.
+        chat.history_push_top_next_req(history_cell::new_connecting_mcp_status());
     }
 }
 

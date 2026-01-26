@@ -218,6 +218,11 @@ pub enum Op {
         enable: bool,
     },
 
+    /// Update the master validation harness toggle for the session.
+    UpdateValidationHarness {
+        enable: bool,
+    },
+
     /// Append an entry to the persistent cross-session message history.
     ///
     /// Note the entry is not guaranteed to be logged if the user has

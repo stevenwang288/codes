@@ -1116,6 +1116,11 @@ impl BottomPane<'_> {
         self.request_redraw();
     }
 
+    pub(crate) fn set_validation_harness_enabled(&mut self, enabled: bool) {
+        self.composer.set_validation_harness_enabled(enabled);
+        self.request_redraw();
+    }
+
     #[allow(dead_code)]
     fn render_auto_coordinator_footer(&self, _area: Rect, _buf: &mut Buffer) {}
 

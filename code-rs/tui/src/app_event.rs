@@ -495,6 +495,8 @@ pub(crate) enum AppEvent {
     CycleAccessMode,
     /// Cycle Auto Drive composer styling variants (Sentinel → Whisper → …)
     CycleAutoDriveVariant,
+    /// Toggle the validation harness mode (DevFast ↔ Strict).
+    ToggleValidationHarnessMode,
     /// Bottom composer expanded (e.g., slash command popup opened)
     ComposerExpanded,
 

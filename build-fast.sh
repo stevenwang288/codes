@@ -819,6 +819,12 @@ if [ $? -eq 0 ]; then
       echo "Binary artifact not found at ${ABS_BIN_PATH}"
     fi
 
+    # Persist the last-built binary path so launchers can run without rebuilding.
+    if [ -n "${CODE_HOME:-}" ]; then
+      mkdir -p "${CODE_HOME}" 2>/dev/null || true
+      printf '%s\n' "${ABS_BIN_PATH}" > "${CODE_HOME}/last-built-bin.txt" 2>/dev/null || true
+    fi
+
     if [ "$RUN_AFTER_BUILD" -eq 1 ]; then
       RUN_PATH="${RUN_BIN_PATH}"
       if [ ! -x "${RUN_PATH}" ]; then

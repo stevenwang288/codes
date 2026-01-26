@@ -115,7 +115,10 @@ impl AgentEditorView {
             let t = self.description_field.text().trim().to_string();
             if t.is_empty() {
                 if require_description {
-                    self.description_error = Some("Describe what this agent is good at before saving.".to_string());
+                    self.description_error = Some(code_i18n::tr(
+                        code_i18n::current_language(),
+                        "tui.agent_editor.error.desc_required",
+                    ).to_string());
                     return false;
                 }
                 self.description_error = None;
@@ -128,7 +131,10 @@ impl AgentEditorView {
 
         let trimmed_name = self.name_field.text().trim();
         if self.name_editable && trimmed_name.is_empty() {
-            self.name_error = Some("Agent ID is required.".to_string());
+            self.name_error = Some(code_i18n::tr(
+                code_i18n::current_language(),
+                "tui.agent_editor.error.id_required",
+            ).to_string());
             return false;
         }
         self.name_error = None;
@@ -453,16 +459,21 @@ impl AgentEditorView {
         let desc_offset = wr_offset + wr_box_h + 1;
         let instr_offset = desc_offset + desc_box_h + desc_hint_lines;
         let mut lines: Vec<Line<'static>> = Vec::new();
+        let ui_language = code_i18n::current_language();
 
         // Title, spacer
         lines.push(Line::from(Span::styled(
-            format!("Agents » Edit Agent » {}", self.name),
+            code_i18n::tr_args(
+                ui_language,
+                "tui.agent_editor.title",
+                &[("name", self.name.as_str())],
+            ),
             Style::default().add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
         if !self.installed && !self.install_hint.is_empty() {
             lines.push(Line::from(Span::styled(
-                "Command not found on PATH.",
+                code_i18n::tr(ui_language, "tui.agent_editor.error.command_not_found"),
                 Style::default().fg(crate::colors::warning()).add_modifier(Modifier::BOLD),
             )));
             lines.push(Line::from(Span::styled(
@@ -512,10 +523,18 @@ impl AgentEditorView {
         } else {
             Style::default().fg(crate::colors::text())
         };
-        let enabled_text = format!("[{}] Enabled", if self.enabled { 'x' } else { ' ' });
-        let disabled_text = format!("[{}] Disabled", if self.enabled { ' ' } else { 'x' });
+        let enabled_text = format!(
+            "[{}] {}",
+            if self.enabled { 'x' } else { ' ' },
+            code_i18n::tr(ui_language, "tui.common.enabled")
+        );
+        let disabled_text = format!(
+            "[{}] {}",
+            if self.enabled { ' ' } else { 'x' },
+            code_i18n::tr(ui_language, "tui.common.disabled")
+        );
         lines.push(Line::from(vec![
-            Span::styled("Status:", label_style),
+            Span::styled(code_i18n::tr(ui_language, "tui.common.status_prefix"), label_style),
             Span::raw("  "),
             Span::styled(enabled_text, enabled_style),
             Span::raw("  "),
@@ -543,7 +562,7 @@ impl AgentEditorView {
             Line::from(Span::styled(err.clone(), Style::default().fg(crate::colors::error())))
         } else {
             Line::from(Span::styled(
-                "Required: explain what this agent is good at so Code can pick it intelligently.",
+                code_i18n::tr(ui_language, "tui.agent_editor.desc_required_hint"),
                 desc_style,
             ))
         };
@@ -555,7 +574,7 @@ impl AgentEditorView {
             lines.push(Line::from(""));
         }
         lines.push(Line::from(Span::styled(
-            "Optional guidance prepended to every request sent to the agent.",
+            code_i18n::tr(ui_language, "tui.agent_editor.instructions_optional_hint"),
             desc_style,
         )));
         lines.push(Line::from(""));
@@ -567,9 +586,15 @@ impl AgentEditorView {
         let save_style = sel(FIELD_SAVE).fg(crate::colors::success());
         let cancel_style = sel(FIELD_CANCEL).fg(crate::colors::text());
         lines.push(Line::from(vec![
-            Span::styled("[ Save ]", save_style),
+            Span::styled(
+                format!("[ {} ]", code_i18n::tr(ui_language, "tui.common.save")),
+                save_style,
+            ),
             Span::raw("  "),
-            Span::styled("[ Cancel ]", cancel_style),
+            Span::styled(
+                format!("[ {} ]", code_i18n::tr(ui_language, "tui.common.cancel")),
+                cancel_style,
+            ),
         ]));
 
         while lines

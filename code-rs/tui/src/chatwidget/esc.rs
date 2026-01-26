@@ -1,7 +1,7 @@
 use crossterm::event::KeyEvent;
 use std::time::{Duration, Instant};
 
-use super::{ChatWidget, AUTO_ESC_EXIT_HINT, AUTO_ESC_EXIT_HINT_DOUBLE, DOUBLE_ESC_HINT};
+use super::ChatWidget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EscIntent {
@@ -51,7 +51,7 @@ impl EscRoute {
 impl ChatWidget<'_> {
     // --- Double‑Escape helpers ---
     pub(crate) fn double_esc_hint_label() -> &'static str {
-        DOUBLE_ESC_HINT
+        code_i18n::tr_plain("tui.undo.double_esc_hint_label")
     }
 
     pub(crate) fn show_esc_undo_hint(&mut self) {
@@ -61,9 +61,9 @@ impl ChatWidget<'_> {
 
     pub(super) fn show_auto_drive_exit_hint(&mut self) {
         let hint = if self.auto_state.is_paused_manual() {
-            AUTO_ESC_EXIT_HINT_DOUBLE
+            code_i18n::tr_plain("tui.auto_drive.exit_hint_double")
         } else {
-            AUTO_ESC_EXIT_HINT
+            code_i18n::tr_plain("tui.auto_drive.exit_hint")
         };
         self.bottom_pane
             .set_standard_terminal_hint(Some(hint.to_string()));
@@ -72,7 +72,7 @@ impl ChatWidget<'_> {
     fn auto_stop_via_escape(&mut self, message: Option<String>) {
         self.auto_stop(message);
         self.bottom_pane
-            .update_status_text("Auto Drive stopped.".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.auto_drive.stopped").to_string());
         if self.auto_state.last_run_summary.is_some() {
             self.auto_clear_summary_panel();
         } else {
@@ -206,15 +206,18 @@ impl ChatWidget<'_> {
                 true
             }
             EscIntent::AutoStopDuringApproval => {
+                let message = code_i18n::tr_plain("tui.auto_drive.stopped_during_approval").to_string();
                 self.bottom_pane
-                    .update_status_text("Auto Drive stopped during approval.".to_string());
-                self.auto_stop_via_escape(Some("Auto Drive stopped during approval.".to_string()));
+                    .update_status_text(message.clone());
+                self.auto_stop_via_escape(Some(message));
                 true
             }
             EscIntent::AutoStopActive => {
                 self.bottom_pane
-                    .update_status_text("Stopping Auto Drive…".to_string());
-                self.auto_stop_via_escape(Some("Auto Drive stopped by user.".to_string()));
+                    .update_status_text(code_i18n::tr_plain("tui.auto_drive.stopping").to_string());
+                self.auto_stop_via_escape(Some(
+                    code_i18n::tr_plain("tui.auto_drive.stopped_by_user").to_string(),
+                ));
                 true
             }
             EscIntent::AutoGoalEnableEdit => {
@@ -244,15 +247,17 @@ impl ChatWidget<'_> {
                 let _ = self.on_ctrl_c();
                 if auto_was_active {
                     let status = if had_running {
-                        "Command cancelled. Esc stops Auto Drive."
+                        code_i18n::tr_plain("tui.auto_drive.command_cancelled_esc_stops")
                     } else {
-                        "Auto Drive stopped by user."
+                        code_i18n::tr_plain("tui.auto_drive.stopped_by_user")
                     };
                     self.bottom_pane.update_status_text(status.to_string());
-                    self.auto_stop_via_escape(Some("Auto Drive stopped by user.".to_string()));
+                    self.auto_stop_via_escape(Some(
+                        code_i18n::tr_plain("tui.auto_drive.stopped_by_user").to_string(),
+                    ));
                 } else if had_running {
                     self.bottom_pane
-                        .update_status_text("Command cancelled.".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.auto_drive.command_cancelled").to_string());
                 }
                 true
             }

@@ -41,9 +41,13 @@ impl AgentsOverviewView {
 
     fn build_lines(&self) -> Vec<Line<'static>> {
         let mut lines: Vec<Line<'static>> = Vec::new();
+        let ui_language = code_i18n::current_language();
 
         // Agents section
-        lines.push(Line::from(Span::styled("Agents", Style::default().add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(Span::styled(
+            code_i18n::tr(ui_language, "tui.agents_overview.section.agents"),
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
         let max_name_len = self
             .agents
             .iter()
@@ -53,11 +57,20 @@ impl AgentsOverviewView {
         for (i, (name, enabled, installed, _cmd)) in self.agents.iter().enumerate() {
             let sel = i == self.selected;
             let (status_text, status_color) = if !*enabled {
-                ("disabled", crate::colors::error())
+                (
+                    code_i18n::tr(ui_language, "tui.agents_overview.status.disabled"),
+                    crate::colors::error(),
+                )
             } else if !*installed {
-                ("not installed", crate::colors::warning())
+                (
+                    code_i18n::tr(ui_language, "tui.agents_overview.status.not_installed"),
+                    crate::colors::warning(),
+                )
             } else {
-                ("enabled", crate::colors::success())
+                (
+                    code_i18n::tr(ui_language, "tui.agents_overview.status.enabled"),
+                    crate::colors::success(),
+                )
             };
             let dot_style = Style::default().fg(status_color);
             let name_style = if sel { Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD) } else { Style::default() };
@@ -70,14 +83,14 @@ impl AgentsOverviewView {
                 Span::raw("  "),
                 Span::styled("•", dot_style),
                 Span::raw(" "),
-                Span::styled(status_text.to_string(), Style::default().fg(status_color)),
+                Span::styled(status_text, Style::default().fg(status_color)),
             ];
             if sel {
                 spans.push(Span::raw("  "));
                 let hint = if !*installed {
-                    "(press Enter to install)"
+                    code_i18n::tr(ui_language, "tui.agents_overview.hint.enter_install")
                 } else {
-                    "(press Enter to configure)"
+                    code_i18n::tr(ui_language, "tui.agents_overview.hint.enter_configure")
                 };
                 spans.push(Span::styled(hint, Style::default().fg(crate::colors::text_dim())));
             }
@@ -88,7 +101,10 @@ impl AgentsOverviewView {
         lines.push(Line::from(""));
 
         // Commands section
-        lines.push(Line::from(Span::styled("Commands", Style::default().add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(Span::styled(
+            code_i18n::tr(ui_language, "tui.agents_overview.section.commands"),
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
         for (j, cmd) in self.commands.iter().enumerate() {
             let idx = self.agents.len() + j;
             let sel = idx == self.selected;
@@ -99,7 +115,10 @@ impl AgentsOverviewView {
             ];
             if sel {
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("(press Enter to configure)", Style::default().fg(crate::colors::text_dim())));
+                spans.push(Span::styled(
+                    code_i18n::tr(ui_language, "tui.agents_overview.hint.enter_configure"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ));
             }
             lines.push(Line::from(spans));
         }
@@ -109,11 +128,23 @@ impl AgentsOverviewView {
         let add_sel = add_idx == self.selected;
         let mut add_spans = vec![
             Span::styled(if add_sel { "› " } else { "  " }, if add_sel { Style::default().fg(crate::colors::primary()) } else { Style::default() }),
-            Span::styled("Add new…", if add_sel { Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD) } else { Style::default() }),
+            Span::styled(
+                code_i18n::tr(ui_language, "tui.agents_overview.add_new"),
+                if add_sel {
+                    Style::default()
+                        .fg(crate::colors::primary())
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                },
+            ),
         ];
         if add_sel {
             add_spans.push(Span::raw("  "));
-            add_spans.push(Span::styled("(press Enter to add)", Style::default().fg(crate::colors::text_dim())));
+            add_spans.push(Span::styled(
+                code_i18n::tr(ui_language, "tui.agents_overview.hint.enter_add"),
+                Style::default().fg(crate::colors::text_dim()),
+            ));
         }
         lines.push(Line::from(add_spans));
 
@@ -121,11 +152,20 @@ impl AgentsOverviewView {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("↑↓", Style::default().fg(crate::colors::function())),
-            Span::styled(" Navigate  ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr(ui_language, "tui.common.navigate")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::styled(" Configure  ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr(ui_language, "tui.common.configure")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Esc", Style::default().fg(crate::colors::error())),
-            Span::styled(" Close", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr(ui_language, "tui.common.close_label")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ]));
 
         lines
@@ -185,11 +225,12 @@ impl<'a> BottomPaneView<'a> for AgentsOverviewView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
+        let ui_language = code_i18n::current_language();
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" Agents ")
+            .title(format!(" {} ", code_i18n::tr(ui_language, "tui.agents.title")))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -224,7 +265,12 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(combined.contains("enabled"), "expected status text to show 'enabled', got: {combined}");
-        assert!(!combined.contains("not installed"));
+        let enabled = code_i18n::tr_plain("tui.agents_overview.status.enabled");
+        let not_installed = code_i18n::tr_plain("tui.agents_overview.status.not_installed");
+        assert!(
+            combined.contains(enabled),
+            "expected status text to include {enabled:?}, got: {combined}"
+        );
+        assert!(!combined.contains(not_installed));
     }
 }

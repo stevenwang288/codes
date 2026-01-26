@@ -23,6 +23,7 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 tokio-stream = "0.1.17"
 chrono = { version = "0.4", features = ["serde"] }
 code-login = { path = "../login" }
+code-i18n = { workspace = true }
 code-core = { path = "../core" }
 throbber-widgets-tui = "0.8.0"
 base64 = "0.22"

@@ -11,6 +11,8 @@ use crate::onboarding::onboarding_screen::StepStateProvider;
 
 use super::onboarding_screen::StepState;
 
+use code_i18n;
+
 pub(crate) struct WelcomeWidget {
     pub is_logged_in: bool,
 }
@@ -20,7 +22,7 @@ impl WidgetRef for &WelcomeWidget {
         let line1 = Line::from(vec![
             Span::raw(">_ "),
             Span::styled(
-                "Welcome to Code",
+                code_i18n::tr_plain("tui.onboarding.welcome.title"),
                 Style::default().add_modifier(Modifier::BOLD),
             ),
         ]);

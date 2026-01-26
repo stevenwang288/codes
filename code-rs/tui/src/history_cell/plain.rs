@@ -32,12 +32,26 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Padding, Paragraph, Wrap};
 use std::collections::HashMap;
+use std::sync::OnceLock;
+
+use regex_lite::Regex;
+use unicode_width::UnicodeWidthStr;
+
+#[derive(Clone, Debug)]
+pub(crate) struct OpenButton {
+    pub y: u16,
+    pub x_start: u16,
+    pub x_end: u16,
+    pub target: String,
+}
 
 struct PlainLayoutCache {
     requested_width: u16,
     effective_width: u16,
+    ui_language: code_i18n::Language,
     height: u16,
     buffer: Option<Buffer>,
+    open_buttons: Vec<OpenButton>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -63,6 +77,183 @@ impl PlainCellState {
 pub(crate) struct PlainHistoryCell {
     state: PlainCellState,
     cached_layout: std::cell::RefCell<Option<PlainLayoutCache>>,
+}
+
+fn url_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"https?://[^\s<>"']+"#).expect("url regex"))
+}
+
+fn win_path_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    // Roughly: C:\path\to\file or C:/path/to/file (no spaces)
+    RE.get_or_init(|| Regex::new(r#"(?i)\b[a-z]:[\\/][^\s<>"']+"#).expect("win path regex"))
+}
+
+fn trim_trailing_punct(mut token: &str) -> &str {
+    loop {
+        let trimmed = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ';'));
+        if trimmed == token {
+            return token;
+        }
+        token = trimmed;
+    }
+}
+
+fn split_line_suffix(token: &str) -> (&str, &str) {
+    // Extract ":123" or ":123:45" suffix for display/open.
+    // Keep Windows drive colon intact.
+    let Some(last_colon) = token.rfind(':') else {
+        return (token, "");
+    };
+    if last_colon == 1 {
+        return (token, "");
+    }
+    let suffix = &token[last_colon..];
+    let suffix_digits = suffix.trim_start_matches(':');
+    let valid = !suffix_digits.is_empty()
+        && suffix_digits
+            .split(':')
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()));
+    if valid {
+        (&token[..last_colon], suffix)
+    } else {
+        (token, "")
+    }
+}
+
+fn shorten_url(url: &str) -> String {
+    let url = trim_trailing_punct(url);
+    let host = url
+        .split("://")
+        .nth(1)
+        .and_then(|rest| rest.split('/').next())
+        .unwrap_or(url);
+    let rest = url
+        .splitn(2, host)
+        .nth(1)
+        .unwrap_or("")
+        .trim_end_matches('/');
+    let mut display = host.to_string();
+    if !rest.is_empty() {
+        display.push_str(rest);
+    }
+    const MAX_W: usize = 36;
+    if display.width() > MAX_W {
+        let prefix = crate::live_wrap::take_prefix_by_width(&display, MAX_W.saturating_sub(1)).0;
+        return format!("{prefix}…");
+    }
+    display
+}
+
+fn shorten_path(path: &str) -> String {
+    let path = trim_trailing_punct(path);
+    let (path_part, suffix) = split_line_suffix(path);
+    let normalized = path_part.replace('\\', "/");
+    let mut parts = normalized.split('/').filter(|p| !p.is_empty()).collect::<Vec<_>>();
+    if parts.is_empty() {
+        return path.to_string();
+    }
+    let file = parts.pop().unwrap_or(path_part);
+    let parent = parts.pop();
+    let mut display = String::new();
+    if let Some(parent) = parent {
+        display.push_str("…/");
+        display.push_str(parent);
+        display.push('/');
+    } else {
+        display.push_str("…/");
+    }
+    display.push_str(file);
+    display.push_str(suffix);
+    display
+}
+
+fn decorate_open_buttons(
+    lines: Vec<Line<'static>>,
+    theme: &Theme,
+    ui_language: code_i18n::Language,
+) -> (Vec<Line<'static>>, Vec<String>, String) {
+    let mut out: Vec<Line<'static>> = Vec::new();
+    let mut targets: Vec<String> = Vec::new();
+    let open_label = code_i18n::tr(ui_language, "tui.common.open_label");
+
+    let token = format!("[{open_label}]");
+    let token_style = Style::default()
+        .fg(crate::colors::text())
+        .bg(crate::colors::primary())
+        .add_modifier(Modifier::BOLD);
+
+    for line in lines {
+        let mut found_target: Option<String> = None;
+        let mut new_spans: Vec<Span<'static>> = Vec::new();
+
+        for span in line.spans.into_iter() {
+            if found_target.is_some() {
+                new_spans.push(span);
+                continue;
+            }
+
+            let text = span.content.to_string();
+            if let Some(m) = url_regex().find(&text).or_else(|| win_path_regex().find(&text)) {
+                let before = &text[..m.start()];
+                let token_text = &text[m.start()..m.end()];
+                let token_text = trim_trailing_punct(token_text).to_string();
+                let display = if token_text.starts_with("http://") || token_text.starts_with("https://") {
+                    shorten_url(&token_text)
+                } else {
+                    shorten_path(&token_text)
+                };
+                found_target = Some(token_text);
+
+                if !before.is_empty() {
+                    new_spans.push(Span::styled(before.to_string(), span.style));
+                }
+                new_spans.push(Span::styled(display, span.style));
+
+                let after = &text[m.end()..];
+                if !after.is_empty() {
+                    new_spans.push(Span::styled(after.to_string(), span.style));
+                }
+            } else {
+                new_spans.push(span);
+            }
+        }
+
+        out.push(Line::from(new_spans));
+
+        if let Some(target) = found_target {
+            targets.push(target);
+            out.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(token.clone(), token_style),
+            ]));
+        }
+    }
+
+    // Preserve header style: we only used theme for potential future tweaks; keep param to avoid churn.
+    let _ = theme;
+    (out, targets, token)
+}
+
+fn find_token_in_row(buf: &Buffer, y: u16, token: &str) -> Option<(u16, u16)> {
+    if token.is_empty() || buf.area().width == 0 {
+        return None;
+    }
+    let token_chars: Vec<char> = token.chars().collect();
+    let w = buf.area().width;
+    let max_x = w.saturating_sub(token_chars.len() as u16);
+    'outer: for x in 0..=max_x {
+        for (i, ch) in token_chars.iter().enumerate() {
+            let cell = buf[(x + i as u16, y)].symbol();
+            let cell_ch = cell.chars().next();
+            if cell_ch != Some(*ch) {
+                continue 'outer;
+            }
+        }
+        return Some((x, x + token_chars.len() as u16));
+    }
+    None
 }
 
 impl PlainHistoryCell {
@@ -132,12 +323,14 @@ impl PlainHistoryCell {
     }
 
     fn ensure_layout(&self, requested_width: u16, effective_width: u16) {
+        let ui_language = code_i18n::current_language();
         let mut cache = self.cached_layout.borrow_mut();
         let needs_rebuild = cache
             .as_ref()
             .map_or(true, |cached| {
                 cached.requested_width != requested_width
                     || cached.effective_width != effective_width
+                    || cached.ui_language != ui_language
             });
         if needs_rebuild {
             *cache = Some(self.build_layout(requested_width, effective_width));
@@ -145,12 +338,15 @@ impl PlainHistoryCell {
     }
 
     fn build_layout(&self, requested_width: u16, effective_width: u16) -> PlainLayoutCache {
+        let ui_language = code_i18n::current_language();
         if requested_width == 0 || effective_width == 0 {
             return PlainLayoutCache {
                 requested_width,
                 effective_width,
+                ui_language,
                 height: 0,
                 buffer: None,
+                open_buttons: Vec::new(),
             };
         }
 
@@ -164,7 +360,10 @@ impl PlainHistoryCell {
         let bg_style = Style::default().bg(cell_bg).fg(crate::colors::text());
 
         let trimmed_lines = self.display_lines_trimmed();
-        let text = Text::from(trimmed_lines.clone());
+        let theme = current_theme();
+        let (decorated_lines, open_targets, open_token) =
+            decorate_open_buttons(trimmed_lines.clone(), &theme, ui_language);
+        let text = Text::from(decorated_lines.clone());
         let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
 
         let (pad_top, pad_bottom) = if is_auto_review {
@@ -185,8 +384,10 @@ impl PlainHistoryCell {
             return PlainLayoutCache {
                 requested_width,
                 effective_width,
+                ui_language,
                 height,
                 buffer: None,
+                open_buttons: Vec::new(),
             };
         }
 
@@ -196,7 +397,7 @@ impl PlainHistoryCell {
         // Paint full cell (including padding) with the cell background so tint extends through padding.
         fill_rect(&mut buffer, render_area, Some(' '), Style::default().bg(cell_bg).fg(crate::colors::text()));
 
-        let paragraph_lines = Text::from(trimmed_lines);
+        let paragraph_lines = Text::from(decorated_lines);
         if matches!(self.state.kind, HistoryCellType::User) {
             let block = Block::default()
                 .style(bg_style)
@@ -231,12 +432,40 @@ impl PlainHistoryCell {
                 .render(inner_area, &mut buffer);
         }
 
+        let mut open_buttons: Vec<OpenButton> = Vec::new();
+        if !open_targets.is_empty() {
+            let mut remaining = open_targets.into_iter();
+            for y in 0..render_area.height {
+                if let Some((x0, x1)) = find_token_in_row(&buffer, y, &open_token) {
+                    if let Some(target) = remaining.next() {
+                        open_buttons.push(OpenButton {
+                            y,
+                            x_start: x0,
+                            x_end: x1,
+                            target,
+                        });
+                    }
+                }
+            }
+        }
+
         PlainLayoutCache {
             requested_width,
             effective_width,
+            ui_language,
             height,
             buffer: Some(buffer),
+            open_buttons,
         }
+    }
+
+    pub(crate) fn open_buttons_for_area(&self, requested_width: u16, effective_width: u16) -> Vec<OpenButton> {
+        self.ensure_layout(requested_width, effective_width);
+        self.cached_layout
+            .borrow()
+            .as_ref()
+            .map(|cache| cache.open_buttons.clone())
+            .unwrap_or_default()
     }
 
     fn hide_header(&self) -> bool {
@@ -372,6 +601,7 @@ impl HistoryCell for PlainHistoryCell {
         trim_empty_lines(self.display_lines())
     }
 }
+
 struct PlainMessageStateBuilder;
 
 impl PlainMessageStateBuilder {
@@ -575,7 +805,7 @@ pub(crate) fn new_session_info(
 fn popular_commands_lines(_latest_version: Option<&str>) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::styled(
-        "Popular commands:",
+        code_i18n::tr_plain("tui.popular_commands.title"),
         Style::default().fg(crate::colors::text_bright()),
     ));
     lines.push(Line::from(vec![
@@ -584,7 +814,7 @@ fn popular_commands_lines(_latest_version: Option<&str>) -> Vec<Line<'static>> {
         Span::from(SlashCommand::Settings.description())
             .style(Style::default().add_modifier(Modifier::DIM)),
         Span::styled(
-            " UPDATED",
+            code_i18n::tr_plain("tui.popular_commands.updated_badge"),
             Style::default().fg(crate::colors::primary()),
         ),
     ]));
@@ -594,7 +824,7 @@ fn popular_commands_lines(_latest_version: Option<&str>) -> Vec<Line<'static>> {
         Span::from(SlashCommand::Auto.description())
             .style(Style::default().add_modifier(Modifier::DIM)),
         Span::styled(
-            " UPDATED",
+            code_i18n::tr_plain("tui.popular_commands.updated_badge"),
             Style::default().fg(crate::colors::primary()),
         ),
     ]));
@@ -622,7 +852,7 @@ fn popular_commands_lines(_latest_version: Option<&str>) -> Vec<Line<'static>> {
         Span::from(SlashCommand::Skills.description())
             .style(Style::default().add_modifier(Modifier::DIM)),
         Span::styled(
-            " NEW",
+            code_i18n::tr_plain("tui.popular_commands.new_badge"),
             Style::default().fg(crate::colors::primary()),
         ),
     ]));
@@ -674,6 +904,113 @@ pub(crate) fn new_user_prompt(message: String) -> PlainMessageState {
     lines.extend(content);
     // No empty line at end - trimming and spacing handled by renderer
     plain_message_state_from_lines(lines, HistoryCellType::User)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_temp_code_home(name: &str) -> std::path::PathBuf {
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("code-i18n-{name}-{pid}-{nanos}"));
+        std::fs::create_dir_all(&path).ok();
+        path
+    }
+
+    fn lines_to_plain_text(lines: &[ratatui::text::Line<'static>]) -> Vec<String> {
+        lines.iter().map(line_plain_text).collect()
+    }
+
+    #[test]
+    fn popular_commands_are_localized_in_zh_cn() {
+        let code_home = make_temp_code_home("popular-zh");
+        unsafe {
+            std::env::set_var("CODE_HOME", &code_home);
+        }
+
+        code_i18n::with_test_language(code_i18n::Language::ZhCn, || {
+            let lines = popular_commands_lines(None);
+            let plain = lines_to_plain_text(&lines);
+
+            assert_eq!(plain[0], "常用命令：");
+            assert!(
+                plain.iter()
+                    .any(|line| line.contains("/settings") && line.contains("集中管理所有设置")),
+                "expected /settings line to be localized; got: {plain:?}"
+            );
+            assert!(
+                plain.iter().any(|line| line.contains("已更新")),
+                "expected UPDATED badge to be localized; got: {plain:?}"
+            );
+            assert!(
+                plain.iter().any(|line| line.contains("新增")),
+                "expected NEW badge to be localized; got: {plain:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn popular_commands_are_english_in_en() {
+        let code_home = make_temp_code_home("popular-en");
+        unsafe {
+            std::env::set_var("CODE_HOME", &code_home);
+        }
+
+        code_i18n::with_test_language(code_i18n::Language::En, || {
+            let lines = popular_commands_lines(None);
+            let plain = lines_to_plain_text(&lines);
+
+            assert_eq!(plain[0], "Popular commands:");
+            assert!(
+                plain.iter()
+                    .any(|line| line.contains("/settings") && line.contains("manage all settings")),
+                "expected /settings line to be english; got: {plain:?}"
+            );
+            assert!(
+                plain.iter().any(|line| line.contains("UPDATED")),
+                "expected UPDATED badge to be english; got: {plain:?}"
+            );
+            assert!(
+                plain.iter().any(|line| line.contains("NEW")),
+                "expected NEW badge to be english; got: {plain:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn open_button_tracks_full_url_target() {
+        code_i18n::with_test_language(code_i18n::Language::En, || {
+            let state = code_core::history::state::PlainMessageState {
+                id: code_core::history::state::HistoryId::ZERO,
+                role: code_core::history::state::PlainMessageRole::System,
+                kind: code_core::history::state::PlainMessageKind::Plain,
+                header: None,
+                lines: vec![code_core::history::state::MessageLine {
+                    kind: code_core::history::state::MessageLineKind::Paragraph,
+                    spans: vec![code_core::history::state::InlineSpan {
+                        text: "Visit https://example.com/this/is/a/very/long/path?x=1.".to_string(),
+                        tone: code_core::history::state::TextTone::Default,
+                        emphasis: code_core::history::state::TextEmphasis::default(),
+                        entity: None,
+                    }],
+                }],
+                metadata: None,
+            };
+
+            let cell = PlainHistoryCell::from_state(state);
+            let buttons = cell.open_buttons_for_area(80, 80);
+
+            assert_eq!(buttons.len(), 1);
+            assert_eq!(
+                buttons[0].target,
+                "https://example.com/this/is/a/very/long/path?x=1"
+            );
+        });
+    }
 }
 
 /// Render a queued user message that will be sent in the next turn.

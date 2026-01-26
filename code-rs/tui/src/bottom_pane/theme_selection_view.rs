@@ -2327,8 +2327,9 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
             }
         } else if matches!(self.mode, Mode::Themes) {
             // Header: Choose Theme
+            let ui_language = code_i18n::current_language();
             lines.push(Line::from(Span::styled(
-                "Choose Theme",
+                code_i18n::tr(ui_language, "tui.theme.choose"),
                 Style::default()
                     .fg(theme.text_bright)
                     .add_modifier(Modifier::BOLD),
@@ -2360,7 +2361,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     } else {
                         Style::default().fg(theme.text_dim)
                     };
-                    spans.push(Span::styled("Generate your own…", label_style));
+                    spans.push(Span::styled(
+                        code_i18n::tr(ui_language, "tui.theme.generate_your_own"),
+                        label_style,
+                    ));
                     lines.push(Line::from(spans));
                     continue;
                 }
@@ -2368,7 +2372,11 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 let is_original = *theme_enum == self.original_theme;
 
                 let prefix_selected = is_selected;
-                let suffix = if is_original { " (original)" } else { "" };
+                let suffix = if is_original {
+                    code_i18n::tr_plain("tui.theme.original_suffix")
+                } else {
+                    ""
+                };
 
                 let mut spans = vec![Span::raw(" ")];
                 if prefix_selected {
@@ -2606,9 +2614,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                                 Style::default().fg(theme.text)
                             }
                         };
-                        spans.push(Span::styled("[ Save ]", selbtn(primary_selected)));
+                        spans.push(Span::styled(
+                            format!("[ {} ]", code_i18n::tr_plain("tui.common.save")),
+                            selbtn(primary_selected),
+                        ));
                         spans.push(Span::raw("  "));
-                        spans.push(Span::styled("[ Retry ]", selbtn(secondary_selected)));
+                        spans.push(Span::styled(
+                            format!("[ {} ]", code_i18n::tr_plain("tui.common.retry")),
+                            selbtn(secondary_selected),
+                        ));
                         form_lines.push(Line::from(spans));
                         Paragraph::new(form_lines)
                             .alignment(Alignment::Left)
@@ -2710,9 +2724,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             Style::default().fg(theme.text)
                         }
                     };
-                    spans.push(Span::styled("[ Save ]", sel(primary_selected)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.save")),
+                        sel(primary_selected),
+                    ));
                     spans.push(Span::raw("  "));
-                    spans.push(Span::styled("[ Retry ]", sel(secondary_selected)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.retry")),
+                        sel(secondary_selected),
+                    ));
                     form_lines.push(Line::from(spans));
                     Paragraph::new(form_lines)
                         .alignment(Alignment::Left)
@@ -2797,7 +2817,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 };
                 spans.push(Span::styled("[ Generate... ]", sel(primary_selected)));
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("[ Cancel ]", sel(secondary_selected)));
+                spans.push(Span::styled(
+                    format!("[ {} ]", code_i18n::tr_plain("tui.common.cancel")),
+                    sel(secondary_selected),
+                ));
                 form_lines.push(Line::from(spans));
 
                 Paragraph::new(form_lines)
@@ -2976,9 +2999,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             Style::default().fg(theme.text)
                         }
                     };
-                    spans.push(Span::styled("[ Save ]", sel(save_sel)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.save")),
+                        sel(save_sel),
+                    ));
                     spans.push(Span::raw("  "));
-                    spans.push(Span::styled("[ Retry ]", sel(retry_sel)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.retry")),
+                        sel(retry_sel),
+                    ));
                     form_lines.push(Line::from(spans));
                     Paragraph::new(form_lines)
                         .alignment(Alignment::Left)
@@ -3058,7 +3087,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 };
                 spans.push(Span::styled("[ Generate... ]", sel(primary_selected)));
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("[ Cancel ]", sel(secondary_selected)));
+                spans.push(Span::styled(
+                    format!("[ {} ]", code_i18n::tr_plain("tui.common.cancel")),
+                    sel(secondary_selected),
+                ));
                 form_lines.push(Line::from(spans));
                 Paragraph::new(form_lines)
                     .alignment(Alignment::Left)
@@ -3154,7 +3186,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     } else {
                         Style::default().fg(theme.text_dim)
                     };
-                    spans.push(Span::styled("Generate your own…", label_style));
+                    spans.push(Span::styled(
+                        code_i18n::tr(code_i18n::current_language(), "tui.theme.generate_your_own"),
+                        label_style,
+                    ));
                     Paragraph::new(Line::from(spans)).render(row_rect, buf);
                     continue;
                 }

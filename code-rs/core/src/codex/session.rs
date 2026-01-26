@@ -586,6 +586,12 @@ impl Session {
         }
     }
 
+    pub(crate) fn update_validation_harness(&self, enable: bool) {
+        if let Ok(mut cfg) = self.validation.write() {
+            cfg.patch_harness = enable;
+        }
+    }
+
     pub(super) fn resolve_path(&self, path: Option<String>) -> PathBuf {
         path.as_ref()
             .map(PathBuf::from)

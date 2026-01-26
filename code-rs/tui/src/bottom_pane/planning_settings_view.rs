@@ -218,18 +218,21 @@ impl<'a> BottomPaneView<'a> for PlanningSettingsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(colors::border()))
             .style(Style::default().bg(colors::background()).fg(colors::text()))
-            .title(" Planning Settings ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.settings.planning.title")
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
 
         let header_lines = vec![
             Line::from(Span::styled(
-                "Select the model used when you’re in Plan Mode (Read Only).",
+                code_i18n::tr_plain("tui.settings.planning.desc"),
                 Style::default().fg(colors::text_dim()),
             )),
             Line::from(Span::styled(
-                "Use ↑↓ to navigate · Enter/Space to toggle/open · Esc close",
+                code_i18n::tr_plain("tui.settings.planning.hint"),
                 Style::default().fg(colors::text_dim()),
             )),
             Line::from(""),

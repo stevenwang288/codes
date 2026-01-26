@@ -113,19 +113,22 @@ impl SettingsHelpOverlay {
             .fg(crate::colors::text())
             .add_modifier(Modifier::BOLD);
         let hint = Style::default().fg(crate::colors::text_dim());
-        let mut lines = vec![Line::from(vec![Span::styled("Settings Overview", title)]), Line::default()];
+        let mut lines = vec![Line::from(vec![Span::styled(
+            code_i18n::tr_plain("tui.settings.help.title_overview"),
+            title,
+        )]), Line::default()];
         for text in [
-            "• ↑/↓  Move between sections",
-            "• Enter  Open selected section",
-            "• Tab    Jump forward between sections",
-            "• Esc    Close settings",
-            "• ?      Toggle this help",
+            code_i18n::tr_plain("tui.settings.help.overview.nav"),
+            code_i18n::tr_plain("tui.settings.help.overview.open"),
+            code_i18n::tr_plain("tui.settings.help.overview.tab_jump"),
+            code_i18n::tr_plain("tui.settings.help.overview.close"),
+            code_i18n::tr_plain("tui.settings.help.toggle_help"),
         ] {
             lines.push(Line::from(vec![Span::styled(text.to_string(), hint)]));
         }
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(
-            "Press Esc to close",
+            code_i18n::tr_plain("tui.settings.help.press_esc_close"),
             Style::default().fg(crate::colors::text_dim()),
         )]));
         Self { lines }
@@ -138,13 +141,26 @@ impl SettingsHelpOverlay {
         let hint = Style::default().fg(crate::colors::text_dim());
         let mut lines = vec![
             Line::from(vec![Span::styled(
-                format!("{} Shortcuts", section.label()),
+                format!(
+                    "{}{}",
+                    section.label(),
+                    code_i18n::tr_plain("tui.settings.help.section_suffix")
+                ),
                 title,
             )]),
             Line::default(),
-            Line::from(vec![Span::styled("• Esc    Return to overview", hint)]),
-            Line::from(vec![Span::styled("• Tab    Cycle sections", hint)]),
-            Line::from(vec![Span::styled("• Shift+Tab  Cycle backwards", hint)]),
+            Line::from(vec![Span::styled(
+                code_i18n::tr_plain("tui.settings.help.section.esc_overview"),
+                hint,
+            )]),
+            Line::from(vec![Span::styled(
+                code_i18n::tr_plain("tui.settings.help.section.tab_cycle"),
+                hint,
+            )]),
+            Line::from(vec![Span::styled(
+                code_i18n::tr_plain("tui.settings.help.section.shift_tab_cycle"),
+                hint,
+            )]),
         ];
         if matches!(
             section,
@@ -154,14 +170,17 @@ impl SettingsHelpOverlay {
                 | SettingsSection::Skills
         ) {
             lines.push(Line::from(vec![Span::styled(
-                "• Enter  Activate focused action",
+                code_i18n::tr_plain("tui.settings.help.section.enter_activate"),
                 hint,
             )]));
         }
-        lines.push(Line::from(vec![Span::styled("• ?      Toggle this help", hint)]));
+        lines.push(Line::from(vec![Span::styled(
+            code_i18n::tr_plain("tui.settings.help.toggle_help"),
+            hint,
+        )]));
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(
-            "Press Esc to close",
+            code_i18n::tr_plain("tui.settings.help.press_esc_close"),
             Style::default().fg(crate::colors::text_dim()),
         )]));
         Self { lines }
@@ -617,8 +636,9 @@ impl AgentsSettingsContent {
 
     fn build_overview_lines(state: &AgentsOverviewState, available_width: Option<usize>) -> Vec<Line<'static>> {
         let mut lines: Vec<Line<'static>> = Vec::new();
+        let ui_language = code_i18n::current_language();
         lines.push(Line::from(Span::styled(
-            "Agents",
+            code_i18n::tr(ui_language, "tui.agents_overview.section.agents"),
             Style::default().add_modifier(Modifier::BOLD),
         )));
 
@@ -637,12 +657,21 @@ impl AgentsSettingsContent {
 
         for (idx, row) in state.rows.iter().enumerate() {
             let selected = idx == state.selected;
-            let status = if !row.enabled {
-                ("disabled", crate::colors::error())
+            let (status_text, status_color) = if !row.enabled {
+                (
+                    code_i18n::tr(ui_language, "tui.agents_overview.status.disabled"),
+                    crate::colors::error(),
+                )
             } else if !row.installed {
-                ("not installed", crate::colors::warning())
+                (
+                    code_i18n::tr(ui_language, "tui.agents_overview.status.not_installed"),
+                    crate::colors::warning(),
+                )
             } else {
-                ("enabled", crate::colors::success())
+                (
+                    code_i18n::tr(ui_language, "tui.agents_overview.status.enabled"),
+                    crate::colors::success(),
+                )
             };
 
             let mut spans = Vec::new();
@@ -665,9 +694,9 @@ impl AgentsSettingsContent {
                 },
             ));
             spans.push(Span::raw("  "));
-            spans.push(Span::styled("•", Style::default().fg(status.1)));
+            spans.push(Span::styled("•", Style::default().fg(status_color)));
             spans.push(Span::raw(" "));
-            spans.push(Span::styled(status.0.to_string(), Style::default().fg(status.1)));
+            spans.push(Span::styled(status_text, Style::default().fg(status_color)));
 
             let mut showed_desc = false;
             if let Some(desc) = row
@@ -677,7 +706,7 @@ impl AgentsSettingsContent {
                 .filter(|value| !value.is_empty())
             {
                 if let Some(width) = available_width {
-                    let status_width = UnicodeWidthStr::width(status.0);
+                    let status_width = UnicodeWidthStr::width(status_text);
                     let prefix_width = 2 + max_name_width + 2 + 2 + status_width;
                     if width > prefix_width + 3 {
                         let desc_width = width - prefix_width - 3;
@@ -699,9 +728,9 @@ impl AgentsSettingsContent {
             if selected && !showed_desc {
                 spans.push(Span::raw("  "));
                 let hint = if !row.installed {
-                    "Enter to install"
+                    code_i18n::tr(ui_language, "tui.agents_overview.hint.enter_install")
                 } else {
-                    "Enter to configure"
+                    code_i18n::tr(ui_language, "tui.agents_overview.hint.enter_configure")
                 };
                 spans.push(Span::styled(hint, Style::default().fg(crate::colors::text_dim())));
             }
@@ -723,7 +752,7 @@ impl AgentsSettingsContent {
             },
         ));
         add_spans.push(Span::styled(
-            "Add new agent…",
+            code_i18n::tr_plain("tui.agents_settings.add_new_agent"),
             if add_agent_selected {
                 Style::default()
                     .fg(crate::colors::primary())
@@ -735,7 +764,7 @@ impl AgentsSettingsContent {
         if add_agent_selected {
             add_spans.push(Span::raw("  "));
             add_spans.push(Span::styled(
-                "Enter to configure",
+                code_i18n::tr_plain("tui.settings.hint.enter_to_configure"),
                 Style::default().fg(crate::colors::text_dim()),
             ));
         }
@@ -743,7 +772,7 @@ impl AgentsSettingsContent {
 
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "Commands",
+            code_i18n::tr_plain("tui.agents_settings.commands_title"),
             Style::default().add_modifier(Modifier::BOLD),
         )));
 
@@ -772,7 +801,7 @@ impl AgentsSettingsContent {
             if selected {
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled(
-                    "Enter to configure",
+                    code_i18n::tr_plain("tui.settings.hint.enter_to_configure"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
             }
@@ -791,7 +820,7 @@ impl AgentsSettingsContent {
             },
         ));
         add_spans.push(Span::styled(
-            "Add new…",
+            code_i18n::tr_plain("tui.agents_settings.add_new_command"),
             if add_selected {
                 Style::default()
                     .fg(crate::colors::primary())
@@ -803,7 +832,7 @@ impl AgentsSettingsContent {
         if add_selected {
             add_spans.push(Span::raw("  "));
             add_spans.push(Span::styled(
-                "Enter to create",
+                code_i18n::tr_plain("tui.settings.hint.enter_to_create"),
                 Style::default().fg(crate::colors::text_dim()),
             ));
         }
@@ -812,11 +841,20 @@ impl AgentsSettingsContent {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("↑↓", Style::default().fg(crate::colors::function())),
-            Span::styled(" Navigate  ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.settings.hint.navigate")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::styled(" Open", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.settings.hint.open")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("  Esc", Style::default().fg(crate::colors::error())),
-            Span::styled(" Close", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ]));
 
         lines
@@ -1200,7 +1238,10 @@ impl SettingsContent for ChromeSettingsContent {
 
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(Line::from(" Chrome Launch Options "))
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.settings.panel_title.chrome")
+            )))
             .title_alignment(Alignment::Center)
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
             .border_style(Style::default().fg(crate::colors::border()));
@@ -1213,13 +1254,13 @@ impl SettingsContent for ChromeSettingsContent {
 
         let mut lines: Vec<Line<'static>> = Vec::new();
         lines.push(Line::from(vec![Span::styled(
-            "Chrome is already running or CDP connection failed",
+            code_i18n::tr_plain("tui.chrome_overlay.warning"),
             Style::default()
                 .fg(crate::colors::warning())
                 .add_modifier(Modifier::BOLD),
         )]));
         lines.push(Line::from(""));
-        lines.push(Line::from("Select an option:"));
+        lines.push(Line::from(code_i18n::tr_plain("tui.common.select_option")));
         lines.push(Line::from(""));
 
         for (idx, (_, label, description)) in Self::options().iter().enumerate() {
@@ -1582,13 +1623,22 @@ impl SettingsOverlayView {
     fn block_title_line(&self) -> Line<'static> {
         if self.is_menu_active() {
             Line::from(vec![
-                Span::styled("Settings", Style::default().fg(crate::colors::text())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.settings.title"),
+                    Style::default().fg(crate::colors::text()),
+                ),
                 Span::styled(" ▸ ", Style::default().fg(crate::colors::text_dim())),
-                Span::styled("Overview", Style::default().fg(crate::colors::text())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.settings.overview"),
+                    Style::default().fg(crate::colors::text()),
+                ),
             ])
         } else {
             Line::from(vec![
-                Span::styled("Settings", Style::default().fg(crate::colors::text())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.settings.title"),
+                    Style::default().fg(crate::colors::text()),
+                ),
                 Span::styled(" ▸ ", Style::default().fg(crate::colors::text_dim())),
                 Span::styled(
                     self.active_section().label(),
@@ -1633,7 +1683,7 @@ impl SettingsOverlayView {
 
         if self.overview_rows.is_empty() {
             let line = Line::from(vec![Span::styled(
-                "No settings available.",
+                code_i18n::tr_plain("tui.settings.no_settings_available"),
                 Style::default().fg(crate::colors::text_dim()),
             )]);
             Paragraph::new(line)
@@ -1837,9 +1887,13 @@ impl SettingsOverlayView {
         let normalized = trimmed
             .trim_end_matches(|c: char| matches!(c, '.' | '!' | ','))
             .to_ascii_lowercase();
-        if matches!(normalized.as_str(), "on" | "enabled" | "yes") {
+        if matches!(normalized.as_str(), "on" | "enabled" | "yes")
+            || matches!(trimmed, "开" | "启用" | "已启用" | "是" | "可用")
+        {
             Style::default().fg(crate::colors::success())
-        } else if matches!(normalized.as_str(), "off" | "disabled" | "no") {
+        } else if matches!(normalized.as_str(), "off" | "disabled" | "no")
+            || matches!(trimmed, "关" | "禁用" | "已禁用" | "否")
+        {
             Style::default().fg(crate::colors::error())
         } else {
             Style::default().fg(crate::colors::info())
@@ -1853,13 +1907,25 @@ impl SettingsOverlayView {
 
         let line = Line::from(vec![
             Span::styled("↑ ↓", Style::default().fg(crate::colors::text())),
-            Span::styled(" Move    ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}    ", code_i18n::tr_plain("tui.settings.hint.move")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Enter", Style::default().fg(crate::colors::text())),
-            Span::styled(" Open    ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}    ", code_i18n::tr_plain("tui.settings.hint.open")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("Esc", Style::default().fg(crate::colors::text())),
-            Span::styled(" Close    ", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}    ", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
             Span::styled("?", Style::default().fg(crate::colors::text())),
-            Span::styled(" Help", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.settings.hint.help")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ]);
 
         Paragraph::new(line)
@@ -1918,21 +1984,21 @@ impl SettingsOverlayView {
 
     fn section_panel_title(section: SettingsSection) -> &'static str {
         match section {
-            SettingsSection::Model => "Select Model & Reasoning",
-            SettingsSection::Theme => "Theme Settings",
-            SettingsSection::Planning => "Planning Settings",
-            SettingsSection::Updates => "Upgrade",
-            SettingsSection::Accounts => "Account Switching",
-            SettingsSection::Agents => "Agents",
-            SettingsSection::Skills => "Skills",
-            SettingsSection::AutoDrive => "Auto Drive Settings",
-            SettingsSection::Review => "Review Settings",
-            SettingsSection::Validation => "Validation Settings",
-            SettingsSection::Limits => "Rate Limits",
-            SettingsSection::Chrome => "Chrome Launch Options",
-            SettingsSection::Notifications => "Notifications",
-            SettingsSection::Mcp => "MCP Servers",
-            SettingsSection::Prompts => "Custom Prompts",
+            SettingsSection::Model => code_i18n::tr_plain("tui.settings.panel_title.model"),
+            SettingsSection::Theme => code_i18n::tr_plain("tui.settings.panel_title.theme"),
+            SettingsSection::Planning => code_i18n::tr_plain("tui.settings.panel_title.planning"),
+            SettingsSection::Updates => code_i18n::tr_plain("tui.settings.panel_title.updates"),
+            SettingsSection::Accounts => code_i18n::tr_plain("tui.settings.panel_title.accounts"),
+            SettingsSection::Agents => code_i18n::tr_plain("tui.settings.panel_title.agents"),
+            SettingsSection::Skills => code_i18n::tr_plain("tui.settings.panel_title.skills"),
+            SettingsSection::AutoDrive => code_i18n::tr_plain("tui.settings.panel_title.auto_drive"),
+            SettingsSection::Review => code_i18n::tr_plain("tui.settings.panel_title.review"),
+            SettingsSection::Validation => code_i18n::tr_plain("tui.settings.panel_title.validation"),
+            SettingsSection::Limits => code_i18n::tr_plain("tui.settings.panel_title.limits"),
+            SettingsSection::Chrome => code_i18n::tr_plain("tui.settings.panel_title.chrome"),
+            SettingsSection::Notifications => code_i18n::tr_plain("tui.settings.panel_title.notifications"),
+            SettingsSection::Mcp => code_i18n::tr_plain("tui.settings.panel_title.mcp"),
+            SettingsSection::Prompts => code_i18n::tr_plain("tui.settings.panel_title.prompts"),
         }
     }
 

@@ -170,34 +170,57 @@ fn normalize_begin_action_text(
     }
 
     if action.starts_with("Waiting for agents") {
-        return Some("Waiting for agents".to_string());
+        return Some(code_i18n::tr_plain("tui.agents.waiting").to_string());
     }
 
     if action.starts_with("Requested results for ") {
+        let ui_language = code_i18n::current_language();
+        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
         let names = friendly_agent_names(metadata, tracker);
         if names.is_empty() {
-            return Some("Requested results".to_string());
+            return Some(code_i18n::tr_plain("tui.agents.requested_results").to_string());
         }
-        return Some(format!("Requested results for {}", names.join(", ")));
+        let names = names.join(joiner);
+        return Some(code_i18n::tr_args(
+            ui_language,
+            "tui.agents.requested_results_for",
+            &[("names", &names)],
+        ));
     }
 
     if action.starts_with("Cancelling agent batch for ") {
+        let ui_language = code_i18n::current_language();
+        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
         let names = friendly_agent_names(metadata, tracker);
         if names.is_empty() {
-            return Some("Cancelling agent batch".to_string());
+            return Some(code_i18n::tr_plain("tui.agents.cancelling_batch").to_string());
         }
-        return Some(format!("Cancelling agents {}", names.join(", ")));
+        let names = names.join(joiner);
+        return Some(code_i18n::tr_args(
+            ui_language,
+            "tui.agents.cancelling_agents",
+            &[("names", &names)],
+        ));
     }
 
     if action.starts_with("Checking agent status for ") {
+        let ui_language = code_i18n::current_language();
+        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
         let names = friendly_agent_names(metadata, tracker);
         if names.is_empty() {
-            return Some("Checking agent status".to_string());
+            return Some(code_i18n::tr_plain("tui.agents.checking_status").to_string());
         }
-        return Some(format!("Checking agent status for {}", names.join(", ")));
+        let names = names.join(joiner);
+        return Some(code_i18n::tr_args(
+            ui_language,
+            "tui.agents.checking_status_for",
+            &[("names", &names)],
+        ));
     }
 
     if action.starts_with("Started agent run for ") {
+        let ui_language = code_i18n::current_language();
+        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
         let names = friendly_agent_names(metadata, tracker);
         if names.is_empty() {
             if let Some(label) = metadata
@@ -206,11 +229,20 @@ fn normalize_begin_action_text(
                 .and_then(|value| clean_label(value))
                 .filter(|value| !looks_like_uuid(value))
             {
-                return Some(format!("Started agent run for {}", label));
+                return Some(code_i18n::tr_args(
+                    ui_language,
+                    "tui.agents.started_run_for",
+                    &[("names", label.as_str())],
+                ));
             }
             return Some(action);
         }
-        return Some(format!("Started agent run for {}", names.join(", ")));
+        let names = names.join(joiner);
+        return Some(code_i18n::tr_args(
+            ui_language,
+            "tui.agents.started_run_for",
+            &[("names", &names)],
+        ));
     }
 
     Some(action)
@@ -453,14 +485,19 @@ fn agent_start_line(tracker: &AgentRunTracker) -> Line<'static> {
     agents.sort_unstable();
     agents.dedup();
 
+    let ui_language = code_i18n::current_language();
     let agent_segment = if agents.is_empty() {
         None
     } else {
-        Some(format!(" with agents {}", agents.join(", ")))
+        Some(code_i18n::tr_args(
+            ui_language,
+            "tui.agent_run.with_agents",
+            &[("agents", &agents.join(", "))],
+        ))
     };
 
     let mut spans: Vec<Span<'static>> = Vec::new();
-    spans.push(Span::raw("Started "));
+    spans.push(Span::raw(code_i18n::tr(ui_language, "tui.agent_run.started_prefix")));
     spans.push(Span::styled(title, Style::new().bold()));
     if let Some(segment) = agent_segment {
         spans.push(Span::raw(segment));
@@ -1385,24 +1422,24 @@ impl StatusSummary {
             return;
         }
         if self.any_cancelled {
-            cell.set_status_label("Cancelled");
+            cell.set_status_label(code_i18n::tr_plain("tui.state.cancelled"));
             cell.mark_completed();
             return;
         }
         if self.total > 0 && self.completed == self.total {
-            cell.set_status_label("Completed");
+            cell.set_status_label(code_i18n::tr_plain("tui.state.completed"));
             cell.mark_completed();
             return;
         }
         if self.any_running {
-            cell.set_status_label("Running");
+            cell.set_status_label(code_i18n::tr_plain("tui.state.running"));
             return;
         }
         if self.any_pending {
-            cell.set_status_label("Pending");
+            cell.set_status_label(code_i18n::tr_plain("tui.state.pending"));
             return;
         }
-        cell.set_status_label("Running");
+        cell.set_status_label(code_i18n::tr_plain("tui.state.running"));
     }
 }
 

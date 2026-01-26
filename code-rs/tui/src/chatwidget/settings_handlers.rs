@@ -28,6 +28,25 @@ pub(super) fn handle_settings_paste(chat: &mut ChatWidget<'_>, text: String) -> 
 /// Handle key presses for the full-screen settings overlay. Returns true when the
 /// key has been consumed (overlay stays modal while active).
 pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
+    // Global toggle: Ctrl+S opens/closes Settings (even when not already visible).
+    let is_ctrl_s = matches!(
+        key_event,
+        KeyEvent {
+            code: KeyCode::Char('s'),
+            modifiers: crossterm::event::KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press | KeyEventKind::Repeat,
+            ..
+        }
+    );
+    if is_ctrl_s {
+        if chat.settings.overlay.is_some() {
+            chat.close_settings_overlay();
+        } else {
+            chat.show_settings_overlay(None);
+        }
+        return true;
+    }
+
     if chat.settings.overlay.is_none() {
         return false;
     }
@@ -37,6 +56,8 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
     }
 
     let Some(ref mut overlay) = chat.settings.overlay else { return true };
+
+
 
     if overlay.is_help_visible() {
         match key_event.code {
@@ -64,7 +85,17 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
         let mut changed = false;
 
         match key_event.code {
+            KeyCode::Left => {
+                // Menu is already active; consume Left so it doesn't leak to the main UI.
+                return true;
+            }
             KeyCode::Enter => {
+                let section = overlay.active_section();
+                overlay.set_mode_section(section);
+                chat.request_redraw();
+                return true;
+            }
+            KeyCode::Right => {
                 let section = overlay.active_section();
                 overlay.set_mode_section(section);
                 chat.request_redraw();
@@ -124,6 +155,11 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
     }
 
     match key_event.code {
+        KeyCode::Left if key_event.modifiers.is_empty() => {
+            overlay.set_mode_menu(Some(overlay.active_section()));
+            chat.request_redraw();
+            return true;
+        }
         KeyCode::Esc if key_event.modifiers.is_empty() => {
             overlay.set_mode_menu(None);
             chat.request_redraw();

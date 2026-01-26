@@ -37,7 +37,7 @@ pub(crate) struct StatusIndicatorWidget {
 impl StatusIndicatorWidget {
     pub(crate) fn new(app_event_tx: AppEventSender) -> Self {
         Self {
-            header: String::from("Working"),
+            header: code_i18n::tr(code_i18n::current_language(), "tui.status_summary.working").to_string(),
             queued_messages: Vec::new(),
             start_time: Instant::now(),
             last_schedule: Cell::new(Instant::now()),
@@ -197,4 +197,3 @@ impl WidgetRef for StatusIndicatorWidget {
         paragraph.render_ref(area, buf);
     }
 }
-

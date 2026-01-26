@@ -1067,6 +1067,7 @@ dependencies = [
  "code-common",
  "code-core",
  "code-exec",
+ "code-i18n",
  "code-login",
  "code-mcp-server",
  "code-process-hardening",
@@ -1108,6 +1109,7 @@ dependencies = [
  "code-cloud-tasks-client",
  "code-common",
  "code-core",
+ "code-i18n",
  "code-login",
  "code-tui",
  "crossterm",
@@ -1322,6 +1324,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "code-i18n"
+version = "0.0.0"
+dependencies = [
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "code-linux-sandbox"
 version = "0.0.0"
 dependencies = [
@@ -1533,6 +1544,7 @@ dependencies = [
  "code-core",
  "code-file-search",
  "code-git-tooling",
+ "code-i18n",
  "code-login",
  "code-mcp-types",
  "code-ollama",
@@ -1589,6 +1601,19 @@ dependencies = [
  "uuid",
  "vt100",
  "which",
+]
+
+[[package]]
+name = "code-utils-i18n-scan"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "proc-macro2",
+ "serde",
+ "serde_json",
+ "syn 2.0.108",
+ "walkdir",
 ]
 
 [[package]]

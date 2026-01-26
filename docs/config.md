@@ -469,6 +469,13 @@ harness now activates automatically whenever at least one validation group is
 enabled. Use `[validation.groups]` for high-level toggles and the nested
 `[validation.tools]` table for per-tool overrides:
 
+To disable the harness entirely (fastest path), set:
+
+```toml
+[validation]
+patch_harness = false
+```
+
 ```toml
 [validation.groups]
 functional = true

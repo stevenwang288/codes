@@ -232,11 +232,12 @@ impl PatchSummaryCell {
             HistoryPatchEventType::ApplyFailure
         ) {
             if let Some(metadata) = &self.record.failure {
+                let ui_language = code_i18n::current_language();
                 if !lines.is_empty() {
                     lines.push(Line::default());
                 }
                 lines.push(
-                    Line::from("Patch application failed")
+                    Line::from(code_i18n::tr(ui_language, "tui.patch.apply_failed"))
                         .fg(crate::colors::error())
                         .bold(),
                 );
@@ -246,7 +247,10 @@ impl PatchSummaryCell {
                 if let Some(stdout) = &metadata.stdout_excerpt {
                     if !stdout.is_empty() {
                         lines.push(Line::default());
-                        lines.push(Line::from("stdout excerpt:").fg(crate::colors::info()));
+                        lines.push(
+                            Line::from(code_i18n::tr(ui_language, "tui.patch.stdout_excerpt"))
+                                .fg(crate::colors::info()),
+                        );
                         for line in stdout.lines() {
                             lines.push(Line::from(line.to_string()).fg(crate::colors::text()));
                         }
@@ -255,7 +259,10 @@ impl PatchSummaryCell {
                 if let Some(stderr) = &metadata.stderr_excerpt {
                     if !stderr.is_empty() {
                         lines.push(Line::default());
-                        lines.push(Line::from("stderr excerpt:").fg(crate::colors::error()));
+                        lines.push(
+                            Line::from(code_i18n::tr(ui_language, "tui.patch.stderr_excerpt"))
+                                .fg(crate::colors::error()),
+                        );
                         for line in stderr.lines() {
                             lines.push(Line::from(line.to_string()).fg(crate::colors::error()));
                         }

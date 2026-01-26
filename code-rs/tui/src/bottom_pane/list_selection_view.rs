@@ -9,6 +9,7 @@ use ratatui::text::Span;
 use ratatui::widgets::{Paragraph, Block, Borders, Clear};
 use ratatui::layout::Alignment;
 use ratatui::widgets::Widget;
+use code_i18n;
 
 use crate::app_event_sender::AppEventSender;
 
@@ -245,7 +246,7 @@ impl BottomPaneView<'_> for ListSelectionView {
                 // Use a nicer selector: '›' when selected, otherwise space
                 let prefix = if is_selected { '›' } else { ' ' };
                 let name_with_marker = if it.is_current {
-                    format!("{} (current)", it.name)
+                    format!("{} {}", it.name, code_i18n::tr_plain("tui.common.current"))
                 } else {
                     it.name.clone()
                 };
@@ -275,13 +276,16 @@ impl BottomPaneView<'_> for ListSelectionView {
             }
             // Render footer on the last inner line
             let footer_area = Rect { x: inner.x.saturating_add(1), y: inner.y + inner.height - 1, width: content_width, height: 1 };
+            let navigate = code_i18n::tr_plain("tui.common.navigate");
+            let select = code_i18n::tr_plain("tui.common.select_label");
+            let cancel = code_i18n::tr_plain("tui.common.cancel");
             let line = Line::from(vec![
                 Span::styled("↑↓", Style::default().fg(crate::colors::function())),
-                Span::styled(" Navigate  ", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(format!(" {navigate}  "), Style::default().fg(crate::colors::text_dim())),
                 Span::styled("Enter", Style::default().fg(crate::colors::success())),
-                Span::styled(" Select  ", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(format!(" {select}  "), Style::default().fg(crate::colors::text_dim())),
                 Span::styled("Esc", Style::default().fg(crate::colors::error())),
-                Span::styled(" Cancel", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(format!(" {cancel}"), Style::default().fg(crate::colors::text_dim())),
             ]);
             Paragraph::new(line)
                 .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))

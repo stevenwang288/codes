@@ -289,11 +289,11 @@ impl ValidationSettingsView {
     fn render_header_lines(&self) -> Vec<Line<'static>> {
         vec![
             Line::from(Span::styled(
-                "Toggle validation groups and installed tools.",
+                code_i18n::tr_plain("tui.settings.validation.desc"),
                 Style::default().fg(colors::text_dim()),
             )),
             Line::from(Span::styled(
-                "Use ↑↓ to navigate · Enter/Space toggle · Esc close",
+                code_i18n::tr_plain("tui.settings.validation.hint"),
                 Style::default().fg(colors::text_dim()),
             )),
             Line::from(""),
@@ -303,13 +303,25 @@ impl ValidationSettingsView {
     fn render_footer_lines(&self) -> Vec<Line<'static>> {
         let base = Line::from(vec![
             Span::styled("↑↓", Style::default().fg(colors::function())),
-            Span::styled(" Navigate  ", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
+                Style::default().fg(colors::text_dim()),
+            ),
             Span::styled("Enter", Style::default().fg(colors::success())),
-            Span::styled(" Toggle  ", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")),
+                Style::default().fg(colors::text_dim()),
+            ),
             Span::styled("Space", Style::default().fg(colors::success())),
-            Span::styled(" Toggle  ", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")),
+                Style::default().fg(colors::text_dim()),
+            ),
             Span::styled("Esc", Style::default().fg(colors::error())),
-            Span::styled(" Close", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(colors::text_dim()),
+            ),
         ]);
 
         let mut lines = vec![base];
@@ -335,8 +347,12 @@ impl ValidationSettingsView {
                     return Line::from("");
                 };
                 let description = match status.group {
-                    ValidationGroup::Functional => "Compile & structural checks",
-                    ValidationGroup::Stylistic => "Formatting and style linting",
+                    ValidationGroup::Functional => {
+                        code_i18n::tr_plain("tui.settings.validation.group.functional_desc")
+                    }
+                    ValidationGroup::Stylistic => {
+                        code_i18n::tr_plain("tui.settings.validation.group.stylistic_desc")
+                    }
                 };
                 let label_style = if selected {
                     Style::default().fg(colors::primary()).add_modifier(Modifier::BOLD)
@@ -345,10 +361,17 @@ impl ValidationSettingsView {
                 } else {
                     Style::default().fg(colors::text_dim()).add_modifier(Modifier::BOLD)
                 };
+                let ui_language = code_i18n::current_language();
                 let status_span = if *enabled {
-                    Span::styled("enabled", Style::default().fg(colors::success()))
+                    Span::styled(
+                        code_i18n::tr(ui_language, "tui.common.enabled"),
+                        Style::default().fg(colors::success()),
+                    )
                 } else {
-                    Span::styled("disabled", Style::default().fg(colors::text_dim()))
+                    Span::styled(
+                        code_i18n::tr(ui_language, "tui.common.disabled"),
+                        Style::default().fg(colors::text_dim()),
+                    )
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
@@ -359,7 +382,11 @@ impl ValidationSettingsView {
                     Span::styled(description, Style::default().fg(colors::text_dim())),
                 ];
                 if selected {
-                    let hint = if *enabled { "(press Enter to disable)" } else { "(press Enter to enable)" };
+                    let hint = if *enabled {
+                        code_i18n::tr(ui_language, "tui.common.hint.enter_disable")
+                    } else {
+                        code_i18n::tr(ui_language, "tui.common.hint.enter_enable")
+                    };
                     spans.push(Span::raw("  "));
                     spans.push(Span::styled(hint, Style::default().fg(colors::text_dim())));
                 }
@@ -385,21 +412,33 @@ impl ValidationSettingsView {
                 let mut spans = vec![Span::styled(arrow, arrow_style), Span::raw("  "), name_span];
                 spans.push(Span::raw("  "));
                 if row.group_enabled {
+                    let ui_language = code_i18n::current_language();
                     let (status_label, status_style) = if !row.status.installed {
-                        ("missing", Style::default().fg(colors::warning()).add_modifier(Modifier::BOLD))
+                        (
+                            code_i18n::tr(ui_language, "tui.common.missing"),
+                            Style::default()
+                                .fg(colors::warning())
+                                .add_modifier(Modifier::BOLD),
+                        )
                     } else if row.enabled {
-                        ("enabled", Style::default().fg(colors::success()))
+                        (
+                            code_i18n::tr(ui_language, "tui.common.enabled"),
+                            Style::default().fg(colors::success()),
+                        )
                     } else {
-                        ("disabled", Style::default().fg(colors::warning()))
+                        (
+                            code_i18n::tr(ui_language, "tui.common.disabled"),
+                            Style::default().fg(colors::warning()),
+                        )
                     };
                     spans.push(Span::styled(status_label, status_style));
                     spans.push(Span::raw("  "));
                     spans.push(Span::styled(row.status.description, Style::default().fg(colors::text_dim())));
                     if selected {
                         let hint = if !row.status.installed {
-                            "(press Enter to install)"
+                            code_i18n::tr(ui_language, "tui.common.hint.enter_install")
                         } else {
-                            "(press Enter to toggle)"
+                            code_i18n::tr(ui_language, "tui.common.hint.enter_toggle")
                         };
                         spans.push(Span::raw("  "));
                         spans.push(Span::styled(hint, Style::default().fg(colors::text_dim())));

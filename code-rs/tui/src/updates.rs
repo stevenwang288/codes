@@ -625,6 +625,19 @@ async fn fetch_latest_version(originator: &str) -> anyhow::Result<VersionInfo> {
 }
 
 async fn check_for_update(version_file: &Path, originator: &str) -> anyhow::Result<VersionInfo> {
+    if let Some(parent) = version_file.parent() {
+        if parent.exists() && parent.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotADirectory,
+                format!(
+                    "Update cache parent is a file, expected directory: {}",
+                    parent.display()
+                ),
+            )
+            .into());
+        }
+    }
+
     if let Some(info) = read_version_info(version_file)? {
         if is_cache_fresh(&info) {
             return Ok(info);

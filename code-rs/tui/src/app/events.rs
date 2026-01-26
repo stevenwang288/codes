@@ -1157,6 +1157,11 @@ impl App<'_> {
                                 widget.show_settings_overlay(section);
                             }
                         }
+                        SlashCommand::Lang => {
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                widget.handle_lang_command(command_args);
+                            }
+                        }
                         SlashCommand::Notifications => {
                             if let AppState::Chat { widget } = &mut self.app_state {
                                 widget.handle_notifications_command(command_args);
@@ -1926,6 +1931,12 @@ impl App<'_> {
                 AppEvent::CycleAutoDriveVariant => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.cycle_auto_drive_variant();
+                    }
+                    self.schedule_redraw();
+                }
+                AppEvent::ToggleValidationHarnessMode => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.toggle_validation_harness_mode();
                     }
                     self.schedule_redraw();
                 }

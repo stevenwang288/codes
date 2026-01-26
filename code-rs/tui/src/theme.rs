@@ -365,7 +365,7 @@ const ANSI16_COLORS: [(u8, u8, u8); 16] = [
 
 pub(crate) fn palette_mode() -> PaletteMode {
     if let Some(level) = supports_color::on_cached(supports_color::Stream::Stdout) {
-        if level.has_16m {
+        if level.has_16m || level.has_256 {
             return PaletteMode::Ansi256;
         }
     }

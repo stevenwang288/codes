@@ -35,7 +35,20 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-const AUTH_REQUIRED_MESSAGE: &str = "Authentication required. Run `code login` to continue.";
+const AUTH_REQUIRED_MESSAGE_EN: &str = "Authentication required. Run `code login` to continue.";
+const AUTH_REQUIRED_MESSAGE_ZH_CN: &str = "需要登录。请运行 `code login`（或 `codes login`）后继续。";
+
+fn auth_required_message() -> &'static str {
+    let env = std::env::var("CODEX_LANG")
+        .ok()
+        .or_else(|| std::env::var("OPENCODE_LANGUAGE").ok())
+        .unwrap_or_default();
+    let normalized = env.trim().to_ascii_lowercase().replace('_', "-");
+    match normalized.as_str() {
+        "zh" | "zh-cn" | "zh-hans" => AUTH_REQUIRED_MESSAGE_ZH_CN,
+        _ => AUTH_REQUIRED_MESSAGE_EN,
+    }
+}
 
 use crate::agent_defaults::{default_agent_configs, enabled_agent_model_specs};
 use crate::chat_completions::AggregateStreamExt;
@@ -194,7 +207,7 @@ fn map_unauthorized_outcome(
 
     if !had_auth {
         return Some(CodexErr::AuthRefreshPermanent(
-            AUTH_REQUIRED_MESSAGE.to_string(),
+            auth_required_message().to_string(),
         ));
     }
 
@@ -1160,7 +1173,7 @@ impl ModelClient {
                                 Ok(Some(_)) => {}
                                 Ok(None) => {
                                     auth_refresh_error = Some(RefreshTokenError::permanent(
-                                        AUTH_REQUIRED_MESSAGE,
+                                        auth_required_message(),
                                     ));
                                 }
                                 Err(err) => {
@@ -2480,7 +2493,7 @@ mod tests {
             .expect("should require login");
         match outcome {
             CodexErr::AuthRefreshPermanent(msg) => {
-                assert_eq!(msg, AUTH_REQUIRED_MESSAGE);
+                assert_eq!(msg, auth_required_message());
             }
             other => panic!("unexpected outcome: {:?}", other),
         }

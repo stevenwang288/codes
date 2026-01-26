@@ -176,9 +176,29 @@ fn pid_alive(pid: u32) -> bool {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
+fn pid_alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    unsafe {
+        let handle: HANDLE = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+
+        let mut status: u32 = 0;
+        let ok = GetExitCodeProcess(handle, &mut status as *mut u32);
+        CloseHandle(handle);
+        ok != 0 && status == STILL_ACTIVE as u32
+    }
+}
+
+#[cfg(all(not(unix), not(target_os = "windows")))]
 fn pid_alive(_pid: u32) -> bool {
-    // Best-effort: assume alive to avoid clobbering valid locks on non-Unix platforms
+    // Best-effort: assume alive to avoid clobbering valid locks.
     true
 }
 

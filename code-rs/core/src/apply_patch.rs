@@ -19,6 +19,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 pub const CODEX_APPLY_PATCH_ARG1: &str = "--codex-run-as-apply-patch";
 
@@ -282,8 +283,13 @@ async fn apply_changes_from_apply_patch(
                 added.push(path.clone());
             }
             ApplyPatchFileChange::Delete { content: _ } => {
-                std::fs::remove_file(path)
-                    .with_context(|| format!("Failed to delete file {}", path.display()))?;
+                soft_delete_file_to_bak(path, &action.cwd).with_context(|| {
+                    format!(
+                        "Failed to move deleted file {} into {}/bak",
+                        path.display(),
+                        action.cwd.display()
+                    )
+                })?;
                 deleted.push(path.clone());
             }
             ApplyPatchFileChange::Update {
@@ -318,4 +324,86 @@ async fn apply_changes_from_apply_patch(
         modified,
         deleted,
     })
+}
+
+fn soft_delete_file_to_bak(path: &Path, project_root: &Path) -> Result<()> {
+    // Preserve existing behavior: deleting a directory should fail.
+    // `remove_file` yields the right platform-specific error message/kind.
+    if path.is_dir() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("Failed to delete file {}", path.display()))?;
+        return Ok(());
+    }
+
+    let bak_root = project_root.join("bak");
+    let rel = path.strip_prefix(project_root).unwrap_or(path);
+    let dest_base = bak_root.join(rel);
+    let dest = unique_bak_destination(dest_base);
+    if let Some(parent) = dest.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create bak parent directories for {}", parent.display())
+            })?;
+        }
+    }
+
+    match std::fs::rename(path, &dest) {
+        Ok(()) => Ok(()),
+        Err(err) if is_cross_device_rename_error(&err) => {
+            std::fs::copy(path, &dest)
+                .with_context(|| format!("Failed to copy {} to {}", path.display(), dest.display()))?;
+            std::fs::remove_file(path)
+                .with_context(|| format!("Failed to delete original file {}", path.display()))?;
+            Ok(())
+        }
+        Err(err) => Err(err).with_context(|| {
+            format!("Failed to move {} to {}", path.display(), dest.display())
+        }),
+    }
+}
+
+fn is_cross_device_rename_error(err: &std::io::Error) -> bool {
+    // We avoid relying on `std::io::ErrorKind` variants that may not exist on
+    // older Rust toolchains.
+    //
+    // Typical codes:
+    // - Unix: EXDEV = 18
+    // - Windows: ERROR_NOT_SAME_DEVICE = 17
+    matches!(err.raw_os_error(), Some(17 | 18))
+}
+
+fn unique_bak_destination(dest: PathBuf) -> PathBuf {
+    if !dest.exists() {
+        return dest;
+    }
+
+    let stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| format!("{}-{}", d.as_secs(), d.subsec_nanos()))
+        .unwrap_or_else(|_| "unknown-time".to_string());
+
+    let parent = dest.parent().map(Path::to_path_buf);
+
+    let stem = dest
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("deleted");
+    let ext = dest.extension().and_then(|e| e.to_str());
+
+    let mut attempt: u32 = 1;
+    loop {
+        let filename = match ext {
+            Some(ext) if !ext.is_empty() => format!("{stem}.bak.{stamp}.{attempt}.{ext}"),
+            _ => format!("{stem}.bak.{stamp}.{attempt}"),
+        };
+        let candidate = parent
+            .clone()
+            .map(|p| p.join(&filename))
+            .unwrap_or_else(|| PathBuf::from(&filename));
+
+        if !candidate.exists() {
+            return candidate;
+        }
+        attempt = attempt.saturating_add(1);
+    }
 }

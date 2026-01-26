@@ -12,6 +12,7 @@ use code_core::config::load_global_mcp_servers;
 use code_core::config::write_global_mcp_servers;
 use code_core::config_types::McpServerConfig;
 use code_core::config_types::McpServerTransportConfig;
+use code_i18n;
 
 /// Subcommands:
 /// - `serve`  — run the MCP server on stdio
@@ -124,7 +125,7 @@ fn build_mcp_transport_for_add(
 ) -> Result<McpServerTransportConfig> {
     if let Some(url) = url {
         if !command.is_empty() {
-            bail!("--url cannot be combined with a command");
+            bail!("{}", code_i18n::tr_plain("cli.mcp.add.url_with_command_error"));
         }
         if let Some(bearer_token) = bearer_token {
             return Ok(McpServerTransportConfig::StreamableHttp {
@@ -140,13 +141,13 @@ fn build_mcp_transport_for_add(
     }
 
     if bearer_token.is_some() {
-        bail!("--bearer-token requires --url");
+        bail!("{}", code_i18n::tr_plain("cli.mcp.add.bearer_requires_url_error"));
     }
 
     let mut command_parts = command.into_iter();
     let command_bin = command_parts
         .next()
-        .ok_or_else(|| anyhow!("command is required"))?;
+        .ok_or_else(|| anyhow!(code_i18n::tr_plain("cli.mcp.add.command_required_error")))?;
     let command_args: Vec<String> = command_parts.collect();
     Ok(McpServerTransportConfig::Stdio {
         command: command_bin,
@@ -179,7 +180,7 @@ fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Result<(
         Some(map)
     };
 
-    let code_home = find_code_home().context("failed to resolve CODEX_HOME")?;
+    let code_home = find_code_home().context(code_i18n::tr_plain("cli.config.find_code_home_failed"))?;
     let mut servers = load_global_mcp_servers(&code_home)
         .with_context(|| format!("failed to load MCP servers from {}", code_home.display()))?;
 
@@ -196,7 +197,11 @@ fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Result<(
     write_global_mcp_servers(&code_home, &servers)
         .with_context(|| format!("failed to write MCP servers to {}", code_home.display()))?;
 
-    println!("Added global MCP server '{name}'.");
+    let ui_language = code_i18n::current_language();
+    println!(
+        "{}",
+        code_i18n::tr_args(ui_language, "cli.mcp.added", &[("name", name.as_str())])
+    );
 
     Ok(())
 }
@@ -254,7 +259,7 @@ fn run_remove(config_overrides: &CliConfigOverrides, remove_args: RemoveArgs) ->
 
     validate_server_name(&name)?;
 
-    let code_home = find_code_home().context("failed to resolve CODEX_HOME")?;
+    let code_home = find_code_home().context(code_i18n::tr_plain("cli.config.find_code_home_failed"))?;
     let mut servers = load_global_mcp_servers(&code_home)
         .with_context(|| format!("failed to load MCP servers from {}", code_home.display()))?;
 
@@ -265,10 +270,17 @@ fn run_remove(config_overrides: &CliConfigOverrides, remove_args: RemoveArgs) ->
             .with_context(|| format!("failed to write MCP servers to {}", code_home.display()))?;
     }
 
+    let ui_language = code_i18n::current_language();
     if removed {
-        println!("Removed global MCP server '{name}'.");
+        println!(
+            "{}",
+            code_i18n::tr_args(ui_language, "cli.mcp.removed", &[("name", name.as_str())])
+        );
     } else {
-        println!("No MCP server named '{name}' found.");
+        println!(
+            "{}",
+            code_i18n::tr_args(ui_language, "cli.mcp.not_found", &[("name", name.as_str())])
+        );
     }
 
     Ok(())
@@ -277,7 +289,7 @@ fn run_remove(config_overrides: &CliConfigOverrides, remove_args: RemoveArgs) ->
 fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Result<()> {
     let overrides = config_overrides.parse_overrides().map_err(|e| anyhow!(e))?;
     let config = Config::load_with_cli_overrides(overrides, ConfigOverrides::default())
-        .context("failed to load configuration")?;
+        .context(code_i18n::tr_plain("cli.config.load_failed"))?;
 
     let mut entries: Vec<_> = config.mcp_servers.iter().collect();
     entries.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -316,7 +328,7 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
     }
 
     if entries.is_empty() {
-        println!("No MCP servers configured yet. Try `codex mcp add my-tool -- my-command`.");
+        println!("{}", code_i18n::tr_plain("cli.mcp.none_configured"));
         return Ok(());
     }
 
@@ -358,7 +370,13 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
     }
 
     if !stdio_rows.is_empty() {
-        let mut widths = ["Name".len(), "Command".len(), "Args".len(), "Env".len()];
+        let headers = [
+            code_i18n::tr_plain("cli.mcp.table.name"),
+            code_i18n::tr_plain("cli.mcp.table.command"),
+            code_i18n::tr_plain("cli.mcp.table.args"),
+            code_i18n::tr_plain("cli.mcp.table.env"),
+        ];
+        let mut widths = [headers[0].len(), headers[1].len(), headers[2].len(), headers[3].len()];
         for row in &stdio_rows {
             for (i, cell) in row.iter().enumerate() {
                 widths[i] = widths[i].max(cell.len());
@@ -367,10 +385,10 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
 
         println!(
             "{:<name_w$}  {:<cmd_w$}  {:<args_w$}  {:<env_w$}",
-            "Name",
-            "Command",
-            "Args",
-            "Env",
+            headers[0],
+            headers[1],
+            headers[2],
+            headers[3],
             name_w = widths[0],
             cmd_w = widths[1],
             args_w = widths[2],
@@ -397,7 +415,12 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
     }
 
     if !http_rows.is_empty() {
-        let mut widths = ["Name".len(), "Url".len(), "Has Bearer Token".len()];
+        let headers = [
+            code_i18n::tr_plain("cli.mcp.table.name"),
+            code_i18n::tr_plain("cli.mcp.table.url"),
+            code_i18n::tr_plain("cli.mcp.table.has_bearer_token"),
+        ];
+        let mut widths = [headers[0].len(), headers[1].len(), headers[2].len()];
         for row in &http_rows {
             for (i, cell) in row.iter().enumerate() {
                 widths[i] = widths[i].max(cell.len());
@@ -406,9 +429,9 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
 
         println!(
             "{:<name_w$}  {:<url_w$}  {:<token_w$}",
-            "Name",
-            "Url",
-            "Has Bearer Token",
+            headers[0],
+            headers[1],
+            headers[2],
             name_w = widths[0],
             url_w = widths[1],
             token_w = widths[2],
@@ -433,10 +456,14 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
 fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Result<()> {
     let overrides = config_overrides.parse_overrides().map_err(|e| anyhow!(e))?;
     let config = Config::load_with_cli_overrides(overrides, ConfigOverrides::default())
-        .context("failed to load configuration")?;
+        .context(code_i18n::tr_plain("cli.config.load_failed"))?;
 
     let Some(server) = config.mcp_servers.get(&get_args.name) else {
-        bail!("No MCP server named '{name}' found.", name = get_args.name);
+        let ui_language = code_i18n::current_language();
+        bail!(
+            "{}",
+            code_i18n::tr_args(ui_language, "cli.mcp.not_found", &[("name", get_args.name.as_str())])
+        );
     };
 
     if get_args.json {
@@ -464,16 +491,26 @@ fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Result<(
     }
 
     println!("{}", get_args.name);
+    let ui_language = code_i18n::current_language();
     match &server.transport {
         McpServerTransportConfig::Stdio { command, args, env } => {
-            println!("  transport: stdio");
-            println!("  command: {command}");
+            println!(
+                "  {}",
+                code_i18n::tr_args(ui_language, "cli.mcp.get.transport", &[("value", "stdio")])
+            );
+            println!(
+                "  {}",
+                code_i18n::tr_args(ui_language, "cli.mcp.get.command", &[("value", command.as_str())])
+            );
             let args_display = if args.is_empty() {
                 "-".to_string()
             } else {
                 args.join(" ")
             };
-            println!("  args: {args_display}");
+            println!(
+                "  {}",
+                code_i18n::tr_args(ui_language, "cli.mcp.get.args", &[("value", &args_display)])
+            );
             let env_display = match env.as_ref() {
                 None => "-".to_string(),
                 Some(map) if map.is_empty() => "-".to_string(),
@@ -487,25 +524,62 @@ fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Result<(
                         .join(", ")
                 }
             };
-            println!("  env: {env_display}");
+            println!(
+                "  {}",
+                code_i18n::tr_args(ui_language, "cli.mcp.get.env", &[("value", &env_display)])
+            );
         }
         McpServerTransportConfig::StreamableHttp { url, bearer_token } => {
-            println!("  transport: streamable_http");
-            println!("  url: {url}");
+            println!(
+                "  {}",
+                code_i18n::tr_args(
+                    ui_language,
+                    "cli.mcp.get.transport",
+                    &[("value", "streamable_http")]
+                )
+            );
+            println!(
+                "  {}",
+                code_i18n::tr_args(ui_language, "cli.mcp.get.url", &[("value", url.as_str())])
+            );
             let token_display = bearer_token
                 .as_ref()
                 .map(|_| "<redacted>".to_string())
                 .unwrap_or_else(|| "-".to_string());
-            println!("  bearer_token: {token_display}");
+            println!(
+                "  {}",
+                code_i18n::tr_args(
+                    ui_language,
+                    "cli.mcp.get.bearer_token",
+                    &[("value", &token_display)]
+                )
+            );
         }
     }
     if let Some(timeout) = server.startup_timeout_sec {
-        println!("  startup_timeout_sec: {:.3}", timeout.as_secs_f64());
+        println!(
+            "  {}",
+            code_i18n::tr_args(
+                ui_language,
+                "cli.mcp.get.startup_timeout_sec",
+                &[("value", &format!("{:.3}", timeout.as_secs_f64()))]
+            )
+        );
     }
     if let Some(timeout) = server.tool_timeout_sec {
-        println!("  tool_timeout_sec: {:.3}", timeout.as_secs_f64());
+        println!(
+            "  {}",
+            code_i18n::tr_args(
+                ui_language,
+                "cli.mcp.get.tool_timeout_sec",
+                &[("value", &format!("{:.3}", timeout.as_secs_f64()))]
+            )
+        );
     }
-    println!("  remove: codex mcp remove {}", get_args.name);
+    println!(
+        "  {}",
+        code_i18n::tr_args(ui_language, "cli.mcp.remove_hint", &[("name", get_args.name.as_str())])
+    );
 
     Ok(())
 }
@@ -516,11 +590,11 @@ fn parse_env_pair(raw: &str) -> Result<(String, String), String> {
         .next()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| "environment entries must be in KEY=VALUE form".to_string())?;
+        .ok_or_else(|| code_i18n::tr_plain("cli.mcp.env_pair_invalid").to_string())?;
     let value = parts
         .next()
         .map(str::to_string)
-        .ok_or_else(|| "environment entries must be in KEY=VALUE form".to_string())?;
+        .ok_or_else(|| code_i18n::tr_plain("cli.mcp.env_pair_invalid").to_string())?;
 
     Ok((key.to_string(), value))
 }
@@ -534,6 +608,14 @@ fn validate_server_name(name: &str) -> Result<()> {
     if is_valid {
         Ok(())
     } else {
-        bail!("invalid server name '{name}' (use letters, numbers, '-', '_')");
+        let ui_language = code_i18n::current_language();
+        bail!(
+            "{}",
+            code_i18n::tr_args(
+                ui_language,
+                "cli.mcp.invalid_server_name",
+                &[("name", name)]
+            )
+        );
     }
 }

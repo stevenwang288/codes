@@ -28,6 +28,48 @@
 
 你的当前描述（PowerShell、UI 可滚动、认为是机制问题）优先落在 (1)+(2)。
 
+## 立即可用的“降慢”方案（不改代码优先）
+
+本项目里“`apply_patch` 后慢”的第一大来源通常是 **validation harness**（在应用补丁前/后触发的快速校验）。
+如果你把“速度优先”放在第一位，可以先用开关把它关小：
+
+### 方案 0：直接关闭 validation（效果最大）
+
+在配置里把两个 group 都关掉即可彻底禁用 harness：
+
+```toml
+[validation.groups]
+functional = false
+stylistic = false
+```
+
+或在 TUI 用 `/validation off`（也可 `status` 看当前状态）。
+
+### 方案 1：只关掉最慢的工具
+
+保留 `functional=true`，逐个把慢的 tool 关掉（例如 Rust 的 `cargo-check`）：
+
+```toml
+[validation.groups]
+functional = true
+
+[validation.tools]
+cargo-check = false
+```
+
+### 方案 2：降低 validation 超时/缩小 allowlist
+
+- `timeout_seconds`：缩短外部工具的等待时间（例如 2-3 秒），让“慢”变成“快失败”。
+- `tools_allowlist`：只允许最关键的少量工具运行。
+
+（注意：这两项会降低发现问题的能力，需要你接受“更快但更少保障”。）
+
+### 方案 3：关闭 auto-review
+
+auto-review 会带来额外的 git/worktree 工作流开销（尤其在大仓库/慢盘）。
+如果你主要诉求是速度，可以先把 `[tui].auto_review_enabled` 关掉。
+
+
 ## 现状定位（代码指针）
 
 以下指针用于后续评估时快速回到关键路径：
@@ -81,6 +123,18 @@
   - #257「TUI hangs while creating ghost snapshot on large repositories」（2025-09-27，Closed）
 
 这类问题的典型特征是“UI 彻底不响应”，通常应优先排查本地阻塞 IO（git/磁盘/索引）。
+
+## 运行提示：Auto-Review worktree 报错（本地 git 机制）
+
+如果你看到类似报错：
+
+- `failed to prepare worktree: Failed to reset reusable worktree: fatal: not a git repository: <repo>/.git/worktrees/auto-review`
+
+这通常意味着：
+
+- `auto-review` 复用 worktree 的目录还在，但 `.git/worktrees/auto-review` 的注册信息缺失/损坏（例如中断创建、目录被手动删除、或把当前目录重新 init 成另一个 git 仓库）。
+
+修复思路是“检测无效 worktree → 强制移除目录 → `git worktree prune` → 重新创建”。
 
 ## 需求：为什么“我在交互，但你不理我”
 

@@ -93,35 +93,56 @@ impl<'a> BottomPaneView<'a> for GithubSettingsView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
+        let ui_language = code_i18n::current_language();
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" GitHub Settings ")
+            .title(format!(" {} ", code_i18n::tr(ui_language, "tui.github_settings.title")))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
 
         let status_line = if self.token_ready {
             Line::from(vec![
-                Span::styled("Status: ", Style::default().fg(crate::colors::text_dim())),
-                Span::styled("Ready", Style::default().fg(crate::colors::success()).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.common.status_prefix"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.state.ready"),
+                    Style::default()
+                        .fg(crate::colors::success())
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw("  "),
                 Span::styled(&self.token_status, Style::default().fg(crate::colors::dim())),
             ])
         } else {
             Line::from(vec![
-                Span::styled("Status: ", Style::default().fg(crate::colors::text_dim())),
-                Span::styled("No token", Style::default().fg(crate::colors::warning()).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.common.status_prefix"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.github_settings.no_token"),
+                    Style::default()
+                        .fg(crate::colors::warning())
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw("  "),
                 Span::styled(
-                    "Set GH_TOKEN/GITHUB_TOKEN or run: 'gh auth login'",
+                    code_i18n::tr(ui_language, "tui.github_settings.no_token_hint"),
                     Style::default().fg(crate::colors::dim()),
                 ),
             ])
         };
 
-        let toggle_label = if self.watcher_enabled { "Enabled" } else { "Disabled" };
+        let toggle_label = if self.watcher_enabled {
+            code_i18n::tr(ui_language, "tui.common.enabled")
+        } else {
+            code_i18n::tr(ui_language, "tui.common.disabled")
+        };
         let mut toggle_style = Style::default().fg(crate::colors::text());
         if self.selected_row == 0 { toggle_style = toggle_style.bg(crate::colors::selection()).add_modifier(Modifier::BOLD); }
 
@@ -129,24 +150,40 @@ impl<'a> BottomPaneView<'a> for GithubSettingsView {
             status_line,
             Line::from(""),
             Line::from(vec![
-                Span::styled("Workflow Monitoring: ", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.github_settings.workflow_monitoring"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ),
                 Span::styled(toggle_label, toggle_style),
             ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled(if self.selected_row == 1 { "› " } else { "  " }, Style::default()),
-                Span::styled("Close", if self.selected_row == 1 { Style::default().bg(crate::colors::selection()).add_modifier(Modifier::BOLD) } else { Style::default() }),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.common.close_label"),
+                    if self.selected_row == 1 {
+                        Style::default()
+                            .bg(crate::colors::selection())
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    },
+                ),
             ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("↑↓", Style::default().fg(crate::colors::light_blue())),
-                Span::raw(" Navigate  "),
+                Span::raw(format!(" {}  ", code_i18n::tr(ui_language, "tui.common.navigate"))),
                 Span::styled("←→/Space", Style::default().fg(crate::colors::success())),
-                Span::raw(" Toggle  "),
+                Span::raw(format!(" {}  ", code_i18n::tr(ui_language, "tui.common.toggle"))),
                 Span::styled("Enter", Style::default().fg(crate::colors::success())),
-                Span::raw(" Toggle/Close  "),
+                Span::raw(format!(
+                    " {}/{}  ",
+                    code_i18n::tr(ui_language, "tui.common.toggle"),
+                    code_i18n::tr(ui_language, "tui.common.close_label")
+                )),
                 Span::styled("Esc", Style::default().fg(crate::colors::error())),
-                Span::raw(" Cancel"),
+                Span::raw(format!(" {}", code_i18n::tr(ui_language, "tui.common.cancel"))),
             ]),
         ];
 

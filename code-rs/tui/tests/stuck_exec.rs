@@ -797,7 +797,9 @@ fn running_exec_is_finalized_when_error_event_arrives() {
         output
     );
     assert!(
-        output.contains("fatal: provider crashed") || output.contains("Cancelled by user."),
+        output.contains("fatal: provider crashed")
+            || output.contains(code_i18n::tr(code_i18n::Language::En, "tui.common.cancelled_by_user"))
+            || output.contains(code_i18n::tr(code_i18n::Language::ZhCn, "tui.common.cancelled_by_user")),
         "error context should be visible after fatal error:\n{}",
         output
     );

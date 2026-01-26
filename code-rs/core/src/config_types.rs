@@ -638,7 +638,7 @@ pub enum Notifications {
 
 impl Default for Notifications {
     fn default() -> Self {
-        Self::Enabled(false)
+        Self::Enabled(true)
     }
 }
 

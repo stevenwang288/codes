@@ -28,6 +28,7 @@ use crate::clipboard_paste::normalize_pasted_path;
 use crate::clipboard_paste::paste_image_to_temp_png;
 use crate::clipboard_paste::try_decode_base64_image_to_temp_png;
 use code_file_search::FileMatch;
+use code_i18n;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -168,6 +169,8 @@ pub(crate) struct ChatComposer {
     access_mode_label: Option<String>,
     access_mode_label_expiry: Option<std::time::Instant>,
     access_mode_hint_expiry: Option<std::time::Instant>,
+    // Validation harness mode indicator shown on the right
+    validation_harness_enabled: bool,
     // Footer hint visibility flags
     show_reasoning_hint: bool,
     show_diffs_hint: bool,
@@ -237,6 +240,7 @@ impl ChatComposer {
             access_mode_label: None,
             access_mode_label_expiry: None,
             access_mode_hint_expiry: None,
+            validation_harness_enabled: true,
             show_reasoning_hint: false,
             show_diffs_hint: false,
             reasoning_shown: false,
@@ -249,6 +253,10 @@ impl ChatComposer {
             auto_drive_active: false,
             auto_drive_style: None,
         }
+    }
+
+    pub(crate) fn set_validation_harness_enabled(&mut self, enabled: bool) {
+        self.validation_harness_enabled = enabled;
     }
 
     pub fn set_using_chatgpt_auth(&mut self, using: bool) {
@@ -472,14 +480,14 @@ impl ChatComposer {
         if lower.contains("auto review") {
             let cleaned = technical_message.trim();
             if cleaned.is_empty() {
-                "Auto Review".to_string()
+                code_i18n::tr_plain("tui.agent.source.auto_review").to_string()
             } else {
                 cleaned.to_string()
             }
         } else if lower.contains("auto drive goal") {
-            "Auto Drive Goal".to_string()
+            code_i18n::tr_plain("tui.status.auto_drive_goal").to_string()
         } else if lower.contains("auto drive") {
-            "Auto Drive".to_string()
+            code_i18n::tr_plain("tui.settings.section.auto_drive").to_string()
         }
         // Thinking/reasoning patterns
         else if lower.contains("reasoning")
@@ -488,7 +496,7 @@ impl ChatComposer {
             || lower.contains("waiting for model")
             || lower.contains("model")
         {
-            "Thinking".to_string()
+            code_i18n::tr_plain("tui.status_summary.thinking").to_string()
         }
         // Tool/command execution patterns
         else if lower.contains("tool")
@@ -498,7 +506,7 @@ impl ChatComposer {
             || lower.contains("bash")
             || lower.contains("shell")
         {
-            "Using tools".to_string()
+            code_i18n::tr_plain("tui.status_summary.tools").to_string()
         }
         // Browser activity
         else if lower.contains("browser")
@@ -508,7 +516,7 @@ impl ChatComposer {
             || lower.contains("url")
             || lower.contains("screenshot")
         {
-            "Browsing".to_string()
+            code_i18n::tr_plain("tui.status_summary.browsing").to_string()
         }
         // Multi-agent orchestration
         else if lower.contains("agent")
@@ -516,7 +524,7 @@ impl ChatComposer {
             || lower.contains("orchestrating")
             || lower.contains("coordinating")
         {
-            "Agents".to_string()
+            code_i18n::tr_plain("tui.status_summary.agents").to_string()
         }
         // Response generation patterns
         else if lower.contains("generating")
@@ -527,7 +535,7 @@ impl ChatComposer {
             || lower.contains("chat completions")
             || lower.contains("completion")
         {
-            "Responding".to_string()
+            code_i18n::tr_plain("tui.status_summary.responding").to_string()
         }
         // Transient network/stream retry patterns → keep spinner visible with a
         // clear reconnecting message so the user knows we are still working.
@@ -541,7 +549,7 @@ impl ChatComposer {
             || lower.contains("network")
             || lower.contains("connection")
         {
-            "Reconnecting".to_string()
+            code_i18n::tr_plain("tui.status_summary.reconnecting").to_string()
         }
         // File/code editing patterns
         else if lower.contains("editing")
@@ -551,16 +559,16 @@ impl ChatComposer {
             || lower.contains("updating")
             || lower.contains("patch")
         {
-            "Coding".to_string()
+            code_i18n::tr_plain("tui.status_summary.coding").to_string()
         }
         // Catch some common technical terms
         else if lower.contains("processing") || lower.contains("analyzing") {
-            "Thinking".to_string()
+            code_i18n::tr_plain("tui.status_summary.thinking").to_string()
         } else if lower.contains("reading") || lower.contains("searching") {
-            "Reading".to_string()
+            code_i18n::tr_plain("tui.status_summary.reading").to_string()
         } else {
             // Default fallback - use "working" for unknown status
-            "Working".to_string()
+            code_i18n::tr_plain("tui.status_summary.working").to_string()
         }
     }
 
@@ -1577,6 +1585,18 @@ impl ChatComposer {
                 (InputResult::None, true)
             }
             // -------------------------------------------------------------
+            // Tab (when composer is empty) — toggle validation harness mode
+            // -------------------------------------------------------------
+            KeyEvent {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            } if self.is_empty() && self.has_focus => {
+                self.app_event_tx.send(crate::app_event::AppEvent::ToggleValidationHarnessMode);
+                (InputResult::None, true)
+            }
+            // -------------------------------------------------------------
             // Tab-press file search when not using @ or ./ and not in slash cmd
             // -------------------------------------------------------------
             KeyEvent { code: KeyCode::Tab, .. } => {
@@ -2173,10 +2193,11 @@ impl ChatComposer {
     ) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
         let key_hint_style = Style::default().fg(crate::colors::function());
         let label_style = Style::default().fg(crate::colors::text_dim());
+        let ui_language = code_i18n::current_language();
 
         let agent_hint_label_text = match agent_hint_label {
-            AgentHintLabel::Review => " show review",
-            AgentHintLabel::Agents => " show agents",
+            AgentHintLabel::Review => code_i18n::tr(ui_language, "tui.footer.hint.show_review"),
+            AgentHintLabel::Agents => code_i18n::tr(ui_language, "tui.footer.hint.show_agents"),
         };
 
         let agent_hint_spans = vec![
@@ -2187,39 +2208,48 @@ impl ChatComposer {
         let status_spans = match status.status {
             AutoReviewIndicatorStatus::Running => {
                 let phase_label = match status.phase {
-                    AutoReviewPhase::Resolving => "Auto Review: Resolving",
-                    AutoReviewPhase::Reviewing => "Auto Review: Reviewing",
+                    AutoReviewPhase::Resolving => code_i18n::tr(ui_language, "tui.auto_review.phase.resolving"),
+                    AutoReviewPhase::Reviewing => code_i18n::tr(ui_language, "tui.auto_review.phase.reviewing"),
                 };
                 let status_style = key_hint_style;
                 vec![
-                    Span::styled("Auto Review: ", label_style),
+                    Span::styled(
+                        format!("{}: ", code_i18n::tr(ui_language, "tui.agent.source.auto_review")),
+                        label_style,
+                    ),
                     Span::styled("•", status_style),
                     Span::from(" "),
-                    Span::styled(
-                        phase_label.trim_start_matches("Auto Review: "),
-                        status_style,
-                    ),
+                    Span::styled(phase_label, status_style),
                 ]
             }
             AutoReviewIndicatorStatus::Clean => {
                 let icon_style = key_hint_style;
                 vec![
-                    Span::styled("Auto Review: ", label_style),
+                    Span::styled(
+                        format!("{}: ", code_i18n::tr(ui_language, "tui.agent.source.auto_review")),
+                        label_style,
+                    ),
                     Span::styled("✔", icon_style),
                     Span::from(" "),
-                    Span::styled("Correct", icon_style),
+                    Span::styled(code_i18n::tr(ui_language, "tui.auto_review.correct"), icon_style),
                 ]
             }
             AutoReviewIndicatorStatus::Fixed => {
                 let icon_style = Style::default().fg(crate::colors::success());
                 let text = if let Some(count) = status.findings {
-                    let plural = if count == 1 { "Issue" } else { "Issues" };
-                    format!("{count} {plural} Fixed")
+                    code_i18n::tr_args(
+                        ui_language,
+                        "tui.auto_review.fixed_count",
+                        &[("count", &count.to_string())],
+                    )
                 } else {
-                    "Issues Fixed".to_string()
+                    code_i18n::tr(ui_language, "tui.auto_review.fixed").to_string()
                 };
                 vec![
-                    Span::styled("Auto Review: ", label_style),
+                    Span::styled(
+                        format!("{}: ", code_i18n::tr(ui_language, "tui.agent.source.auto_review")),
+                        label_style,
+                    ),
                     Span::styled("✔", icon_style),
                     Span::from(" "),
                     Span::styled(text, icon_style),
@@ -2228,10 +2258,13 @@ impl ChatComposer {
             AutoReviewIndicatorStatus::Failed => {
                 let icon_style = Style::default().fg(crate::colors::error());
                 vec![
-                    Span::styled("Auto Review: ", label_style),
+                    Span::styled(
+                        format!("{}: ", code_i18n::tr(ui_language, "tui.agent.source.auto_review")),
+                        label_style,
+                    ),
                     Span::styled("✖", icon_style),
                     Span::from(" "),
-                    Span::styled("Failed", icon_style),
+                    Span::styled(code_i18n::tr(ui_language, "tui.state.failed"), icon_style),
                 ]
             }
         };
@@ -2447,11 +2480,14 @@ impl ChatComposer {
                 let mut include_tokens = !token_spans_full.is_empty() || !token_spans_compact.is_empty();
                 let mut token_use_compact = false;
 
-                // Guide hint (priority 4) — only when not auto-drive and not showing quit hint
+                // Guide/settings hint (priority 4) — only when not auto-drive and not showing quit hint
                 let guide_spans: Vec<Span<'static>> = if !self.auto_drive_active && !self.ctrl_c_quit_hint {
                     vec![
+                        Span::from("Ctrl+S").style(key_hint_style),
+                        Span::from(format!(" {}", code_i18n::tr_plain("tui.footer.settings"))).style(label_style),
+                        Span::from("   "),
                         Span::from("Ctrl+G").style(key_hint_style),
-                        Span::from(" guide").style(label_style),
+                        Span::from(format!(" {}", code_i18n::tr_plain("tui.footer.guide"))).style(label_style),
                     ]
                 } else {
                     Vec::new()
@@ -2459,6 +2495,28 @@ impl ChatComposer {
                 let guide_present = !guide_spans.is_empty();
                 if guide_present {
                     right_sections.push((4, guide_spans, true));
+                }
+
+                // Mode indicator (priority 5) — always show when not in auto-drive.
+                let mode_spans: Vec<Span<'static>> = if !self.auto_drive_active {
+                    let ui_language = code_i18n::current_language();
+                    let mode_value_key = if self.validation_harness_enabled {
+                        "tui.footer.mode.strict"
+                    } else {
+                        "tui.footer.mode.fast"
+                    };
+                    let mode_value = code_i18n::tr(ui_language, mode_value_key);
+                    vec![
+                        Span::from("Tab").style(key_hint_style),
+                        Span::from(format!(" {}: {}", code_i18n::tr_plain("tui.footer.mode_prefix"), mode_value))
+                            .style(label_style),
+                    ]
+                } else {
+                    Vec::new()
+                };
+                let mode_present = !mode_spans.is_empty();
+                if mode_present {
+                    right_sections.push((5, mode_spans, true));
                 }
 
                 // Tokens placeholder (actual spans chosen later)
@@ -2849,8 +2907,10 @@ impl WidgetRef for ChatComposer {
                         .eq_ignore_ascii_case("auto drive goal")
                     {
                         let title_text = format!(
-                            "{}Auto Drive Goal{}",
-                            style.goal_title_prefix, style.goal_title_suffix
+                            "{}{}{}",
+                            style.goal_title_prefix,
+                            code_i18n::tr_plain("tui.status.auto_drive_goal"),
+                            style.goal_title_suffix
                         );
                         let title_line =
                             Line::from(Span::styled(title_text, style.title_style.clone()));
@@ -3034,13 +3094,26 @@ mod tests {
         let mut buf = Buffer::empty(area);
         composer.render_footer(area, &mut buf);
 
-        let line: String = (0..area.width)
-            .map(|x| buf[(area.x + x, area.y)].symbol().to_string())
-            .collect();
+        // NOTE: Wide (CJK) characters occupy 2 cells; the trailing cell has an empty symbol.
+        // Build a display line that skips empty continuation cells so localized labels remain searchable.
+        let mut line = String::new();
+        for x in 0..area.width {
+            let sym = buf[(area.x + x, area.y)].symbol();
+            if sym.is_empty() {
+                continue;
+            }
+            line.push_str(sym);
+        }
 
-        let auto_idx = line
-            .find("Auto Review")
-            .expect("footer should show auto review text");
+        let ui_language = code_i18n::current_language();
+        let auto_review_label = code_i18n::tr(ui_language, "tui.agent.source.auto_review");
+        // Some terminals/backends can render wide graphemes into a buffer where our cell-level
+        // extraction introduces spaces between glyph fragments. Normalize by dropping whitespace.
+        let compact_line: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+        let compact_label: String = auto_review_label.chars().filter(|c| !c.is_whitespace()).collect();
+        let auto_idx = compact_line
+            .find(&compact_label)
+            .unwrap_or_else(|| panic!("footer should show auto review text; line={line:?}"));
         let esc_idx = line.find("Esc stop").unwrap_or(line.len());
 
         assert!(auto_idx < esc_idx, "Auto Review status should be left-most");

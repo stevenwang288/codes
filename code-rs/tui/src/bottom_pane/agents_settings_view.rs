@@ -296,6 +296,7 @@ impl SubagentEditorView {
 
     fn agent_lines(&self, max_width: u16) -> Vec<Line<'static>> {
         let max_width = max_width.max(1) as usize;
+        let ui_language = code_i18n::current_language();
         let sel = |idx: usize| {
             if self.field == idx {
                 Style::default()
@@ -317,7 +318,10 @@ impl SubagentEditorView {
 
         let mut spans: Vec<Span> = Vec::new();
         spans.push(Span::raw(" "));
-        spans.push(Span::styled("Agents:", label(2)));
+        spans.push(Span::styled(
+            code_i18n::tr(ui_language, "tui.subagent_editor.agents_label"),
+            label(2),
+        ));
         spans.push(Span::raw("  "));
 
         for (idx, a) in self.available_agents.iter().enumerate() {
@@ -394,11 +398,15 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
+        let ui_language = code_i18n::current_language();
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" Configure Agent Command ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr(ui_language, "tui.subagent_editor.title")
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -410,7 +418,10 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
         let label = |idx: usize| if self.field == idx { Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD) } else { Style::default() };
 
         // Bold title
-        lines.push(Line::from(Span::styled("Agents » Edit Command", Style::default().add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(Span::styled(
+            code_i18n::tr(ui_language, "tui.agents.edit_command_title"),
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
         // Spacer after title
         lines.push(Line::from(""));
         // Reserve a box area for Name (we draw the bordered box with a title after)
@@ -422,15 +433,32 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
         {
             let mut spans: Vec<Span> = Vec::new();
             spans.push(Span::raw(" "));
-            spans.push(Span::styled("Mode:", label(1)));
+            spans.push(Span::styled(
+                code_i18n::tr(ui_language, "tui.subagent_editor.mode_label"),
+                label(1),
+            ));
             spans.push(Span::raw("  "));
             // [x] read-only
             let ro = if self.read_only { "[x]" } else { "[ ]" };
-            spans.push(Span::styled(format!("{} read-only", ro), sel(1)));
+            spans.push(Span::styled(
+                format!(
+                    "{} {}",
+                    ro,
+                    code_i18n::tr(ui_language, "tui.subagent_editor.mode.read_only")
+                ),
+                sel(1),
+            ));
             spans.push(Span::raw("  "));
             // [x] write (inverse of read_only)
             let wr = if self.read_only { "[ ]" } else { "[x]" };
-            spans.push(Span::styled(format!("{} write", wr), sel(1)));
+            spans.push(Span::styled(
+                format!(
+                    "{} {}",
+                    wr,
+                    code_i18n::tr(ui_language, "tui.subagent_editor.mode.write")
+                ),
+                sel(1),
+            ));
             lines.push(Line::from(spans));
         }
 
@@ -454,32 +482,37 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
 
         // Buttons row
         let show_delete = !self.is_new && !matches!(self.name_field.text().to_ascii_lowercase().as_str(), "plan" | "solve" | "code");
+        let save_label = code_i18n::tr(ui_language, "tui.common.save");
+        let delete_label = code_i18n::tr(ui_language, "tui.common.delete");
+        let cancel_label = code_i18n::tr(ui_language, "tui.common.cancel");
+        let confirm_delete_label = code_i18n::tr(ui_language, "tui.common.confirm_delete");
+        let back_label = code_i18n::tr(ui_language, "tui.common.back");
         if self.confirm_delete {
             let confirm_style = sel(4).fg(crate::colors::error()).add_modifier(Modifier::BOLD);
             let back_style = sel(5).fg(crate::colors::text());
             let mut btn_spans: Vec<Span> = Vec::new();
-            btn_spans.push(Span::styled("[ Confirm Delete ]", confirm_style));
+            btn_spans.push(Span::styled(format!("[ {confirm_delete_label} ]"), confirm_style));
             btn_spans.push(Span::raw("  "));
-            btn_spans.push(Span::styled("[ Back ]", back_style));
+            btn_spans.push(Span::styled(format!("[ {back_label} ]"), back_style));
             lines.push(Line::from(btn_spans));
         } else if show_delete {
             let save_style = sel(4).fg(crate::colors::success());
             let delete_style = sel(5).fg(crate::colors::error());
             let cancel_style = sel(6).fg(crate::colors::text());
             let mut btn_spans: Vec<Span> = Vec::new();
-            btn_spans.push(Span::styled("[ Save ]", save_style));
+            btn_spans.push(Span::styled(format!("[ {save_label} ]"), save_style));
             btn_spans.push(Span::raw("  "));
-            btn_spans.push(Span::styled("[ Delete ]", delete_style));
+            btn_spans.push(Span::styled(format!("[ {delete_label} ]"), delete_style));
             btn_spans.push(Span::raw("  "));
-            btn_spans.push(Span::styled("[ Cancel ]", cancel_style));
+            btn_spans.push(Span::styled(format!("[ {cancel_label} ]"), cancel_style));
             lines.push(Line::from(btn_spans));
         } else {
             let save_style = sel(4).fg(crate::colors::success());
             let cancel_style = sel(5).fg(crate::colors::text());
             let mut btn_spans: Vec<Span> = Vec::new();
-            btn_spans.push(Span::styled("[ Save ]", save_style));
+            btn_spans.push(Span::styled(format!("[ {save_label} ]"), save_style));
             btn_spans.push(Span::raw("  "));
-            btn_spans.push(Span::styled("[ Cancel ]", cancel_style));
+            btn_spans.push(Span::styled(format!("[ {cancel_label} ]"), cancel_style));
             lines.push(Line::from(btn_spans));
         }
         // Remove any trailing blank lines so buttons hug the bottom frame

@@ -196,10 +196,14 @@ pub async fn process_exec_tool_call(
     let duration = start.elapsed();
     match raw_output_result {
         Ok(raw_output) => {
-            #[allow(unused_mut)]
+            #[cfg(target_family = "unix")]
             let mut timed_out = raw_output.timed_out;
+            #[cfg(not(target_family = "unix"))]
+            let timed_out = raw_output.timed_out;
 
-            #[allow(unused_variables)]
+            #[cfg(target_family = "unix")]
+            let mut exit_signal: Option<i32> = None;
+            #[cfg(not(target_family = "unix"))]
             let exit_signal: Option<i32> = None;
 
             #[cfg(target_family = "unix")]

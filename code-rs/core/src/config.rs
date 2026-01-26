@@ -88,6 +88,7 @@ pub use sources::{
     set_tui_spinner_name,
     set_tui_theme_name,
     set_validation_group_enabled,
+    set_validation_patch_harness_enabled,
     set_validation_tool_enabled,
     write_global_mcp_servers,
 };
@@ -1724,7 +1725,7 @@ persistence = "none"
     }
 
     #[test]
-    fn tui_config_missing_notifications_field_defaults_to_disabled() {
+    fn tui_config_missing_notifications_field_defaults_to_enabled() {
         let cfg = r#"
 [tui]
 "#;
@@ -1733,7 +1734,7 @@ persistence = "none"
             .expect("TUI config without notifications should succeed");
         let tui = parsed.tui.expect("config should include tui section");
 
-        assert_eq!(tui.notifications, Notifications::Enabled(false));
+        assert_eq!(tui.notifications, Notifications::Enabled(true));
     }
 
     #[test]
