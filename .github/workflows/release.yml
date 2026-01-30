@@ -521,7 +521,7 @@ jobs:
           for i in {1..30}; do if nc -z 127.0.0.1 5058; then break; else sleep 0.2; fi; done || true
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts/
 
