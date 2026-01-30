@@ -211,7 +211,7 @@ jobs:
     steps:
       - name: Resolve slug and next tag
         id: slug
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo; const pr = context.payload.pull_request.number;
@@ -388,7 +388,7 @@ jobs:
     steps:
       - name: Resolve slug and latest tag
         id: slug
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           RELEASE_SLUG: ${{ needs.release.outputs.slug }}
         with:
@@ -444,7 +444,7 @@ jobs:
             core.setOutput('tag', latest);
       - name: Upsert PR comment with artifact info
         if: github.event_name == 'pull_request' && github.event.pull_request.head.ref != 'upstream-merge'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
@@ -493,7 +493,7 @@ jobs:
             }
 
       - name: Mark triage complete on linked issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo;
