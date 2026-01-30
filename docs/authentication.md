@@ -11,7 +11,7 @@ export OPENAI_API_KEY="your-api-key-here"
 Alternatively, read from a file:
 
 ```shell
-code login --with-api-key < my_key.txt
+codes login --with-api-key < my_key.txt
 ```
 
 The legacy `--api-key` flag now exits with an error instructing you to use `--with-api-key` so that the key never appears in shell history or process listings.
@@ -22,9 +22,9 @@ This key must, at minimum, have write access to the Responses API.
 
 If you've used the Code CLI before with usage-based billing via an API key and want to switch to using your ChatGPT plan, follow these steps:
 
-1. Update the CLI and ensure `code --version` is `0.5.0` or later
-2. Delete `~/.codex/auth.json` (on Windows this lives under `C:\\Users\\USERNAME\\.codex\\auth.json`)
-3. Run `code login` again
+1. Update the CLI and ensure `codes --version` is `0.5.0` or later
+2. Delete `~/.codes/auth.json` (on Windows this lives under `C:\\Users\\USERNAME\\.codes\\auth.json`)
+3. Run `codes login` again
 
 ## Forcing a specific auth method (advanced)
 
@@ -33,20 +33,20 @@ You can explicitly choose which authentication Code should prefer when both are 
 - To always use your API key (even when ChatGPT auth exists), set:
 
 ```toml
-# ~/.codex/config.toml
+# ~/.codes/config.toml
 preferred_auth_method = "apikey"
 ```
 
 Or override ad-hoc via CLI:
 
 ```bash
-code --config preferred_auth_method="apikey"
+codes --config preferred_auth_method="apikey"
 ```
 
 - To prefer ChatGPT auth (default), set:
 
 ```toml
-# ~/.codex/config.toml
+# ~/.codes/config.toml
 preferred_auth_method = "chatgpt"
 ```
 
@@ -64,7 +64,7 @@ Why: many repos include an API key in `.env` for unrelated tooling, which could 
 
 What still works:
 
-- `~/.codex/.env` is loaded first and may contain your `OPENAI_API_KEY` for global use.
+- `~/.codes/.env` is loaded first and may contain your `OPENAI_API_KEY` for global use.
 - A shell-exported `OPENAI_API_KEY` is honored.
 
 Project `.env` provider keys are always ignored — there is no opt‑in.
@@ -79,28 +79,28 @@ Today, the login process entails running a server on `localhost:1455`. If you ar
 
 ### Authenticate locally and copy your credentials to the "headless" machine
 
-The easiest solution is likely to run through the `code login` process on your local machine such that `localhost:1455` _is_ accessible in your web browser. When you complete the authentication process, an `auth.json` file should be available at `$CODEX_HOME/auth.json` (defaults to `~/.codex/auth.json`).
+The easiest solution is likely to run through the `codes login` process on your local machine such that `localhost:1455` _is_ accessible in your web browser. When you complete the authentication process, an `auth.json` file should be available at `$CODES_HOME/auth.json` (defaults to `~/.codes/auth.json`).
 
-Because the `auth.json` file is not tied to a specific host, once you complete the authentication flow locally, you can copy the `$CODE_HOME/auth.json` file to the headless machine and then `code` should "just work" on that machine. Note to copy a file to a Docker container, you can do:
+Because the `auth.json` file is not tied to a specific host, once you complete the authentication flow locally, you can copy the `$CODES_HOME/auth.json` file to the headless machine and then `codes` should "just work" on that machine. Note to copy a file to a Docker container, you can do:
 
 ```shell
 # substitute MY_CONTAINER with the name or id of your Docker container:
 CONTAINER_HOME=$(docker exec MY_CONTAINER printenv HOME)
-docker exec MY_CONTAINER mkdir -p "$CONTAINER_HOME/.codex"
-docker cp auth.json MY_CONTAINER:"$CONTAINER_HOME/.codex/auth.json"
+docker exec MY_CONTAINER mkdir -p "$CONTAINER_HOME/.codes"
+docker cp auth.json MY_CONTAINER:"$CONTAINER_HOME/.codes/auth.json"
 ```
 
 whereas if you are `ssh`'d into a remote machine, you likely want to use [`scp`](https://en.wikipedia.org/wiki/Secure_copy_protocol):
 
 ```shell
-ssh user@remote 'mkdir -p ~/.codex'
-scp ~/.codex/auth.json user@remote:~/.codex/auth.json
+ssh user@remote 'mkdir -p ~/.codes'
+scp ~/.codes/auth.json user@remote:~/.codes/auth.json
 ```
 
 or try this one-liner:
 
 ```shell
-ssh user@remote 'mkdir -p ~/.codex && cat > ~/.codex/auth.json' < ~/.codex/auth.json
+ssh user@remote 'mkdir -p ~/.codes && cat > ~/.codes/auth.json' < ~/.codes/auth.json
 ```
 
 ### Connecting through VPS or remote
@@ -113,3 +113,4 @@ ssh -L 1455:localhost:1455 <user>@<remote-host>
 ```
 
 Then, in that SSH session, run `code` and select "Sign in with ChatGPT". When prompted, open the printed URL (it will be `http://localhost:1455/...`) in your local browser. The traffic will be tunneled to the remote server.
+Then, in that SSH session, run `codes` and select "Sign in with ChatGPT". When prompted, open the printed URL (it will be `http://localhost:1455/...`) in your local browser. The traffic will be tunneled to the remote server.

@@ -523,15 +523,8 @@ impl BottomPane<'_> {
         self.request_redraw();
     }
 
-    /// Attempt to close the file-search popup if visible. Returns true if closed.
-    pub(crate) fn close_file_popup_if_active(&mut self) -> bool {
-        let closed = self.composer.close_file_popup_if_active();
-        if closed { self.request_redraw(); }
-        closed
-    }
-
-    pub(crate) fn file_popup_visible(&self) -> bool {
-        self.composer.file_popup_visible()
+    pub(crate) fn composer_popup_visible(&self) -> bool {
+        self.composer.popup_visible()
     }
 
     /// True if a modal/overlay view is currently displayed (not the composer popup).

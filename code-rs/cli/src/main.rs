@@ -129,7 +129,7 @@ enum Subcommand {
     /// Internal debugging commands.
     Debug(DebugArgs),
 
-    /// Debug: replay ordering from response.json and codex-tui.log
+    /// Debug: replay ordering from response.json and codes-tui.log
     #[clap(hide = false)]
     OrderReplay(OrderReplayArgs),
 
@@ -376,10 +376,9 @@ struct GenerateTsCommand {
 
 #[derive(Debug, Parser)]
 struct OrderReplayArgs {
-    /// Path to a response.json captured under ~/.code/debug_logs/*_response.json
-    /// (legacy ~/.codex/debug_logs/ is still read).
+    /// Path to a response.json captured under ~/.codes/debug_logs/*_response.json.
     response_json: std::path::PathBuf,
-    /// Path to codex-tui.log (typically ~/.code/debug_logs/codex-tui.log).
+    /// Path to codes-tui.log (typically ~/.codes/debug_logs/codes-tui.log).
     tui_log: std::path::PathBuf,
 }
 
@@ -387,7 +386,7 @@ struct OrderReplayArgs {
 struct PreviewArgs {
     /// Slug identifier (e.g., faster-downloads)
     slug: String,
-    /// Optional owner/repo to override (defaults to just-every/code or $GITHUB_REPOSITORY)
+    /// Optional owner/repo to override (defaults to stevenwang288/codes or $GITHUB_REPOSITORY)
     #[arg(long = "repo", value_name = "OWNER/REPO")]
     repo: Option<String>,
     /// Output directory where the binary will be extracted
@@ -1435,7 +1434,7 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
     }
 
     // Determine output directory
-    // Default: ~/.code/bin
+    // Default: ~/.codes/bin
     let out_dir = if let Some(dir) = args.out_dir {
         dir
     } else {
@@ -1447,7 +1446,7 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
         let base = home
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
-        base.join(".code").join("bin")
+        base.join(".codes").join("bin")
     };
     let _ = fs::create_dir_all(&out_dir);
 
@@ -1465,8 +1464,12 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
             let mut ar = tar::Archive::new(gz);
             ar.unpack(&out_dir)?;
             // Find extracted binary
-            let bin = first_match(&out_dir, "code-").unwrap_or(out_dir.join("code"));
-            let dest_name = format!("{}-{}", bin.file_name().and_then(|s| s.to_str()).unwrap_or("code"), slug);
+            let bin = first_match(&out_dir, "codes-").unwrap_or(out_dir.join("codes"));
+            let dest_name = format!(
+                "{}-{}",
+                bin.file_name().and_then(|s| s.to_str()).unwrap_or("codes"),
+                slug
+            );
             let dest = out_dir.join(dest_name);
             // Rename/move to include PR number suffix
             let _ = fs::rename(&bin, &dest).or_else(|_| { fs::copy(&bin, &dest).map(|_| () ) });
@@ -1541,16 +1544,24 @@ async fn doctor_main() -> anyhow::Result<()> {
     use std::process::Stdio;
     use tokio::process::Command;
 
+    macro_rules! outln {
+        ($($arg:tt)*) => {{
+            use std::io::Write;
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(stdout, $($arg)*);
+        }};
+    }
+
     // Print current executable and version
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "<unknown>".to_string());
-    println!("code version: {}", code_version::version());
-    println!("current_exe: {}", exe);
+    outln!("codes version: {}", code_version::version());
+    outln!("current_exe: {}", exe);
 
     // PATH
     let path = env::var("PATH").unwrap_or_default();
-    println!("PATH: {}", path);
+    outln!("PATH: {}", path);
 
     // Helper to run a shell command and capture stdout (best-effort)
     async fn run_cmd(cmd: &str, args: &[&str]) -> String {
@@ -1566,7 +1577,11 @@ async fn doctor_main() -> anyhow::Result<()> {
     let which_all = |name: &str| {
         let name = name.to_string();
         async move {
-            let out = run_cmd("/bin/bash", &["-lc", &format!("which -a {} 2>/dev/null || true", name)]).await;
+            let out = run_cmd(
+                "/bin/bash",
+                &["-lc", &format!("which -a {name} 2>/dev/null || true")],
+            )
+            .await;
             out.split('\n').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect::<Vec<_>>()
         }
     };
@@ -1579,53 +1594,56 @@ async fn doctor_main() -> anyhow::Result<()> {
         }
     };
 
-    // Gather candidates for code/coder
+    // Gather candidates for codes (primary) and a couple of common neighbors.
+    let codes_paths = which_all("codes").await;
+    let codex_paths = which_all("codex").await;
     let code_paths = which_all("code").await;
-    let coder_paths = which_all("coder").await;
 
-    println!("\nFound 'code' on PATH (in order):");
-    if code_paths.is_empty() {
-        println!("  <none>");
-    } else {
-        for p in &code_paths { println!("  {}", p); }
-    }
-    println!("\nFound 'coder' on PATH (in order):");
-    if coder_paths.is_empty() {
-        println!("  <none>");
-    } else {
-        for p in &coder_paths { println!("  {}", p); }
-    }
-
-    // Try to run --version for each resolved binary to show where mismatches come from
-    async fn show_versions(caption: &str, paths: &[String]) {
-        println!("\n{}:", caption);
-        for p in paths {
-            let out = run_cmd(p, &["--version"]).await;
-            if out.is_empty() {
-                println!("  {} -> (no output)", p);
-            } else {
-                println!("  {} -> {}", p, out);
+    fn print_paths(label: &str, paths: &[String]) {
+        outln!("\nFound '{}' on PATH (in order):", label);
+        if paths.is_empty() {
+            outln!("  <none>");
+        } else {
+            for p in paths {
+                outln!("  {}", p);
             }
         }
     }
+    print_paths("codes", &codes_paths);
+    print_paths("codex", &codex_paths);
+    print_paths("code", &code_paths);
+
+    // Try to run --version for each resolved binary to show where mismatches come from
+    async fn show_versions(caption: &str, paths: &[String]) {
+        outln!("\n{}:", caption);
+        for p in paths {
+            let out = run_cmd(p, &["--version"]).await;
+            if out.is_empty() {
+                outln!("  {} -> (no output)", p);
+            } else {
+                outln!("  {} -> {}", p, out);
+            }
+        }
+    }
+    show_versions("codes --version by path", &codes_paths).await;
+    show_versions("codex --version by path", &codex_paths).await;
     show_versions("code --version by path", &code_paths).await;
-    show_versions("coder --version by path", &coder_paths).await;
 
     // Detect Bun shims
     let bun_home = env::var("BUN_INSTALL").ok().or_else(|| {
-        env::var("HOME").ok().map(|h| format!("{}/.bun", h))
+        env::var("HOME").ok().map(|h| format!("{h}/.bun"))
     });
     if let Some(bun) = bun_home {
-        let bun_bin = format!("{}/bin", bun);
-        let bun_coder = format!("{}/coder", bun_bin);
-        if coder_paths.iter().any(|p| p == &bun_coder) {
-            println!("\nBun shim detected for 'coder': {}", bun_coder);
-            println!("Suggestion: remove old Bun global with: bun remove -g @just-every/code");
+        let bun_bin = format!("{bun}/bin");
+        let bun_codes = format!("{bun_bin}/codes");
+        if codes_paths.iter().any(|p| p == &bun_codes) {
+            outln!("\nBun shim detected for 'codes': {}", bun_codes);
+            outln!("Suggestion: keep only one global install and ensure it's first on PATH.");
         }
-        let bun_code = format!("{}/code", bun_bin);
-        if code_paths.iter().any(|p| p == &bun_code) {
-            println!("Bun shim detected for 'code': {}", bun_code);
-            println!("Suggestion: prefer 'coder' or remove Bun shim if it conflicts.");
+        let bun_codex = format!("{bun_bin}/codex");
+        if codex_paths.iter().any(|p| p == &bun_codex) {
+            outln!("Bun shim detected for 'codex': {}", bun_codex);
+            outln!("Suggestion: keep only one global install and ensure it's first on PATH.");
         }
     }
 
@@ -1635,8 +1653,8 @@ async fn doctor_main() -> anyhow::Result<()> {
         let brew_code = code_paths.iter().find(|p| p.contains("/homebrew/bin/code") || p.contains("/Cellar/code/"));
         let vscode_code = code_paths.iter().find(|p| p.contains("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"));
         if brew_code.is_some() && vscode_code.is_some() {
-            println!("\nHomebrew 'code' precedes VS Code CLI in PATH.");
-            println!("Suggestion: uninstall Homebrew formula 'code' (brew uninstall code) or reorder PATH so /usr/local/bin comes before /usr/local/homebrew/bin.");
+            outln!("\nHomebrew 'code' precedes VS Code CLI in PATH.");
+            outln!("Suggestion: uninstall Homebrew formula 'code' (brew uninstall code) or reorder PATH so /usr/local/bin comes before /usr/local/homebrew/bin.");
         }
     }
 
@@ -1644,17 +1662,15 @@ async fn doctor_main() -> anyhow::Result<()> {
     let npm_root = run_cmd("npm", &["root", "-g"]).await;
     let npm_prefix = run_cmd("npm", &["prefix", "-g"]).await;
     if !npm_root.is_empty() {
-        println!("\nnpm root -g: {}", npm_root);
+        outln!("\nnpm root -g: {}", npm_root);
     }
     if !npm_prefix.is_empty() {
-        println!("npm prefix -g: {}", npm_prefix);
+        outln!("npm prefix -g: {}", npm_prefix);
     }
 
-    println!("\nIf versions differ, remove older installs and keep one package manager:");
-    println!("  - Bun: bun remove -g @just-every/code");
-    println!("  - npm/pnpm: npm uninstall -g @just-every/code");
-    println!("  - Homebrew: brew uninstall code");
-    println!("  - Prefer using 'coder' to avoid conflicts with VS Code's 'code'.");
+    outln!("\nIf versions differ, remove older installs and keep one package manager:");
+    outln!("  - Prefer a single global install of 'codes'.");
+    outln!("  - Tip: 'codes --version' should match the executable printed by 'current_exe'.");
 
     Ok(())
 }

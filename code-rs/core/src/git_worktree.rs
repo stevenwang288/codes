@@ -610,8 +610,18 @@ fn canonical_worktree_path(worktree_path: &Path) -> Option<PathBuf> {
 
 fn metadata_file_path(worktree_path: &Path) -> Option<PathBuf> {
     let canonical = canonical_worktree_path(worktree_path)?;
-    let mut base = dirs::home_dir()?;
-    base = base
+    let base = crate::config::find_code_home()
+        .ok()?
+        .join("working")
+        .join(BRANCH_METADATA_DIR);
+    let key = canonical.to_string_lossy();
+    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(key.as_bytes());
+    Some(base.join(encoded).with_extension("json"))
+}
+
+fn legacy_metadata_file_path(worktree_path: &Path) -> Option<PathBuf> {
+    let canonical = canonical_worktree_path(worktree_path)?;
+    let base = dirs::home_dir()?
         .join(".code")
         .join("working")
         .join(BRANCH_METADATA_DIR);
@@ -634,6 +644,9 @@ pub async fn write_branch_metadata(
         .map_err(|e| format!("Failed to serialise branch metadata: {e}"))?;
     let legacy_path = worktree_path.join(".codex-branch.json");
     let _ = tokio::fs::remove_file(&legacy_path).await;
+    if let Some(legacy_path) = legacy_metadata_file_path(worktree_path) {
+        let _ = tokio::fs::remove_file(&legacy_path).await;
+    }
     tokio::fs::write(&path, serialised)
         .await
         .map_err(|e| format!("Failed to write branch metadata: {e}"))
@@ -647,6 +660,13 @@ pub fn load_branch_metadata(worktree_path: &Path) -> Option<BranchMetadata> {
             }
         }
     }
+    if let Some(path) = legacy_metadata_file_path(worktree_path) {
+        if let Ok(bytes) = stdfs::read(&path) {
+            if let Ok(parsed) = serde_json::from_slice(&bytes) {
+                return Some(parsed);
+            }
+        }
+    }
     let legacy_path = worktree_path.join(".codex-branch.json");
     let bytes = stdfs::read(legacy_path).ok()?;
     serde_json::from_slice(&bytes).ok()
@@ -654,6 +674,9 @@ pub fn load_branch_metadata(worktree_path: &Path) -> Option<BranchMetadata> {
 
 pub fn remove_branch_metadata(worktree_path: &Path) {
     if let Some(path) = metadata_file_path(worktree_path) {
+        let _ = stdfs::remove_file(path);
+    }
+    if let Some(path) = legacy_metadata_file_path(worktree_path) {
         let _ = stdfs::remove_file(path);
     }
     let legacy_path = worktree_path.join(".codex-branch.json");

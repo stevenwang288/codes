@@ -59,14 +59,12 @@ function Invoke-Bash {
   }
 
   # Always normalize paths for Git Bash.
-  # Keep CODEX_HOME aligned with upstream Codex so config/state are shared.
   $escaped = $RepoRoot.Replace('"', '\"')
   $bootstrap = @(
     'repo_posix="$(cygpath -u "' + $escaped + '")"',
     'cd "${repo_posix}"',
-    'export CODEX_HOME="${HOME}/.codex"',
-    'export CODE_HOME="${CODEX_HOME}"',
-    'mkdir -p "$CODEX_HOME"',
+    'export CODES_HOME="${HOME}/.codes"',
+    'mkdir -p "$CODES_HOME"',
     $Command
   ) -join '; '
 
@@ -78,5 +76,5 @@ function Invoke-Bash {
 
 function Write-Section {
   param([string]$Title)
-  Write-Host "[code-patchkit] $Title" -ForegroundColor Cyan
+  Write-Host "[codes-patchkit] $Title" -ForegroundColor Cyan
 }

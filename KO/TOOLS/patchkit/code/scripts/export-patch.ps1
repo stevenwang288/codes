@@ -25,8 +25,8 @@ Push-Location $RepoRoot
 try {
   $pathspec = @(
     "--",
-    ":(exclude)tools/code-patchkit/patches",
-    ":(exclude)tools/code-patchkit/.state"
+    ":(exclude)KO/TOOLS/patchkit/code/patches",
+    ":(exclude)KO/TOOLS/patchkit/code/.state"
   )
 
   function Write-GitDiffToStream {
@@ -78,12 +78,12 @@ try {
 
   $len = (Get-Item -LiteralPath $patchPath).Length
   if ($len -eq 0) {
-    Write-Host "[code-patchkit] No changes to export." -ForegroundColor Yellow
+    Write-Host "[codes-patchkit] No changes to export." -ForegroundColor Yellow
     Remove-Item -Force $patchPath -ErrorAction SilentlyContinue
     return
   }
 
-  Write-Host "[code-patchkit] Wrote patch: $patchPath" -ForegroundColor Green
+  Write-Host "[codes-patchkit] Wrote patch: $patchPath" -ForegroundColor Green
 } finally {
   Pop-Location
 }

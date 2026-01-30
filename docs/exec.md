@@ -1,24 +1,24 @@
 # Non-interactive mode
 
-Use Every Code in non-interactive mode to automate common workflows.
+Use CODES in non-interactive mode to automate common workflows.
 
 ```shell
-code exec "count the total number of lines of code in this project"
+codes exec "count the total number of lines of code in this project"
 ```
 
-In non-interactive mode, Code does not ask for command or edit approvals. By default it runs in `read-only` mode, so it cannot edit files or run commands that require network access.
+In non-interactive mode, CODES does not ask for command or edit approvals. By default it runs in `read-only` mode, so it cannot edit files or run commands that require network access.
 
-Use `code exec --full-auto` to allow file edits. Use `code exec --sandbox danger-full-access` to allow edits and networked commands.
+Use `codes exec --full-auto` to allow file edits. Use `codes exec --sandbox danger-full-access` to allow edits and networked commands.
 
 ### Default output mode
 
-By default, Code streams its activity to stderr and only writes the final message from the agent to stdout. This makes it easier to pipe `code exec` into another tool without extra filtering.
+By default, CODES streams its activity to stderr and only writes the final message from the agent to stdout. This makes it easier to pipe `codes exec` into another tool without extra filtering.
 
-To write the output of `code exec` to a file, in addition to using a shell redirect like `>`, there is also a dedicated flag to specify an output file: `-o`/`--output-last-message`.
+To write the output of `codes exec` to a file, in addition to using a shell redirect like `>`, there is also a dedicated flag to specify an output file: `-o`/`--output-last-message`.
 
 ### JSON output mode
 
-`code exec` supports a `--json` mode that streams events to stdout as JSON Lines (JSONL) while the agent runs.
+`codes exec` supports a `--json` mode that streams events to stdout as JSON Lines (JSONL) while the agent runs.
 
 Supported event types:
 
@@ -73,40 +73,40 @@ Sample schema:
 ```
 
 ```shell
-code exec "Extract details of the project" --output-schema ~/schema.json
+codes exec "Extract details of the project" --output-schema ~/schema.json
 ...
 
-{"project_name":"Every Code CLI","programming_languages":["Rust","TypeScript","Shell"]}
+{"project_name":"CODES CLI","programming_languages":["Rust","TypeScript","Shell"]}
 ```
 
 Combine `--output-schema` with `-o` to only print the final JSON output. You can also pass a file path to `-o` to save the JSON output to a file.
 
 ### Git repository requirement
 
-Code requires a Git repository to avoid destructive changes. To disable this check, use `code exec --skip-git-repo-check`.
+CODES requires a Git repository to avoid destructive changes. To disable this check, use `codes exec --skip-git-repo-check`.
 
 ### Resuming non-interactive sessions
 
-Resume a previous non-interactive session with `code exec resume <SESSION_ID>` or `code exec resume --last`. This preserves conversation context so you can ask follow-up questions or give new tasks to the agent.
+Resume a previous non-interactive session with `codes exec resume <SESSION_ID>` or `codes exec resume --last`. This preserves conversation context so you can ask follow-up questions or give new tasks to the agent.
 
 ```shell
-code exec "Review the change, look for use-after-free issues"
-code exec resume --last "Fix use-after-free issues"
+codes exec "Review the change, look for use-after-free issues"
+codes exec resume --last "Fix use-after-free issues"
 ```
 
 Only the conversation context is preserved; you must still provide flags to customize Code behavior.
 
 ```shell
-code exec --model gpt-5.1-codex --json "Review the change, look for use-after-free issues"
-code exec --model gpt-5.1 --json resume --last "Fix use-after-free issues"
+codes exec --model gpt-5.1-codex --json "Review the change, look for use-after-free issues"
+codes exec --model gpt-5.1 --json resume --last "Fix use-after-free issues"
 ```
 
 ## Authentication
 
-By default, `code exec` uses the same authentication method as the TUI and VSCode extension. You can override the API key by setting the `CODEX_API_KEY` environment variable.
+By default, `codes exec` uses the same authentication method as the TUI and VSCode extension. You can override the API key by setting the `CODES_API_KEY` environment variable.
 
 ```shell
-CODEX_API_KEY=your-api-key-here code exec "Fix merge conflict"
+CODES_API_KEY=your-api-key-here codes exec "Fix merge conflict"
 ```
 
-NOTE: `CODEX_API_KEY` is only supported in `code exec`.
+NOTE: `CODES_API_KEY` is only supported in `codes exec`.

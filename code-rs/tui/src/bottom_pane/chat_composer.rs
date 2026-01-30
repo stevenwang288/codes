@@ -963,21 +963,8 @@ impl ChatComposer {
         self.textarea.text()
     }
 
-    /// Close the file-search popup if it is currently active. Returns true if closed.
-    pub(crate) fn close_file_popup_if_active(&mut self) -> bool {
-        match self.active_popup {
-            ActivePopup::File(_) => {
-                self.active_popup = ActivePopup::None;
-                self.file_popup_origin = None;
-                self.current_file_query = None;
-                true
-            }
-            _ => false,
-        }
-    }
-
-    pub(crate) fn file_popup_visible(&self) -> bool {
-        matches!(self.active_popup, ActivePopup::File(_))
+    pub(crate) fn popup_visible(&self) -> bool {
+        !matches!(self.active_popup, ActivePopup::None)
     }
 
     /// Handle a key event coming from the main UI.

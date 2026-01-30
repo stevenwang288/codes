@@ -9,7 +9,7 @@ use thiserror::Error;
 
 const SYSTEM_SKILLS_DIR_NAME: &str = ".system";
 const SKILLS_DIR_NAME: &str = "skills";
-const SYSTEM_SKILLS_MARKER_FILENAME: &str = ".codex-system-skills.marker";
+const SYSTEM_SKILLS_MARKER_FILENAME: &str = ".codes-system-skills.marker";
 
 const EMBEDDED_SYSTEM_SKILLS: &[(&str, &[u8])] = &[
     (

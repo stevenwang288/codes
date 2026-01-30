@@ -7,7 +7,6 @@ use super::ChatWidget;
 pub(crate) enum EscIntent {
     DismissModal,
     CloseSettings,
-    CloseFilePopup,
     AutoPauseForEdit,
     AutoStopDuringApproval,
     AutoStopActive,
@@ -115,8 +114,11 @@ impl ChatWidget<'_> {
             return EscRoute::new(EscIntent::AgentsTerminal, true, false);
         }
 
-        if self.bottom_pane.file_popup_visible() {
-            return EscRoute::new(EscIntent::CloseFilePopup, false, false);
+        // Composer popups (slash popup, file search) should handle Esc themselves.
+        // Let the key event fall through to the composer so it can close the popup
+        // without triggering the global Esc policy (clear/backtrack/stop).
+        if self.bottom_pane.composer_popup_visible() {
+            return EscRoute::new(EscIntent::None, false, false);
         }
 
         if self.auto_state.is_active() {
@@ -200,7 +202,6 @@ impl ChatWidget<'_> {
                 self.handle_key_event(key_event);
                 true
             }
-            EscIntent::CloseFilePopup => self.close_file_popup_if_active(),
             EscIntent::AutoPauseForEdit => {
                 self.auto_pause_for_manual_edit(false);
                 true
@@ -287,10 +288,8 @@ impl ChatWidget<'_> {
         let double_ready = last_esc_time.is_some_and(|prev| now.duration_since(prev) <= THRESHOLD);
 
         let mut handled = false;
-        let mut attempts = 0;
 
-        while attempts < 8 {
-            attempts += 1;
+        for _ in 0..8 {
             let route = self.describe_esc_context();
             let mut intent = route.intent;
 
@@ -302,19 +301,9 @@ impl ChatWidget<'_> {
                 intent = EscIntent::OpenUndoTimeline;
             }
 
-            let performed = self.execute_esc_intent(intent, esc_event);
+            let _performed = self.execute_esc_intent(intent, esc_event);
 
             match intent {
-                EscIntent::CloseFilePopup if !route.consume => {
-                    if !performed {
-                        break;
-                    }
-                    continue;
-                }
-                EscIntent::CloseFilePopup => {
-                    handled = true;
-                    break;
-                }
                 EscIntent::ShowUndoHint => {
                     if route.allows_double_esc && !double_ready {
                         *last_esc_time = Some(now);

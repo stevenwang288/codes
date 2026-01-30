@@ -41,7 +41,7 @@ function Get-ProgressStamp {
 function Notify-Stall {
   param([string]$Details)
   if (-not (Test-Path -Path $notifyScript)) {
-    Write-Host "[code-patchkit] notify script missing: $notifyScript" -ForegroundColor Yellow
+    Write-Host "[codes-patchkit] notify script missing: $notifyScript" -ForegroundColor Yellow
     return
   }
 
@@ -55,8 +55,8 @@ function Notify-Stall {
 }
 
 Write-Section "Watchdog (interval=${IntervalSeconds}s, stall=${StallSeconds}s)"
-Write-Host "[code-patchkit] watching: $historyPath" -ForegroundColor DarkGray
-Write-Host "[code-patchkit] watching: $criticalLog" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] watching: $historyPath" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] watching: $criticalLog" -ForegroundColor DarkGray
 
 $baseline = @{}
 $lastProgressUtc = [DateTime]::UtcNow

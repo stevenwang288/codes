@@ -100,4 +100,4 @@ Ensure-SectionLine -Section "tui" -Key "notifications" -Line 'notifications = ["
   [System.Text.UTF8Encoding]::new($false)
 )
 
-Write-Host "[code-patchkit] Updated config." -ForegroundColor Green
+Write-Host "[codes-patchkit] Updated config." -ForegroundColor Green

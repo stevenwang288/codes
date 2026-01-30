@@ -22,8 +22,8 @@ Set-StrictMode -Version Latest
 $RepoRoot = Resolve-RepoRoot -RepoRoot $RepoRoot
 
 $codeHome = Resolve-CodeHome -RepoRoot $RepoRoot
-$env:CODE_HOME = $codeHome
-$env:CODEX_HOME = $codeHome
+$env:CODES_HOME = $codeHome
+New-Item -ItemType Directory -Force -Path $codeHome | Out-Null
 
 $logPath = Resolve-I18nLogPath -RepoRoot $RepoRoot
 $enPath = Join-Path $RepoRoot "code-rs/i18n/assets/en.json"
@@ -51,8 +51,8 @@ if ($Watch) {
 }
 
 Write-Section "i18n sync ($($Watch ? 'watch' : 'once'))"
-Write-Host "[code-patchkit] CODE_HOME=$codeHome" -ForegroundColor DarkGray
-Write-Host "[code-patchkit] log=$logPath" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] Home=$codeHome" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] log=$logPath" -ForegroundColor DarkGray
 
 Push-Location $RepoRoot
 try {

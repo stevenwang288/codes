@@ -86,10 +86,8 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
 
         match key_event.code {
             KeyCode::Left => {
-                // Back out of the active menu to the sidebar.
-                overlay.set_mode_menu(None);
-                overlay.set_sidebar_active(true);
-                chat.request_redraw();
+                // Top-level menu: back closes Settings.
+                chat.close_settings_overlay();
                 return true;
             }
             KeyCode::Enter => {
@@ -105,10 +103,8 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
                 return true;
             }
             KeyCode::Esc => {
-                // Esc should close the menu first (not the whole Settings overlay).
-                overlay.set_mode_menu(None);
-                overlay.set_sidebar_active(true);
-                chat.request_redraw();
+                // Top-level menu: back closes Settings.
+                chat.close_settings_overlay();
                 return true;
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -188,6 +184,14 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
     }
 
     if handled_by_content {
+        // If a section view uses Esc to signal completion, treat that as a "back"
+        // within Settings rather than closing the whole overlay.
+        if should_close && matches!(key_event.code, KeyCode::Esc) {
+            overlay.set_sidebar_active(true);
+            chat.request_redraw();
+            return true;
+        }
+
         chat.request_redraw();
         if should_close {
             chat.close_settings_overlay();
@@ -203,7 +207,7 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
                 return true;
             }
             KeyCode::Esc => {
-                overlay.set_mode_menu(None);
+                overlay.set_sidebar_active(true);
                 chat.request_redraw();
                 return true;
             }

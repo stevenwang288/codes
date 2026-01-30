@@ -30,21 +30,20 @@ foreach ($p in $srcCandidates) {
 }
 
 Write-Section "Bootstrap CODES home"
-Write-Host "[code-patchkit] CODES_HOME=$codesHome" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] Home=$codesHome" -ForegroundColor DarkGray
 
 if (-not $src) {
   throw "No source config.toml found to copy. Checked: $($srcCandidates -join ', ')"
 }
 
 if ((Test-Path -Path $dst) -and (-not $Force)) {
-  Write-Host "[code-patchkit] Exists, skip: $dst" -ForegroundColor Yellow
-  Write-Host "[code-patchkit] Use -Force to overwrite." -ForegroundColor Yellow
+  Write-Host "[codes-patchkit] Exists, skip: $dst" -ForegroundColor Yellow
+  Write-Host "[codes-patchkit] Use -Force to overwrite." -ForegroundColor Yellow
   exit 0
 }
 
 Copy-Item -Force $src $dst
-Write-Host "[code-patchkit] Copied config: $src -> $dst" -ForegroundColor Green
+Write-Host "[codes-patchkit] Copied config: $src -> $dst" -ForegroundColor Green
 
 # Ensure notify/tui.notifications are correctly placed.
 & (Join-Path $PSScriptRoot "ensure-config.ps1") -RepoRoot $RepoRoot -Force:$Force
-

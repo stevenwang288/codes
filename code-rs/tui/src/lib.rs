@@ -171,6 +171,7 @@ pub mod test_helpers {
     pub use crate::chatwidget::smoke_helpers::AutoContinueModeFixture;
     pub use crate::chatwidget::smoke_helpers::ChatWidgetHarness;
     pub use crate::chatwidget::smoke_helpers::LayoutMetrics;
+    pub use crate::chatwidget::smoke_helpers::SettingsOverlayFocus;
     #[cfg(test)]
     pub use crate::test_backend::VT100Backend;
 
@@ -643,7 +644,7 @@ pub async fn run_main(
     std::fs::create_dir_all(&log_dir)?;
 
     let (env_layer, _log_guard) = if cli.debug {
-        rotate_log_file(&log_dir, "codex-tui.log");
+        rotate_log_file(&log_dir, "codes-tui.log");
         // Open (or create) your log file, appending to it.
         let mut log_file_opts = OpenOptions::new();
         log_file_opts.create(true).append(true);
@@ -658,7 +659,7 @@ pub async fn run_main(
             log_file_opts.mode(0o600);
         }
 
-        let log_file = log_file_opts.open(log_dir.join("codex-tui.log"))?;
+        let log_file = log_file_opts.open(log_dir.join("codes-tui.log"))?;
 
         // Wrap file in non‑blocking writer.
         let (log_writer, log_guard) = non_blocking(log_file);

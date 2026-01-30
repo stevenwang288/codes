@@ -12,7 +12,7 @@ Assert-GitRepo -RepoRoot $RepoRoot
 
 $patchFiles = @(Get-PatchFiles -RepoRoot $RepoRoot)
 if ($patchFiles.Length -eq 0) {
-  Write-Host "[code-patchkit] No patch files found." -ForegroundColor Yellow
+  Write-Host "[codes-patchkit] No patch files found." -ForegroundColor Yellow
   exit 0
 }
 
@@ -28,7 +28,7 @@ try {
       git apply --reverse --check --ignore-space-change --ignore-whitespace --whitespace=nowarn "$($patch.FullName)" 2>$null
       $alreadyApplied = ($LASTEXITCODE -eq 0)
       if ($alreadyApplied) {
-        Write-Host "[code-patchkit] Patch already applied, skip." -ForegroundColor Yellow
+        Write-Host "[codes-patchkit] Patch already applied, skip." -ForegroundColor Yellow
         continue
       }
       throw "Patch does not apply cleanly and does not look already applied: $($patch.FullName)"
@@ -43,4 +43,4 @@ try {
   Pop-Location
 }
 
-Write-Host "[code-patchkit] Done." -ForegroundColor Green
+Write-Host "[codes-patchkit] Done." -ForegroundColor Green

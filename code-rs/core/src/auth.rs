@@ -313,6 +313,7 @@ impl CodexAuth {
 }
 
 pub const OPENAI_API_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
+pub const CODES_API_KEY_ENV_VAR: &str = "CODES_API_KEY";
 pub const CODEX_API_KEY_ENV_VAR: &str = "CODEX_API_KEY";
 
 fn read_openai_api_key_from_env() -> Option<String> {
@@ -322,7 +323,8 @@ fn read_openai_api_key_from_env() -> Option<String> {
 }
 
 pub fn read_code_api_key_from_env() -> Option<String> {
-    env::var(CODEX_API_KEY_ENV_VAR)
+    env::var(CODES_API_KEY_ENV_VAR)
+        .or_else(|_| env::var(CODEX_API_KEY_ENV_VAR))
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())

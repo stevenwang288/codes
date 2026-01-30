@@ -1,4 +1,4 @@
-//! Support for `-c key=value` overrides shared across Codex CLI tools.
+//! Support for `-c key=value` overrides shared across CODES CLI tools.
 //!
 //! This module provides a [`CliConfigOverrides`] struct that can be embedded
 //! into a `clap`-derived CLI struct using `#[clap(flatten)]`. Each occurrence
@@ -18,9 +18,9 @@ use toml::Value;
 #[derive(Parser, Debug, Default, Clone)]
 pub struct CliConfigOverrides {
     /// Override a configuration value that would otherwise be loaded from
-    /// `~/.code/config.toml` (Code also reads legacy `~/.codex/config.toml`). Use a dotted path (`foo.bar.baz`) to override
-    /// nested values. The `value` portion is parsed as JSON. If it fails to
-    /// parse as JSON, the raw string is used as a literal.
+    /// `~/.codes/config.toml`. Use a dotted path (`foo.bar.baz`) to override
+    /// nested values. The `value` portion is parsed as TOML. If it fails to
+    /// parse as TOML, the raw string is used as a literal.
     ///
     /// Examples:
     ///   - `-c model="o3"`

@@ -42,6 +42,14 @@ pub struct ChatWidgetHarness {
     chat: ChatWidget<'static>,
     events: Receiver<AppEvent>,
     helper_seq: u64,
+    last_esc_time: Option<Instant>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsOverlayFocus {
+    Menu,
+    Sidebar,
+    Content,
 }
 
 // Use a deterministic Auto Drive placeholder so VT100 snapshots stay stable.
@@ -120,6 +128,7 @@ impl ChatWidgetHarness {
             chat,
             events: rx,
             helper_seq: 0,
+            last_esc_time: None,
         };
         harness.chat.auto_state.elapsed_override = Some(Duration::from_secs(1));
         harness
@@ -280,6 +289,31 @@ impl ChatWidgetHarness {
         self.flush_into_widget();
     }
 
+    /// Simulate the App-level key routing for Esc.
+    ///
+    /// The production TUI routes Esc through `handle_app_esc` before forwarding
+    /// it to `handle_key_event`. Most tests call `send_key` directly and bypass
+    /// this ordering; use this helper when you want coverage for the real Esc
+    /// semantics (close overlays first, then global clear/backtrack/stop).
+    pub fn send_app_key(&mut self, key_event: KeyEvent) {
+        if !matches!(key_event.code, crossterm::event::KeyCode::Esc) {
+            self.last_esc_time = None;
+        }
+
+        if matches!(key_event.code, crossterm::event::KeyCode::Esc) {
+            if self
+                .chat
+                .handle_app_esc(key_event, &mut self.last_esc_time)
+            {
+                self.flush_into_widget();
+                return;
+            }
+        }
+
+        self.chat.handle_key_event(key_event);
+        self.flush_into_widget();
+    }
+
     pub(crate) fn drain_events(&self) -> Vec<AppEvent> {
         let mut out = Vec::new();
         while let Ok(ev) = self.events.try_recv() {
@@ -349,6 +383,18 @@ impl ChatWidgetHarness {
 
     pub fn is_agents_terminal_active(&self) -> bool {
         self.chat.agents_terminal.active
+    }
+
+    pub fn is_browser_overlay_visible(&self) -> bool {
+        self.chat.browser_overlay_visible
+    }
+
+    pub fn is_composer_popup_visible(&self) -> bool {
+        self.chat.bottom_pane.composer_popup_visible()
+    }
+
+    pub fn composer_text(&self) -> String {
+        self.chat.bottom_pane.composer_text()
     }
 
     pub fn close_auto_drive_settings(&mut self) {
@@ -429,6 +475,18 @@ impl ChatWidgetHarness {
     pub fn open_settings_overlay_overview(&mut self) {
         self.chat.show_settings_overlay(None);
         self.flush_into_widget();
+    }
+
+    pub fn settings_overlay_focus(&mut self) -> Option<SettingsOverlayFocus> {
+        self.flush_into_widget();
+        let overlay = self.chat.settings.overlay.as_ref()?;
+        if overlay.is_menu_active() {
+            Some(SettingsOverlayFocus::Menu)
+        } else if overlay.is_sidebar_active() {
+            Some(SettingsOverlayFocus::Sidebar)
+        } else {
+            Some(SettingsOverlayFocus::Content)
+        }
     }
 
     pub fn suppress_rate_limit_refresh(&mut self) {

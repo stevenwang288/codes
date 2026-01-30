@@ -1045,7 +1045,7 @@ use ratatui::text::Span;
 use ratatui::text::Text as RtText;
 use textwrap::wrap;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use ratatui::widgets::Block;
 use ratatui::widgets::Borders;
 use ratatui::widgets::Clear;
@@ -20720,6 +20720,32 @@ Have we met every part of this goal and is there no further work to do?"#
         out
     }
 
+    fn truncate_to_width_with_leading_ellipsis(text: &str, max_width: usize) -> String {
+        if max_width == 0 {
+            return String::new();
+        }
+        if UnicodeWidthStr::width(text) <= max_width {
+            return text.to_string();
+        }
+        if max_width == 1 {
+            return "…".to_string();
+        }
+
+        let mut tail: Vec<char> = Vec::new();
+        let mut current_width = 0usize;
+        for ch in text.chars().rev() {
+            let char_width = UnicodeWidthChar::width(ch).unwrap_or(1);
+            if current_width.saturating_add(char_width) > max_width.saturating_sub(1) {
+                break;
+            }
+            tail.push(ch);
+            current_width = current_width.saturating_add(char_width);
+        }
+        tail.reverse();
+        let tail: String = tail.into_iter().collect();
+        format!("…{tail}")
+    }
+
     fn normalize_status_field(field: Option<String>) -> Option<String> {
         field.and_then(|value| {
             let trimmed = value.trim();
@@ -37709,7 +37735,7 @@ impl ChatWidget<'_> {
         }
 
         let padded = inner.inner(Margin::new(1, 1));
-        let footer_height = padded.height.min(2);
+        let footer_height = padded.height.min(3);
         let list_height = padded.height.saturating_sub(footer_height).max(1);
         let [list_area, footer_area] =
             Layout::vertical([Constraint::Length(list_height), Constraint::Length(footer_height)])
@@ -37887,21 +37913,37 @@ impl ChatWidget<'_> {
         state.select(Some(overlay.selected.min(1)));
         ratatui::widgets::StatefulWidget::render(list, list_area, buf, &mut state);
 
+        let cwd = self.config.cwd.to_string_lossy();
+        let path_display = Self::truncate_to_width_with_leading_ellipsis(
+            cwd.as_ref(),
+            footer_area.width as usize,
+        );
+        let path_line = Line::from(vec![Span::styled(path_display, t_fg)]);
+
         let hint = code_i18n::tr(ui_language, "tui.mode.hint");
-        if footer_height == 1 {
-            Paragraph::new(vec![Line::from(vec![Span::styled(hint, t_dim)])]).render(footer_area, buf);
-        } else {
-            let shortcuts_label = code_i18n::tr(ui_language, "tui.common.shortcuts_prefix");
-            Paragraph::new(vec![
-                Line::from(vec![Span::styled(hint, t_dim)]),
-                Line::from(vec![
-                    Span::styled(shortcuts_label, t_dim),
-                    Span::styled("1", t_fg),
-                    Span::styled("/", t_dim),
-                    Span::styled("2", t_fg),
-                ]),
-            ])
-            .render(footer_area, buf);
+        match footer_height {
+            0 => {}
+            1 => {
+                Paragraph::new(vec![path_line]).render(footer_area, buf);
+            }
+            2 => {
+                Paragraph::new(vec![Line::from(vec![Span::styled(hint, t_dim)]), path_line])
+                    .render(footer_area, buf);
+            }
+            _ => {
+                let shortcuts_label = code_i18n::tr(ui_language, "tui.common.shortcuts_prefix");
+                Paragraph::new(vec![
+                    Line::from(vec![Span::styled(hint, t_dim)]),
+                    Line::from(vec![
+                        Span::styled(shortcuts_label, t_dim),
+                        Span::styled("1", t_fg),
+                        Span::styled("/", t_dim),
+                        Span::styled("2", t_fg),
+                    ]),
+                    path_line,
+                ])
+                .render(footer_area, buf);
+            }
         }
     }
 

@@ -18,7 +18,7 @@ use code_i18n;
 /// - `serve`  — run the MCP server on stdio
 /// - `list`   — list configured servers (with `--json`)
 /// - `get`    — show a single server (with `--json`)
-/// - `add`    — add a server launcher entry to `~/.code/config.toml` (Code also reads legacy `~/.codex/config.toml`)
+/// - `add`    — add a server launcher entry to `~/.codes/config.toml`
 /// - `remove` — delete a server entry
 #[derive(Debug, clap::Parser)]
 pub struct McpCli {
@@ -64,7 +64,7 @@ pub struct AddArgs {
 
     /// URL of a remote MCP server.
     ///
-    /// When `--bearer-token` is omitted, Code records the server as a stdio
+    /// When `--bearer-token` is omitted, CODES records the server as a stdio
     /// launcher using `npx -y mcp-remote <url>` so the MCP server can handle
     /// OAuth flows.
     #[arg(long)]
@@ -72,7 +72,7 @@ pub struct AddArgs {
 
     /// Optional bearer token to use with `--url` for static authentication.
     ///
-    /// When set, Code records the server as a `streamable_http` MCP server.
+    /// When set, CODES records the server as a `streamable_http` MCP server.
     #[arg(long)]
     pub bearer_token: Option<String>,
 

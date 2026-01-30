@@ -70,4 +70,4 @@ if ($StartCodeWindow) {
   ) | Out-Null
 }
 
-Write-Host "[code-patchkit] start completed." -ForegroundColor Green
+Write-Host "[codes-patchkit] start completed." -ForegroundColor Green

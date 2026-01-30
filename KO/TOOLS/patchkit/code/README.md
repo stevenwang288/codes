@@ -1,4 +1,4 @@
-# Code PatchKit（本仓库本地补丁包）
+# CODES PatchKit（本仓库本地补丁包）
 
 目标：把你对 `code-main` 的本地改动（i18n、通知、体验增强、个人偏好配置等）集中到一个目录里，形成“可重复回放”的补丁包。
 
@@ -11,14 +11,14 @@
 ## 目录结构
 
 - `KO/TOOLS/patchkit/code/patches/`：可 `git apply` 的补丁（推荐一个 patch 一个功能点）。
-- `KO/TOOLS/patchkit/code/templates/`：非代码的“模板配置”，例如 `~/.codex/config.toml` 片段。
+- `KO/TOOLS/patchkit/code/templates/`：非代码的“模板配置”，例如 `~/.codes/config.toml` 片段。
 - `KO/TOOLS/patchkit/code/scripts/`：一键脚本：导出补丁、应用补丁、更新+重放+编译。
 
 ## 快速开始（Windows / PowerShell）
 
 本项目把所有“本地增强 / 汉化 / 自更新 / 向导工作流”都收敛到一个独立路径：
 
-- `tools/code-patchkit/`
+- `KO/TOOLS/patchkit/code/`
 
 你日常只需要记住一个入口：
 
@@ -70,7 +70,7 @@ pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/patchkit.ps1" updat
 pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/patchkit.ps1" i18n-wizard
 ```
 
-建议在日常使用时加上 `-Configure`，确保你的 `~/.codex/config.toml` 包含通知钩子（`notify`）等配置：
+建议在日常使用时加上 `-Configure`，确保你的 `~/.codes/config.toml` 包含通知钩子（`notify`）等配置：
 
 ```powershell
 pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/run.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Configure -Apply
@@ -80,7 +80,7 @@ pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/run.ps1" -R
 
 你的运行时缺口采集文件默认在（归档到 PatchKit 子目录）：
 
-- `$CODEX_HOME/patchkit/i18n-missing.jsonl`（默认 `~/.codex/patchkit/i18n-missing.jsonl`）
+- `~/.codes/patchkit/i18n-missing.jsonl`
 
 将其自动翻译并回写到语言包（watch 模式）：
 
@@ -92,7 +92,8 @@ pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/run.ps1" -R
 
 由于子代理/长任务可能会因为鉴权、网络、上下文或工具异常“看起来卡住”，PatchKit 提供一个轻量 watchdog：
 
-- 监控 `${CODEX_HOME}/history.jsonl` 与 `${CODEX_HOME}/debug_logs/critical.log` 的写入活跃度
+- 监控 `~/.codes/history.jsonl` 与 `~/.codes/debug_logs/critical.log` 的写入活跃度
+- 对应默认路径：`~/.codes/history.jsonl` 与 `~/.codes/debug_logs/critical.log`
 - 如果连续一段时间没有任何新活动，会发 Windows 通知并响铃提醒你介入
 
 启动方式：

@@ -76,10 +76,10 @@ try {
       "-StallSeconds",
       "$WatchdogStallSeconds"
     ) | Out-Null
-    Write-Host "[code-patchkit] Watchdog started." -ForegroundColor Green
+    Write-Host "[codes-patchkit] Watchdog started." -ForegroundColor Green
   }
 } finally {
   Pop-Location
 }
 
-Write-Host "[code-patchkit] run completed." -ForegroundColor Green
+Write-Host "[codes-patchkit] run completed." -ForegroundColor Green

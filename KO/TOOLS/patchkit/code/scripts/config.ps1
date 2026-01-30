@@ -82,10 +82,10 @@ function Resolve-CodeHome {
     [string]$RepoRoot
   )
 
-  # Prefer explicit CODEX_HOME so PatchKit can share one global config/state
-  # directory with upstream Codex.
-  if ($env:CODEX_HOME -and $env:CODEX_HOME.Trim().Length -gt 0) {
-    return $env:CODEX_HOME
+  # Prefer explicit CODES_HOME so PatchKit can target the same config/state
+  # directory as the CODES runtime.
+  if ($env:CODES_HOME -and $env:CODES_HOME.Trim().Length -gt 0) {
+    return $env:CODES_HOME
   }
 
   $cfg = Read-PatchKitConfig -RepoRoot $RepoRoot
@@ -101,9 +101,9 @@ function Resolve-CodeHome {
   }
 
   if ($env:USERPROFILE) {
-    return (Join-Path $env:USERPROFILE ".codex")
+    return (Join-Path $env:USERPROFILE ".codes")
   }
-  return (Join-Path $RepoRoot ".codex")
+  return (Join-Path $RepoRoot ".codes")
 }
 
 function Resolve-I18nLogPath {
@@ -113,15 +113,15 @@ function Resolve-I18nLogPath {
   )
 
   $cfg = Read-PatchKitConfig -RepoRoot $RepoRoot
-  $home = Resolve-CodeHome -RepoRoot $RepoRoot
+  $codesHome = Resolve-CodeHome -RepoRoot $RepoRoot
 
   if ($cfg -and $cfg.paths -and $cfg.paths.i18nLog) {
     $p = [string]$cfg.paths.i18nLog
     if ([System.IO.Path]::IsPathRooted($p)) {
       return $p
     }
-    return (Join-Path $home $p)
+    return (Join-Path $codesHome $p)
   }
 
-  return (Join-Path $home "patchkit/i18n-missing.jsonl")
+  return (Join-Path $codesHome "patchkit/i18n-missing.jsonl")
 }

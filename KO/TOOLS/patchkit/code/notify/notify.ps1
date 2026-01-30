@@ -62,7 +62,7 @@ try {
   $notification = $NotificationJson | ConvertFrom-Json
 } catch {
   # If parsing fails, still notify in a minimal way.
-  $title = "Code"
+  $title = "CODES"
   $msg = "notify: invalid json"
   [void](Send-ToastBurntToast -Title $title -Message $msg)
   [void](Send-BalloonFallback -Title $title -Message $msg)
@@ -71,15 +71,15 @@ try {
 }
 
 $type = [string]($notification.type ?? $notification.event ?? 'unknown')
-$title = "Code"
+$title = "CODES"
 $message = ""
 
 switch ($type) {
   'agent-turn-complete' {
-    $title = "Code: 回合完成"
+    $title = "CODES: 回合完成"
     $last = [string]($notification.'last-assistant-message')
     if ($last) {
-      $title = "Code: $last"
+      $title = "CODES: $last"
     }
     $inputs = @($notification.input_messages)
     if ($inputs.Count -gt 0) {
@@ -90,26 +90,26 @@ switch ($type) {
     Try-PlaySound -Kind 'Asterisk'
   }
   'i18n-sync' {
-    $title = "Code: i18n 回写完成"
+    $title = "CODES: i18n 回写完成"
     $inputs = @($notification.input_messages)
     $message = ($inputs -join ' ')
     if (-not $message) { $message = "i18n sync" }
     Try-PlaySound -Kind 'Asterisk'
   }
   'watchdog-stall' {
-    $title = "Code: 可能卡住"
+    $title = "CODES: 可能卡住"
     $inputs = @($notification.input_messages)
     $message = ($inputs -join ' ')
     if (-not $message) { $message = "stall" }
     Try-PlaySound -Kind 'Exclamation'
   }
   'approval-requested' {
-    $title = "Code: 需要审批"
+    $title = "CODES: 需要审批"
     $message = "approval requested"
     Try-PlaySound -Kind 'Exclamation'
   }
   default {
-    $title = "Code: $type"
+    $title = "CODES: $type"
     $message = "event"
     Try-PlaySound -Kind 'Question'
   }

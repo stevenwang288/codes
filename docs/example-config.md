@@ -1,11 +1,11 @@
 # Sample configuration
 
-Use this example configuration as a starting point. For an explanation of each field and additional context, see [Configuration](./config.md). Copy the snippet below to `~/.codex/config.toml` and adjust values as needed.
+Use this example configuration as a starting point. For an explanation of each field and additional context, see [Configuration](./config.md). Copy the snippet below to `~/.codes/config.toml` and adjust values as needed.
 
 ```toml
-# Codex example configuration (config.toml)
+# CODES example configuration (config.toml)
 #
-# This file lists all keys Codex reads from config.toml, their default values,
+# This file lists all keys CODES reads from config.toml, their default values,
 # and concise explanations. Values here mirror the effective defaults compiled
 # into the CLI. Adjust as needed.
 #
@@ -18,7 +18,7 @@ Use this example configuration as a starting point. For an explanation of each f
 # Core Model Selection
 ################################################################################
 
-# Primary model used by Codex. Default: "gpt-5.1-codex-max" on all platforms.
+# Primary model used by CODES. Default: "gpt-5.1-codex-max" on all platforms.
 model = "gpt-5.1-codex-max"
 
 # Model used by the /review feature (code reviews). Default: "gpt-5.1-codex-max".
@@ -27,7 +27,7 @@ review_model = "gpt-5.1-codex-max"
 # Provider id selected from [model_providers]. Default: "openai".
 model_provider = "openai"
 
-# Optional manual model metadata. When unset, Codex auto-detects from model.
+# Optional manual model metadata. When unset, CODES auto-detects from model.
 # Uncomment to force values.
 # model_context_window = 128000       # tokens; default: auto for model
 # model_auto_compact_token_limit = 0  # disable/override auto; default: model family specific

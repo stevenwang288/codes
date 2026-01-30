@@ -19,21 +19,20 @@ $sessions = Join-Path $codeHome "sessions"
 $working = Join-Path $codeHome "working"
 
 Write-Section "Clean"
-Write-Host "[code-patchkit] CODE_HOME=$codeHome" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] Home=$codeHome" -ForegroundColor DarkGray
 
 if (Test-Path -Path $targetCache) {
-  Write-Host "[code-patchkit] Removing $targetCache" -ForegroundColor Yellow
+  Write-Host "[codes-patchkit] Removing $targetCache" -ForegroundColor Yellow
   Remove-Item -Recurse -Force $targetCache
 }
 
 if ($All) {
   foreach ($p in @($sessions, $working)) {
     if (Test-Path -Path $p) {
-      Write-Host "[code-patchkit] Removing $p" -ForegroundColor Yellow
+      Write-Host "[codes-patchkit] Removing $p" -ForegroundColor Yellow
       Remove-Item -Recurse -Force $p
     }
   }
 }
 
-Write-Host "[code-patchkit] Clean done." -ForegroundColor Green
-
+Write-Host "[codes-patchkit] Clean done." -ForegroundColor Green

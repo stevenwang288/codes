@@ -1,9 +1,9 @@
-//! Registry of model providers supported by Codex.
+//! Registry of model providers supported by CODES.
 //!
 //! Providers can be defined in two places:
-//!   1. Built-in defaults compiled into the binary so Codex works out-of-the-box.
-//!   2. User-defined entries inside `~/.code/config.toml` under the `model_providers`
-//!      table (Code also reads legacy `~/.codex/config.toml`).
+//!   1. Built-in defaults compiled into the binary so CODES works out-of-the-box.
+//!   2. User-defined entries inside `~/.codes/config.toml` under the `model_providers`
+//!      table.
 //!      key. These override or extend the defaults at runtime.
 
 use crate::CodexAuth;

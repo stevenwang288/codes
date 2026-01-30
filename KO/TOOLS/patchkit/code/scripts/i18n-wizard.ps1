@@ -23,8 +23,8 @@ Set-StrictMode -Version Latest
 $RepoRoot = Resolve-RepoRoot -RepoRoot $RepoRoot
 
 $codeHome = Resolve-CodeHome -RepoRoot $RepoRoot
-$env:CODE_HOME = $codeHome
-$env:CODEX_HOME = $codeHome
+$env:CODES_HOME = $codeHome
+New-Item -ItemType Directory -Force -Path $codeHome | Out-Null
 
 $logPath = Resolve-I18nLogPath -RepoRoot $RepoRoot
 $enPath = Join-Path $RepoRoot "code-rs/i18n/assets/en.json"
@@ -49,8 +49,8 @@ function Confirm-Next {
 }
 
 Write-Section "i18n 向导"
-Write-Host "[code-patchkit] CODE_HOME=$codeHome" -ForegroundColor DarkGray
-Write-Host "[code-patchkit] log=$logPath" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] Home=$codeHome" -ForegroundColor DarkGray
+Write-Host "[codes-patchkit] log=$logPath" -ForegroundColor DarkGray
 
 if (-not (Test-Path -Path $enPath)) { throw "Missing: $enPath" }
 if (-not (Test-Path -Path $zhPath)) { throw "Missing: $zhPath" }
@@ -62,7 +62,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "stats failed (exit $LASTEXITCODE)" }
 
   if (-not (Confirm-Next -Prompt "继续：执行翻译并回写（sync --once）？")) {
-    Write-Host "[code-patchkit] 已退出向导。" -ForegroundColor Yellow
+    Write-Host "[codes-patchkit] 已退出向导。" -ForegroundColor Yellow
     exit 0
   }
 
@@ -80,10 +80,10 @@ try {
     Write-Section "Step 4/4: 重启"
     & (Join-Path $PSScriptRoot "start.ps1") -RepoRoot $RepoRoot -StartCodeWindow
     if ($LASTEXITCODE -ne 0) { throw "start failed (exit $LASTEXITCODE)" }
-    Write-Host "[code-patchkit] 已启动新窗口；旧窗口请手动关闭。" -ForegroundColor Yellow
+    Write-Host "[codes-patchkit] 已启动新窗口；旧窗口请手动关闭。" -ForegroundColor Yellow
   }
 } finally {
   Pop-Location
 }
 
-Write-Host "[code-patchkit] 向导完成。" -ForegroundColor Green
+Write-Host "[codes-patchkit] 向导完成。" -ForegroundColor Green

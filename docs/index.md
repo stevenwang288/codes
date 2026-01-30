@@ -1,29 +1,13 @@
-# Every Code Documentation
+# Docs 索引（CODES）
 
-Use these docs to install, configure, and operate Every Code (Code).
+## 先看这些（CODES 权威入口）
+- `docs/交接文档.md`：仓库链路、构建/安装、注入链路定位
+- `docs/CODES_开发计划.md`：里程碑与执行规则（少提问 + 长时不丢上下文）
+- `docs/CODES_TODO.md`：所有需求的汇总与优先级（P0–P3）
+- `docs/需求记录.md`：历史入口（已指向汇总）
+- `docs/最高权限与长任务.md`：最高权限/长任务的排查笔记与策略
 
-## Start Here
-- [Getting started](getting-started.md)
-- [Install](install.md) · [Homebrew](homebrew.md)
-- [Authentication](authentication.md)
-- [FAQ](faq.md)
-
-## Using Code
-- [Executing commands](exec.md)
-- [Execution policy](execpolicy.md)
-- [Slash commands](slash-commands.md)
-- [Auto Drive](auto-drive.md)
-- [Agents & Subagents](agents.md)
-- [Settings overlay](settings.md)
-- [Prompts](prompts.md)
-- [Advanced usage](advanced.md)
-- [Zed integration](integration-zed.md)
-
-## Configuration & Security
-- [Configuration](config.md)
-- [Sandboxing overview](sandbox.md)
-- [Platform sandboxing](platform-sandboxing.md)
-- [Windows sandbox security](platform-sandboxing.md#windows)
-
-## Engineering notes
-- [Performance & interactivity (request log)](performance-and-interactivity.md)
+## 参考资料（上游/历史文档，可能仍使用 Code/Codex 命名）
+- `README.md` 与 `docs/` 下多数英文文档来自上游/社区 fork 的继承内容，会逐步迁移到 CODES 口径；如遇命名冲突，以 “CODES 权威入口” 为准。
+- `docs/万能补丁机制-PatchKit.md`：补丁化/脚本化的方向说明（与 CODES 口径保持一致）
+- `docs/config.md`：配置参考（后续按 CODES 口径持续修订）
