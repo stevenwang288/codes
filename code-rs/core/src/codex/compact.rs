@@ -248,7 +248,8 @@ pub(super) async fn perform_compaction(
             Some(turn_context.approval_policy),
             Some(turn_context.sandbox_policy.clone()),
             Some(sess.user_shell.clone()),
-        ));
+        )
+        .with_code_home(Some(sess.code_home.clone())));
         prompt.model_descriptions = sess.model_descriptions.clone();
         prompt.log_tag = Some("codex/compact".to_string());
 
@@ -409,7 +410,8 @@ async fn run_compact_task_inner_inline(
             Some(turn_context.approval_policy),
             Some(turn_context.sandbox_policy.clone()),
             Some(sess.user_shell.clone()),
-        ));
+        )
+        .with_code_home(Some(sess.code_home.clone())));
         prompt.model_descriptions = sess.model_descriptions.clone();
         prompt.log_tag = Some("codex/compact".to_string());
 

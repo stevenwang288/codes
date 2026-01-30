@@ -32,10 +32,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Padding, Paragraph, Wrap};
 use std::collections::HashMap;
-use std::sync::OnceLock;
-
-use regex_lite::Regex;
-use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Debug)]
 pub(crate) struct OpenButton {
@@ -79,161 +75,13 @@ pub(crate) struct PlainHistoryCell {
     cached_layout: std::cell::RefCell<Option<PlainLayoutCache>>,
 }
 
-fn url_regex() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r#"https?://[^\s<>"']+"#).expect("url regex"))
-}
-
-fn win_path_regex() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    // Roughly: C:\path\to\file or C:/path/to/file (no spaces)
-    RE.get_or_init(|| Regex::new(r#"(?i)\b[a-z]:[\\/][^\s<>"']+"#).expect("win path regex"))
-}
-
-fn trim_trailing_punct(mut token: &str) -> &str {
-    loop {
-        let trimmed = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ';'));
-        if trimmed == token {
-            return token;
-        }
-        token = trimmed;
-    }
-}
-
-fn split_line_suffix(token: &str) -> (&str, &str) {
-    // Extract ":123" or ":123:45" suffix for display/open.
-    // Keep Windows drive colon intact.
-    let Some(last_colon) = token.rfind(':') else {
-        return (token, "");
-    };
-    if last_colon == 1 {
-        return (token, "");
-    }
-    let suffix = &token[last_colon..];
-    let suffix_digits = suffix.trim_start_matches(':');
-    let valid = !suffix_digits.is_empty()
-        && suffix_digits
-            .split(':')
-            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()));
-    if valid {
-        (&token[..last_colon], suffix)
-    } else {
-        (token, "")
-    }
-}
-
-fn shorten_url(url: &str) -> String {
-    let url = trim_trailing_punct(url);
-    let host = url
-        .split("://")
-        .nth(1)
-        .and_then(|rest| rest.split('/').next())
-        .unwrap_or(url);
-    let rest = url
-        .splitn(2, host)
-        .nth(1)
-        .unwrap_or("")
-        .trim_end_matches('/');
-    let mut display = host.to_string();
-    if !rest.is_empty() {
-        display.push_str(rest);
-    }
-    const MAX_W: usize = 36;
-    if display.width() > MAX_W {
-        let prefix = crate::live_wrap::take_prefix_by_width(&display, MAX_W.saturating_sub(1)).0;
-        return format!("{prefix}…");
-    }
-    display
-}
-
-fn shorten_path(path: &str) -> String {
-    let path = trim_trailing_punct(path);
-    let (path_part, suffix) = split_line_suffix(path);
-    let normalized = path_part.replace('\\', "/");
-    let mut parts = normalized.split('/').filter(|p| !p.is_empty()).collect::<Vec<_>>();
-    if parts.is_empty() {
-        return path.to_string();
-    }
-    let file = parts.pop().unwrap_or(path_part);
-    let parent = parts.pop();
-    let mut display = String::new();
-    if let Some(parent) = parent {
-        display.push_str("…/");
-        display.push_str(parent);
-        display.push('/');
-    } else {
-        display.push_str("…/");
-    }
-    display.push_str(file);
-    display.push_str(suffix);
-    display
-}
-
 fn decorate_open_buttons(
     lines: Vec<Line<'static>>,
     theme: &Theme,
     ui_language: code_i18n::Language,
 ) -> (Vec<Line<'static>>, Vec<String>, String) {
-    let mut out: Vec<Line<'static>> = Vec::new();
-    let mut targets: Vec<String> = Vec::new();
-    let open_label = code_i18n::tr(ui_language, "tui.common.open_label");
-
-    let token = format!("[{open_label}]");
-    let token_style = Style::default()
-        .fg(crate::colors::text())
-        .bg(crate::colors::primary())
-        .add_modifier(Modifier::BOLD);
-
-    for line in lines {
-        let mut found_target: Option<String> = None;
-        let mut new_spans: Vec<Span<'static>> = Vec::new();
-
-        for span in line.spans.into_iter() {
-            if found_target.is_some() {
-                new_spans.push(span);
-                continue;
-            }
-
-            let text = span.content.to_string();
-            if let Some(m) = url_regex().find(&text).or_else(|| win_path_regex().find(&text)) {
-                let before = &text[..m.start()];
-                let token_text = &text[m.start()..m.end()];
-                let token_text = trim_trailing_punct(token_text).to_string();
-                let display = if token_text.starts_with("http://") || token_text.starts_with("https://") {
-                    shorten_url(&token_text)
-                } else {
-                    shorten_path(&token_text)
-                };
-                found_target = Some(token_text);
-
-                if !before.is_empty() {
-                    new_spans.push(Span::styled(before.to_string(), span.style));
-                }
-                new_spans.push(Span::styled(display, span.style));
-
-                let after = &text[m.end()..];
-                if !after.is_empty() {
-                    new_spans.push(Span::styled(after.to_string(), span.style));
-                }
-            } else {
-                new_spans.push(span);
-            }
-        }
-
-        out.push(Line::from(new_spans));
-
-        if let Some(target) = found_target {
-            targets.push(target);
-            out.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(token.clone(), token_style),
-            ]));
-        }
-    }
-
-    // Preserve header style: we only used theme for potential future tweaks; keep param to avoid churn.
-    let _ = theme;
-    (out, targets, token)
+    let _ = (theme, ui_language);
+    (lines, Vec::new(), String::new())
 }
 
 fn find_token_in_row(buf: &Buffer, y: u16, token: &str) -> Option<(u16, u16)> {

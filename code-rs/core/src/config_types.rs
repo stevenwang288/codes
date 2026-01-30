@@ -448,7 +448,7 @@ fn default_true() -> bool {
 pub struct GithubConfig {
     /// When true, Codex watches for GitHub Actions workflow runs after a
     /// successful `git push` and reports failures as background messages.
-    /// Enabled by default; can be disabled via `~/.code/config.toml` under
+    /// Enabled by default; can be disabled via `~/.codex/config.toml` under
     /// `[github]` with `check_workflows_on_push = false`.
     #[serde(default = "default_true")]
     pub check_workflows_on_push: bool,
@@ -607,8 +607,7 @@ impl UriBasedFileOpener {
     }
 }
 
-/// Settings that govern if and what will be written to `~/.code/history.jsonl`
-/// (Code still reads legacy `~/.codex/history.jsonl`).
+/// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct History {
     /// If true, history entries will not be written to disk.

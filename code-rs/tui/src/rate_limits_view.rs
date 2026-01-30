@@ -5,6 +5,7 @@ use crate::colors;
 use chrono::{DateTime, Datelike, Local, Utc};
 use code_common::elapsed::format_duration;
 use code_core::protocol::RateLimitSnapshotEvent;
+use code_i18n;
 use code_protocol::num_format::format_with_separators;
 use ratatui::prelude::*;
 use ratatui::style::Stylize;
@@ -30,6 +31,14 @@ const INDENTS: IndentSpec = IndentSpec {
     label_target_width: 7,
     label_gap: 2,
 };
+
+fn tr(key: &'static str) -> &'static str {
+    code_i18n::tr_plain(key)
+}
+
+fn tr_args(key: &'static str, args: &[(&str, &str)]) -> String {
+    code_i18n::tr_args(code_i18n::current_language(), key, args)
+}
 
 fn header_indent() -> &'static str {
     INDENTS.header
@@ -203,9 +212,9 @@ fn build_summary_lines(
     lines.push("".into());
 
     if display.show_usage_sections {
-        lines.push(section_header("Hourly Limit"));
+        lines.push(section_header(tr("tui.limits.section.hourly")));
         lines.push(build_bar_line(
-            "Used",
+            tr("tui.limits.label.used"),
             metrics.hourly_used,
             "",
             Style::default().fg(colors::text()),
@@ -221,9 +230,9 @@ fn build_summary_lines(
 
         lines.push("".into());
 
-        lines.push(section_header("Weekly Limit"));
+        lines.push(section_header(tr("tui.limits.section.weekly")));
         lines.push(build_bar_line(
-            "Usage",
+            tr("tui.limits.label.usage"),
             metrics.weekly_used,
             "",
             Style::default().fg(colors::text()),
@@ -244,7 +253,7 @@ fn build_summary_lines(
 
     if display.show_chart {
         lines.push("".into());
-        lines.push(section_header("Chart"));
+        lines.push(section_header(tr("tui.limits.section.chart")));
     }
 
     lines
@@ -280,12 +289,12 @@ fn build_hourly_window_line(
     metrics: &RateLimitMetrics,
     next_reset: Option<DateTime<Utc>>,
 ) -> Line<'static> {
-    let prefix = field_prefix("Window");
+    let prefix = field_prefix(tr("tui.limits.label.window"));
     if metrics.primary_window_minutes == 0 {
         return Line::from(vec![
             Span::raw(prefix),
             Span::styled(
-                "window length unavailable".to_string(),
+                tr("tui.limits.window.unavailable").to_string(),
                 Style::default().fg(colors::dim()),
             ),
         ]);
@@ -307,8 +316,12 @@ fn build_hourly_window_line(
                 let elapsed_display = format_duration(elapsed);
                 let total_display =
                     format_minutes_round_units(metrics.primary_window_minutes);
+                let progress = tr_args(
+                    "tui.limits.window.progress",
+                    &[("elapsed", &elapsed_display), ("total", &total_display)],
+                );
                 spans.push(Span::styled(
-                    format!(" ({elapsed_display} / {total_display})"),
+                    format!(" {progress}"),
                     Style::default().fg(colors::dim()),
                 ));
                 return Line::from(spans);
@@ -319,9 +332,12 @@ fn build_hourly_window_line(
     let mut spans: Vec<Span<'static>> = Vec::new();
     spans.push(Span::raw(prefix));
     spans.push(Span::styled(
-        format!(
-            "(unknown / {})",
-            format_minutes_round_units(metrics.primary_window_minutes)
+        tr_args(
+            "tui.limits.window.unknown",
+            &[ (
+                "total",
+                &format_minutes_round_units(metrics.primary_window_minutes),
+            )],
         ),
         Style::default().fg(colors::dim()),
     ));
@@ -333,16 +349,17 @@ fn build_hourly_reset_line(
     next_reset: Option<DateTime<Utc>>,
 ) -> Line<'static> {
     if let (Some(next), true) = (next_reset, window_minutes > 0) {
-        let prefix = field_prefix("Resets");
+        let prefix = field_prefix(tr("tui.limits.label.resets"));
         if let Some(timing) = compute_window_timing(window_minutes, next) {
             let remaining = format_duration(timing.remaining);
             let mut spans: Vec<Span<'static>> = Vec::new();
             spans.push(Span::raw(prefix.clone()));
             let time_display = format_reset_timestamp(timing.next_reset_local, false);
-            spans.push(Span::raw("at "));
-            spans.push(Span::raw(time_display));
+            let reset_at = tr_args("tui.limits.reset.at", &[("time", &time_display)]);
+            spans.push(Span::raw(reset_at));
+            let reset_in = tr_args("tui.limits.reset.in", &[("remaining", &remaining)]);
             spans.push(Span::styled(
-                format!(" (in {remaining})"),
+                format!(" {reset_in}"),
                 Style::default().fg(colors::dim()),
             ));
             return Line::from(spans);
@@ -350,15 +367,15 @@ fn build_hourly_reset_line(
         return Line::from(vec![
             Span::raw(prefix),
             Span::styled(
-                "timing updating…".to_string(),
+                tr("tui.limits.reset.timing_updating").to_string(),
                 Style::default().fg(colors::dim()),
             ),
         ]);
     }
     let mut spans: Vec<Span<'static>> = Vec::new();
-    spans.push(Span::raw(field_prefix("Resets")));
+    spans.push(Span::raw(field_prefix(tr("tui.limits.label.resets"))));
     spans.push(Span::styled(
-        "awaiting reset timing…".to_string(),
+        tr("tui.limits.reset.awaiting").to_string(),
         Style::default().fg(colors::dim()),
     ));
     Line::from(spans)
@@ -368,12 +385,12 @@ fn build_weekly_window_line(
     weekly_minutes: u64,
     next_reset: Option<DateTime<Utc>>,
 ) -> Line<'static> {
-    let prefix = field_prefix("Window");
+    let prefix = field_prefix(tr("tui.limits.label.window"));
     if weekly_minutes == 0 {
         return Line::from(vec![
             Span::raw(prefix),
             Span::styled(
-                "window length unavailable".to_string(),
+                tr("tui.limits.window.unavailable").to_string(),
                 Style::default().fg(colors::dim()),
             ),
         ]);
@@ -394,8 +411,12 @@ fn build_weekly_window_line(
                 ));
                 let elapsed_display = format_duration(elapsed);
                 let total_display = format_minutes_round_units(weekly_minutes);
+                let progress = tr_args(
+                    "tui.limits.window.progress",
+                    &[("elapsed", &elapsed_display), ("total", &total_display)],
+                );
                 spans.push(Span::styled(
-                    format!(" ({elapsed_display} / {total_display})"),
+                    format!(" {progress}"),
                     Style::default().fg(colors::dim()),
                 ));
                 return Line::from(spans);
@@ -406,9 +427,9 @@ fn build_weekly_window_line(
     Line::from(vec![
         Span::raw(prefix),
         Span::styled(
-            format!(
-                "(unknown / {})",
-                format_minutes_round_units(weekly_minutes)
+            tr_args(
+            "tui.limits.window.unknown",
+            &[("total", &format_minutes_round_units(weekly_minutes))],
             ),
             Style::default().fg(colors::dim()),
         ),
@@ -420,7 +441,7 @@ fn build_weekly_reset_line(
     next_reset: Option<DateTime<Utc>>,
 ) -> Line<'static> {
     if let (Some(next), true) = (next_reset, window_minutes > 0) {
-        let prefix = field_prefix("Resets");
+        let prefix = field_prefix(tr("tui.limits.label.resets"));
         if let Some(timing) = compute_window_timing(window_minutes, next) {
             let remaining = format_duration(timing.remaining);
             let mut spans: Vec<Span<'static>> = Vec::new();
@@ -436,15 +457,15 @@ fn build_weekly_reset_line(
         return Line::from(vec![
             Span::raw(prefix),
             Span::styled(
-                "timing updating…".to_string(),
+                tr("tui.limits.reset.timing_updating").to_string(),
                 Style::default().fg(colors::dim()),
             ),
         ]);
     }
     let mut spans: Vec<Span<'static>> = Vec::new();
-    spans.push(Span::raw(field_prefix("Resets")));
+    spans.push(Span::raw(field_prefix(tr("tui.limits.label.resets"))));
     spans.push(Span::styled(
-        "awaiting reset timing…".to_string(),
+        tr("tui.limits.reset.awaiting").to_string(),
         Style::default().fg(colors::dim()),
     ));
     Line::from(spans)
@@ -460,7 +481,7 @@ fn build_compact_lines(reset_info: &RateLimitResetInfo) -> Vec<Line<'static>> {
                 detail_lines.push(build_compact_status_line(used, limit));
             } else {
                 detail_lines.push(Line::from(vec![Span::styled(
-                    label_text("Session usage updating…"),
+                    label_text(tr("tui.limits.compact.session_updating")),
                     Style::default().fg(colors::dim()),
                 )]));
             }
@@ -477,7 +498,7 @@ fn build_compact_lines(reset_info: &RateLimitResetInfo) -> Vec<Line<'static>> {
                 ));
             } else if reset_info.overflow_auto_compact {
                 detail_lines.push(Line::from(vec![Span::styled(
-                    label_text("Auto-compaction runs after overflow errors"),
+                    label_text(tr("tui.limits.compact.overflow_runs")),
                     Style::default().fg(colors::dim()),
                 )]));
             } else {
@@ -490,7 +511,7 @@ fn build_compact_lines(reset_info: &RateLimitResetInfo) -> Vec<Line<'static>> {
 
     let mut lines: Vec<Line<'static>> = Vec::new();
     if !detail_lines.is_empty() {
-        lines.push(section_header("Compact Limit"));
+        lines.push(section_header(tr("tui.limits.section.compact")));
         lines.extend(detail_lines);
     }
     lines
@@ -509,7 +530,7 @@ fn build_compact_tokens_line(used: u64, limit: u64) -> Line<'static> {
     };
 
     let mut spans: Vec<Span<'static>> = Vec::new();
-    spans.push(Span::raw(field_prefix("Tokens")));
+    spans.push(Span::raw(field_prefix(tr("tui.limits.label.tokens"))));
     spans.extend(render_percent_bar(percent));
     spans.push(Span::styled(
         format!(" {percent_display}"),
@@ -530,11 +551,11 @@ fn build_compact_status_line(used: u64, limit: u64) -> Line<'static> {
     if used < limit {
         let remaining = limit - used;
         return Line::from(vec![
-            Span::raw(field_prefix("Status")),
+            Span::raw(field_prefix(tr("tui.limits.label.status"))),
             Span::styled(
-                format!(
-                    "{} tokens before compact",
-                    format_with_separators(remaining)
+                tr_args(
+                    "tui.limits.compact.before_tokens",
+                    &[("remaining", &format_with_separators(remaining))],
                 ),
                 Style::default().fg(colors::dim()),
             ),
@@ -543,9 +564,9 @@ fn build_compact_status_line(used: u64, limit: u64) -> Line<'static> {
 
     if used == limit {
         return Line::from(vec![
-            Span::raw(field_prefix("Status")),
+            Span::raw(field_prefix(tr("tui.limits.label.status"))),
             Span::styled(
-                "Auto-compact will trigger on the next turn".to_string(),
+                tr("tui.limits.compact.next_turn").to_string(),
                 Style::default().fg(colors::warning()),
             ),
         ]);
@@ -553,9 +574,12 @@ fn build_compact_status_line(used: u64, limit: u64) -> Line<'static> {
 
     let overage = used.saturating_sub(limit);
     Line::from(vec![
-        Span::raw(field_prefix("Status")),
+        Span::raw(field_prefix(tr("tui.limits.label.status"))),
         Span::styled(
-            format!("Exceeded by {} tokens", format_with_separators(overage)),
+            tr_args(
+                "tui.limits.compact.exceeded",
+                &[("overage", &format_with_separators(overage))],
+            ),
             Style::default().fg(colors::error()),
         ),
     ])
@@ -568,7 +592,7 @@ fn build_context_tokens_line(used: u64, window: u64) -> Line<'static> {
         (used as f64 / window as f64) * 100.0
     };
     let mut spans: Vec<Span<'static>> = Vec::new();
-    spans.push(Span::raw(field_prefix("Context")));
+    spans.push(Span::raw(field_prefix(tr("tui.limits.label.context"))));
     spans.extend(render_percent_bar(percent));
     let percent_display = if percent > 100.0 {
         format!("{percent:.0}%")
@@ -598,11 +622,11 @@ fn build_context_status_line(
     if used < window {
         let remaining = window - used;
         return Line::from(vec![
-            Span::raw(field_prefix("Status")),
+            Span::raw(field_prefix(tr("tui.limits.label.status"))),
             Span::styled(
-                format!(
-                    "{} tokens before compact",
-                    format_with_separators(remaining)
+                tr_args(
+                    "tui.limits.compact.before_tokens",
+                    &[("remaining", &format_with_separators(remaining))],
                 ),
                 Style::default().fg(colors::dim()),
             ),
@@ -611,24 +635,27 @@ fn build_context_status_line(
 
     if used == window {
         return Line::from(vec![
-            Span::raw(field_prefix("Status")),
+            Span::raw(field_prefix(tr("tui.limits.label.status"))),
             Span::styled(
-                "Auto-compact will trigger on the next turn".to_string(),
+                tr("tui.limits.compact.next_turn").to_string(),
                 Style::default().fg(colors::warning()),
             ),
         ]);
     }
 
     let overage = used.saturating_sub(window);
-    let mut message = format!(
-        "Exceeded by {} tokens",
-        format_with_separators(overage)
+    let mut message = tr_args(
+        "tui.limits.compact.exceeded",
+        &[("overage", &format_with_separators(overage))],
     );
     if overflow_auto_compact {
-        message.push_str("; auto-compaction runs after overflow");
+        message = tr_args(
+            "tui.limits.compact.exceeded_overflow",
+            &[("overage", &format_with_separators(overage))],
+        );
     }
     Line::from(vec![
-        Span::raw(field_prefix("Status")),
+        Span::raw(field_prefix(tr("tui.limits.label.status"))),
         Span::styled(message, Style::default().fg(colors::error())),
     ])
 }
@@ -721,21 +748,19 @@ fn month_abbrev(month: u32) -> &'static str {
 fn build_status_line(metrics: &RateLimitMetrics) -> Line<'static> {
     if metrics.weekly_exhausted() || metrics.hourly_exhausted() {
         let reason = match (metrics.hourly_exhausted(), metrics.weekly_exhausted()) {
-            (true, true) => "weekly and hourly windows exhausted",
-            (true, false) => "hourly window exhausted",
-            (false, true) => "weekly window exhausted",
+            (true, true) => tr("tui.limits.rate_limited.both"),
+            (true, false) => tr("tui.limits.rate_limited.hourly"),
+            (false, true) => tr("tui.limits.rate_limited.weekly"),
             (false, false) => unreachable!(),
         };
+        let message = tr_args("tui.limits.rate_limited.message", &[("reason", reason)]);
         Line::from(vec![
-            Span::styled(
-                format!("✕ Rate limited: {reason}"),
-                Style::default().fg(colors::error()),
-            ),
+            Span::styled(message, Style::default().fg(colors::error())),
         ])
     } else {
         Line::from(vec![
             Span::styled(
-                "✓ Within current limits".to_string(),
+                tr("tui.limits.within_limits").to_string(),
                 Style::default().fg(colors::success()),
             ),
         ])
@@ -761,7 +786,7 @@ fn build_legend_lines(show_gauge: bool) -> Vec<Line<'static>> {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " weekly usage".to_string(),
+            format!(" {}", tr("tui.limits.legend.weekly_usage")),
             Style::default().fg(colors::dim()),
         ),
     ]));
@@ -777,7 +802,7 @@ fn build_legend_lines(show_gauge: bool) -> Vec<Line<'static>> {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " hourly headroom".to_string(),
+            format!(" {}", tr("tui.limits.legend.hourly_headroom")),
             Style::default().fg(colors::dim()),
         ),
     ]));
@@ -793,7 +818,7 @@ fn build_legend_lines(show_gauge: bool) -> Vec<Line<'static>> {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " unused weekly".to_string(),
+            format!(" {}", tr("tui.limits.legend.weekly_unused")),
             Style::default().fg(colors::dim()),
         ),
     ]));

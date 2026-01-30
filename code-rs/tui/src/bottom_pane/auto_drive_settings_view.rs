@@ -280,7 +280,10 @@ impl AutoDriveSettingsView {
 
         let footer_style = Style::default().fg(colors::text_dim());
         lines.push(Line::from(vec![
-            Span::styled("Enter", Style::default().fg(colors::primary())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(colors::primary()),
+            ),
             Span::styled(
                 format!(" {}", code_i18n::tr_plain("tui.auto_drive_settings.footer.select_toggle")),
                 footer_style,
@@ -292,10 +295,16 @@ impl AutoDriveSettingsView {
                 footer_style,
             ),
             Span::raw("   "),
-            Span::styled("Esc", Style::default().fg(colors::primary())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(colors::primary()),
+            ),
             Span::styled(format!(" {}", code_i18n::tr_plain("tui.common.close")), footer_style),
             Span::raw("   "),
-            Span::styled("Ctrl+S", Style::default().fg(colors::primary())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.ctrl_s"),
+                Style::default().fg(colors::primary()),
+            ),
             Span::styled(format!(" {}", code_i18n::tr_plain("tui.common.close")), footer_style),
         ]));
 

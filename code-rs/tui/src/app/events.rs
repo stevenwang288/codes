@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Receiver;
 use std::thread;
@@ -12,7 +11,7 @@ use crossterm::SynchronizedUpdate;
 use code_cloud_tasks_client::{CloudTaskError, TaskId};
 use code_core::config::add_project_allowed_command;
 use code_core::config_types::Notifications;
-use code_core::protocol::{Event, Op, SandboxPolicy};
+use code_core::protocol::{Op, SandboxPolicy};
 use code_login::{AuthManager, AuthMode, ServerOptions};
 use portable_pty::PtySize;
 
@@ -1259,11 +1258,12 @@ impl App<'_> {
                         SlashCommand::TestApproval => {
                             use code_core::protocol::EventMsg;
                             use std::collections::HashMap;
+                            use std::path::PathBuf;
 
                             use code_core::protocol::ApplyPatchApprovalRequestEvent;
                             use code_core::protocol::FileChange;
 
-                            self.app_event_tx.send(AppEvent::CodexEvent(Event {
+                            self.app_event_tx.send(AppEvent::CodexEvent(code_core::protocol::Event {
                                 id: "1".to_string(),
                                 event_seq: 0,
                                 // msg: EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
@@ -1451,6 +1451,9 @@ impl App<'_> {
                     if let Some(message) = Self::format_notification_message(&title, body.as_deref()) {
                         Self::emit_osc9_notification(&message);
                     }
+                }
+                AppEvent::RingBell => {
+                    Self::emit_terminal_bell();
                 }
                 AppEvent::UpdateMcpServer { name, enable } => {
                     if let AppState::Chat { widget } = &mut self.app_state {

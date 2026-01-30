@@ -23,7 +23,7 @@ This key must, at minimum, have write access to the Responses API.
 If you've used the Code CLI before with usage-based billing via an API key and want to switch to using your ChatGPT plan, follow these steps:
 
 1. Update the CLI and ensure `code --version` is `0.5.0` or later
-2. Delete `~/.code/auth.json` (and remove the legacy `~/.codex/auth.json` if it exists; on Windows these live under `C:\\Users\\USERNAME\\.code\\auth.json` and `C:\\Users\\USERNAME\\.codex\\auth.json`)
+2. Delete `~/.codex/auth.json` (on Windows this lives under `C:\\Users\\USERNAME\\.codex\\auth.json`)
 3. Run `code login` again
 
 ## Forcing a specific auth method (advanced)
@@ -33,7 +33,7 @@ You can explicitly choose which authentication Code should prefer when both are 
 - To always use your API key (even when ChatGPT auth exists), set:
 
 ```toml
-# ~/.code/config.toml (Code also reads legacy ~/.codex/config.toml)
+# ~/.codex/config.toml
 preferred_auth_method = "apikey"
 ```
 
@@ -46,7 +46,7 @@ code --config preferred_auth_method="apikey"
 - To prefer ChatGPT auth (default), set:
 
 ```toml
-# ~/.code/config.toml (Code also reads legacy ~/.codex/config.toml)
+# ~/.codex/config.toml
 preferred_auth_method = "chatgpt"
 ```
 
@@ -64,7 +64,7 @@ Why: many repos include an API key in `.env` for unrelated tooling, which could 
 
 What still works:
 
-- `~/.code/.env` (or `~/.codex/.env`) is loaded first and may contain your `OPENAI_API_KEY` for global use.
+- `~/.codex/.env` is loaded first and may contain your `OPENAI_API_KEY` for global use.
 - A shell-exported `OPENAI_API_KEY` is honored.
 
 Project `.env` provider keys are always ignored — there is no opt‑in.
@@ -79,28 +79,28 @@ Today, the login process entails running a server on `localhost:1455`. If you ar
 
 ### Authenticate locally and copy your credentials to the "headless" machine
 
-The easiest solution is likely to run through the `code login` process on your local machine such that `localhost:1455` _is_ accessible in your web browser. When you complete the authentication process, an `auth.json` file should be available at `$CODE_HOME/auth.json` (defaults to `~/.code/auth.json`; Code will still read `$CODEX_HOME`/`~/.codex/auth.json` if present).
+The easiest solution is likely to run through the `code login` process on your local machine such that `localhost:1455` _is_ accessible in your web browser. When you complete the authentication process, an `auth.json` file should be available at `$CODEX_HOME/auth.json` (defaults to `~/.codex/auth.json`).
 
 Because the `auth.json` file is not tied to a specific host, once you complete the authentication flow locally, you can copy the `$CODE_HOME/auth.json` file to the headless machine and then `code` should "just work" on that machine. Note to copy a file to a Docker container, you can do:
 
 ```shell
 # substitute MY_CONTAINER with the name or id of your Docker container:
 CONTAINER_HOME=$(docker exec MY_CONTAINER printenv HOME)
-docker exec MY_CONTAINER mkdir -p "$CONTAINER_HOME/.code"
-docker cp auth.json MY_CONTAINER:"$CONTAINER_HOME/.code/auth.json"
+docker exec MY_CONTAINER mkdir -p "$CONTAINER_HOME/.codex"
+docker cp auth.json MY_CONTAINER:"$CONTAINER_HOME/.codex/auth.json"
 ```
 
 whereas if you are `ssh`'d into a remote machine, you likely want to use [`scp`](https://en.wikipedia.org/wiki/Secure_copy_protocol):
 
 ```shell
-ssh user@remote 'mkdir -p ~/.code'
-scp ~/.code/auth.json user@remote:~/.code/auth.json
+ssh user@remote 'mkdir -p ~/.codex'
+scp ~/.codex/auth.json user@remote:~/.codex/auth.json
 ```
 
 or try this one-liner:
 
 ```shell
-ssh user@remote 'mkdir -p ~/.code && cat > ~/.code/auth.json' < ~/.code/auth.json
+ssh user@remote 'mkdir -p ~/.codex && cat > ~/.codex/auth.json' < ~/.codex/auth.json
 ```
 
 ### Connecting through VPS or remote

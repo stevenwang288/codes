@@ -86,7 +86,10 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
 
         match key_event.code {
             KeyCode::Left => {
-                // Menu is already active; consume Left so it doesn't leak to the main UI.
+                // Back out of the active menu to the sidebar.
+                overlay.set_mode_menu(None);
+                overlay.set_sidebar_active(true);
+                chat.request_redraw();
                 return true;
             }
             KeyCode::Enter => {
@@ -102,7 +105,10 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
                 return true;
             }
             KeyCode::Esc => {
-                chat.close_settings_overlay();
+                // Esc should close the menu first (not the whole Settings overlay).
+                overlay.set_mode_menu(None);
+                overlay.set_sidebar_active(true);
+                chat.request_redraw();
                 return true;
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -133,6 +139,41 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
         return handled;
     }
 
+    // If the sidebar is focused, handle navigation here and don't send arrows to content.
+    if overlay.is_sidebar_active() {
+        let mut changed = false;
+
+        match key_event.code {
+            KeyCode::Right | KeyCode::Enter => {
+                overlay.set_sidebar_active(false);
+                chat.request_redraw();
+                return true;
+            }
+            KeyCode::Left | KeyCode::Esc => {
+                overlay.set_mode_menu(None);
+                chat.request_redraw();
+                return true;
+            }
+            KeyCode::Up | KeyCode::Char('k') => changed = overlay.select_previous(),
+            KeyCode::Down | KeyCode::Char('j') => changed = overlay.select_next(),
+            KeyCode::Home => changed = overlay.set_section(crate::bottom_pane::SettingsSection::Model),
+            KeyCode::End => {
+                let last = crate::bottom_pane::SettingsSection::ALL
+                    .last()
+                    .copied()
+                    .unwrap_or(crate::bottom_pane::SettingsSection::Model);
+                changed = overlay.set_section(last);
+            }
+            KeyCode::Tab => changed = overlay.select_next(),
+            KeyCode::BackTab => changed = overlay.select_previous(),
+            _ => {}
+        }
+        if changed {
+            chat.request_redraw();
+        }
+        return true;
+    }
+
     // Give the active content first chance to handle keys (including Esc)
     let mut handled_by_content = false;
     let mut should_close = false;
@@ -154,18 +195,20 @@ pub(super) fn handle_settings_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent
         return true;
     }
 
-    match key_event.code {
-        KeyCode::Left if key_event.modifiers.is_empty() => {
-            overlay.set_mode_menu(Some(overlay.active_section()));
-            chat.request_redraw();
-            return true;
+    if key_event.modifiers.is_empty() {
+        match key_event.code {
+            KeyCode::Left => {
+                overlay.set_sidebar_active(true);
+                chat.request_redraw();
+                return true;
+            }
+            KeyCode::Esc => {
+                overlay.set_mode_menu(None);
+                chat.request_redraw();
+                return true;
+            }
+            _ => {}
         }
-        KeyCode::Esc if key_event.modifiers.is_empty() => {
-            overlay.set_mode_menu(None);
-            chat.request_redraw();
-            return true;
-        }
-        _ => {}
     }
 
     let mut handled = true;

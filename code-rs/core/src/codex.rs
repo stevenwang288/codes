@@ -665,7 +665,8 @@ async fn build_turn_status_items_v2(sess: &Session) -> Vec<ResponseItem> {
         Some(sess.approval_policy),
         Some(sess.sandbox_policy.clone()),
         Some(sess.user_shell.clone()),
-    );
+    )
+    .with_code_home(Some(sess.code_home.clone()));
 
     if let Some(mut env_items) = sess.maybe_emit_env_ctx_messages(
         &env_context,

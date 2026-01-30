@@ -169,17 +169,19 @@ impl ValidationSettingsView {
                         if command.is_empty() {
                             self.flash_notice(
                                 pane,
-                                format!(
-                                    "No install command available for {}",
-                                    tool_name
+                                code_i18n::tr_args(
+                                    code_i18n::current_language(),
+                                    "tui.validation.install.missing_command",
+                                    &[("tool", &tool_name)],
                                 ),
                             );
                         } else {
                             self.flash_notice(
                                 pane,
-                                format!(
-                                    "Opening terminal to install {}",
-                                    tool_name
+                                code_i18n::tr_args(
+                                    code_i18n::current_language(),
+                                    "tui.validation.install.opening_terminal",
+                                    &[("tool", &tool_name)],
                                 ),
                             );
                             self.is_complete = true;
@@ -307,17 +309,26 @@ impl ValidationSettingsView {
                 format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
                 Style::default().fg(colors::text_dim()),
             ),
-            Span::styled("Enter", Style::default().fg(colors::success())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(colors::success()),
+            ),
             Span::styled(
                 format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")),
                 Style::default().fg(colors::text_dim()),
             ),
-            Span::styled("Space", Style::default().fg(colors::success())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.space"),
+                Style::default().fg(colors::success()),
+            ),
             Span::styled(
                 format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")),
                 Style::default().fg(colors::text_dim()),
             ),
-            Span::styled("Esc", Style::default().fg(colors::error())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(colors::error()),
+            ),
             Span::styled(
                 format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
                 Style::default().fg(colors::text_dim()),
@@ -480,7 +491,7 @@ impl<'a> BottomPaneView<'a> for ValidationSettingsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(colors::border()))
             .style(Style::default().bg(colors::background()).fg(colors::text()))
-            .title(" Validation Settings ")
+            .title(format!(" {} ", code_i18n::tr_plain("tui.validation.title")))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -552,105 +563,105 @@ pub(crate) fn detect_tools() -> Vec<ToolStatus> {
     vec![
         ToolStatus {
             name: "actionlint",
-            description: "Lint GitHub workflows for syntax and logic issues.",
+            description: code_i18n::tr_plain("tui.validation.tool.actionlint.desc"),
             installed: has("actionlint"),
             install_hint: actionlint_hint(),
             category: validation_tool_category("actionlint"),
         },
         ToolStatus {
             name: "shellcheck",
-            description: "Analyze shell scripts for bugs and common pitfalls.",
+            description: code_i18n::tr_plain("tui.validation.tool.shellcheck.desc"),
             installed: has("shellcheck"),
             install_hint: shellcheck_hint(),
             category: validation_tool_category("shellcheck"),
         },
         ToolStatus {
             name: "markdownlint",
-            description: "Lint Markdown content for style and formatting problems.",
+            description: code_i18n::tr_plain("tui.validation.tool.markdownlint.desc"),
             installed: has("markdownlint"),
             install_hint: markdownlint_hint(),
             category: validation_tool_category("markdownlint"),
         },
         ToolStatus {
             name: "hadolint",
-            description: "Lint Dockerfiles for best practices and mistakes.",
+            description: code_i18n::tr_plain("tui.validation.tool.hadolint.desc"),
             installed: has("hadolint"),
             install_hint: hadolint_hint(),
             category: validation_tool_category("hadolint"),
         },
         ToolStatus {
             name: "yamllint",
-            description: "Validate YAML files for syntax issues.",
+            description: code_i18n::tr_plain("tui.validation.tool.yamllint.desc"),
             installed: has("yamllint"),
             install_hint: yamllint_hint(),
             category: validation_tool_category("yamllint"),
         },
         ToolStatus {
             name: "cargo-check",
-            description: "Run `cargo check` to catch Rust compilation errors quickly.",
+            description: code_i18n::tr_plain("tui.validation.tool.cargo_check.desc"),
             installed: has("cargo"),
             install_hint: cargo_check_hint(),
             category: validation_tool_category("cargo-check"),
         },
         ToolStatus {
             name: "tsc",
-            description: "Type-check TypeScript projects with `tsc --noEmit`.",
+            description: code_i18n::tr_plain("tui.validation.tool.tsc.desc"),
             installed: has("tsc"),
             install_hint: tsc_hint(),
             category: validation_tool_category("tsc"),
         },
         ToolStatus {
             name: "eslint",
-            description: "Lint JavaScript/TypeScript with ESLint (no warnings allowed).",
+            description: code_i18n::tr_plain("tui.validation.tool.eslint.desc"),
             installed: has("eslint"),
             install_hint: eslint_hint(),
             category: validation_tool_category("eslint"),
         },
         ToolStatus {
             name: "mypy",
-            description: "Static type-check Python files using mypy.",
+            description: code_i18n::tr_plain("tui.validation.tool.mypy.desc"),
             installed: has("mypy"),
             install_hint: mypy_hint(),
             category: validation_tool_category("mypy"),
         },
         ToolStatus {
             name: "pyright",
-            description: "Run Pyright for fast Python type analysis.",
+            description: code_i18n::tr_plain("tui.validation.tool.pyright.desc"),
             installed: has("pyright"),
             install_hint: pyright_hint(),
             category: validation_tool_category("pyright"),
         },
         ToolStatus {
             name: "phpstan",
-            description: "Analyze PHP code with phpstan using project rules.",
+            description: code_i18n::tr_plain("tui.validation.tool.phpstan.desc"),
             installed: has("phpstan"),
             install_hint: phpstan_hint(),
             category: validation_tool_category("phpstan"),
         },
         ToolStatus {
             name: "psalm",
-            description: "Run Psalm to detect PHP runtime issues.",
+            description: code_i18n::tr_plain("tui.validation.tool.psalm.desc"),
             installed: has("psalm"),
             install_hint: psalm_hint(),
             category: validation_tool_category("psalm"),
         },
         ToolStatus {
             name: "golangci-lint",
-            description: "Lint Go modules with golangci-lint.",
+            description: code_i18n::tr_plain("tui.validation.tool.golangci_lint.desc"),
             installed: has("golangci-lint"),
             install_hint: golangci_lint_hint(),
             category: validation_tool_category("golangci-lint"),
         },
         ToolStatus {
             name: "shfmt",
-            description: "Format shell scripts consistently with shfmt.",
+            description: code_i18n::tr_plain("tui.validation.tool.shfmt.desc"),
             installed: has("shfmt"),
             install_hint: shfmt_hint(),
             category: validation_tool_category("shfmt"),
         },
         ToolStatus {
             name: "prettier",
-            description: "Format web assets (JS/TS/JSON/MD) with Prettier.",
+            description: code_i18n::tr_plain("tui.validation.tool.prettier.desc"),
             installed: has("prettier"),
             install_hint: prettier_hint(),
             category: validation_tool_category("prettier"),
@@ -680,179 +691,203 @@ fn is_macos() -> bool {
     cfg!(target_os = "macos")
 }
 
+fn command_hint(command: &str) -> String {
+    code_i18n::tr_args(
+        code_i18n::current_language(),
+        "tui.validation.hint.command",
+        &[("command", command)],
+    )
+}
+
+fn see_hint(url: &str) -> String {
+    code_i18n::tr_args(
+        code_i18n::current_language(),
+        "tui.validation.hint.see",
+        &[("url", url)],
+    )
+}
+
+fn install_rust_hint() -> String {
+    code_i18n::tr_args(
+        code_i18n::current_language(),
+        "tui.validation.hint.install_rust",
+        &[("url", "https://rustup.rs")],
+    )
+}
+
 pub fn actionlint_hint() -> String {
     if is_macos() && has("brew") {
-        return "brew install actionlint".to_string();
+        return command_hint("brew install actionlint");
     }
     if has("brew") {
-        return "brew install actionlint".to_string();
+        return command_hint("brew install actionlint");
     }
-    "See: https://github.com/rhysd/actionlint#installation".to_string()
+    see_hint("https://github.com/rhysd/actionlint#installation")
 }
 
 pub fn shellcheck_hint() -> String {
     if is_macos() && has("brew") {
-        return "brew install shellcheck".to_string();
+        return command_hint("brew install shellcheck");
     }
     if has("apt-get") {
-        return "sudo apt-get update && sudo apt-get install -y shellcheck".to_string();
+        return command_hint("sudo apt-get update && sudo apt-get install -y shellcheck");
     }
     if has("dnf") {
-        return "sudo dnf install -y ShellCheck".to_string();
+        return command_hint("sudo dnf install -y ShellCheck");
     }
     if has("yum") {
-        return "sudo yum install -y ShellCheck".to_string();
+        return command_hint("sudo yum install -y ShellCheck");
     }
     if has("brew") {
-        return "brew install shellcheck".to_string();
+        return command_hint("brew install shellcheck");
     }
-    "https://www.shellcheck.net/".to_string()
+    see_hint("https://www.shellcheck.net/")
 }
 
 pub fn markdownlint_hint() -> String {
     if has("npm") {
-        return "npm i -g markdownlint-cli2".to_string();
+        return command_hint("npm i -g markdownlint-cli2");
     }
     if is_macos() && has("brew") {
-        return "brew install markdownlint-cli2".to_string();
+        return command_hint("brew install markdownlint-cli2");
     }
-    "npm i -g markdownlint-cli2".to_string()
+    command_hint("npm i -g markdownlint-cli2")
 }
 
 pub fn hadolint_hint() -> String {
     if is_macos() && has("brew") {
-        return "brew install hadolint".to_string();
+        return command_hint("brew install hadolint");
     }
     if has("apt-get") {
-        return "sudo apt-get update && sudo apt-get install -y hadolint".to_string();
+        return command_hint("sudo apt-get update && sudo apt-get install -y hadolint");
     }
     if has("dnf") {
-        return "sudo dnf install -y hadolint".to_string();
+        return command_hint("sudo dnf install -y hadolint");
     }
     if has("yum") {
-        return "sudo yum install -y hadolint".to_string();
+        return command_hint("sudo yum install -y hadolint");
     }
     if has("brew") {
-        return "brew install hadolint".to_string();
+        return command_hint("brew install hadolint");
     }
-    "https://github.com/hadolint/hadolint".to_string()
+    see_hint("https://github.com/hadolint/hadolint")
 }
 
 pub fn yamllint_hint() -> String {
     if is_macos() && has("brew") {
-        return "brew install yamllint".to_string();
+        return command_hint("brew install yamllint");
     }
     if has("apt-get") {
-        return "sudo apt-get update && sudo apt-get install -y yamllint".to_string();
+        return command_hint("sudo apt-get update && sudo apt-get install -y yamllint");
     }
     if has("dnf") {
-        return "sudo dnf install -y yamllint".to_string();
+        return command_hint("sudo dnf install -y yamllint");
     }
     if has("yum") {
-        return "sudo yum install -y yamllint".to_string();
+        return command_hint("sudo yum install -y yamllint");
     }
     if has("brew") {
-        return "brew install yamllint".to_string();
+        return command_hint("brew install yamllint");
     }
-    "https://yamllint.readthedocs.io/".to_string()
+    see_hint("https://yamllint.readthedocs.io/")
 }
 
 pub fn cargo_check_hint() -> String {
     if has("cargo") {
-        return "cargo check --all-targets".to_string();
+        return command_hint("cargo check --all-targets");
     }
-    "Install Rust (https://rustup.rs) to enable cargo check".to_string()
+    install_rust_hint()
 }
 
 pub fn shfmt_hint() -> String {
     if is_macos() && has("brew") {
-        return "brew install shfmt".to_string();
+        return command_hint("brew install shfmt");
     }
     if has("apt-get") {
-        return "sudo apt-get update && sudo apt-get install -y shfmt".to_string();
+        return command_hint("sudo apt-get update && sudo apt-get install -y shfmt");
     }
     if has("dnf") {
-        return "sudo dnf install -y shfmt".to_string();
+        return command_hint("sudo dnf install -y shfmt");
     }
     if has("yum") {
-        return "sudo yum install -y shfmt".to_string();
+        return command_hint("sudo yum install -y shfmt");
     }
     if has("brew") {
-        return "brew install shfmt".to_string();
+        return command_hint("brew install shfmt");
     }
-    "https://github.com/mvdan/sh".to_string()
+    see_hint("https://github.com/mvdan/sh")
 }
 
 pub fn prettier_hint() -> String {
     if has("npm") {
-        return "npx --yes prettier --write <path>".to_string();
+        return command_hint("npx --yes prettier --write <path>");
     }
     if is_macos() && has("brew") {
-        return "brew install prettier".to_string();
+        return command_hint("brew install prettier");
     }
-    "npm install --global prettier".to_string()
+    command_hint("npm install --global prettier")
 }
 
 pub fn tsc_hint() -> String {
     if has("pnpm") {
-        return "pnpm add -D typescript".to_string();
+        return command_hint("pnpm add -D typescript");
     }
     if has("yarn") {
-        return "yarn add --dev typescript".to_string();
+        return command_hint("yarn add --dev typescript");
     }
-    "npm install --save-dev typescript".to_string()
+    command_hint("npm install --save-dev typescript")
 }
 
 pub fn eslint_hint() -> String {
     if has("pnpm") {
-        return "pnpm add -D eslint".to_string();
+        return command_hint("pnpm add -D eslint");
     }
     if has("yarn") {
-        return "yarn add --dev eslint".to_string();
+        return command_hint("yarn add --dev eslint");
     }
-    "npm install --save-dev eslint".to_string()
+    command_hint("npm install --save-dev eslint")
 }
 
 pub fn phpstan_hint() -> String {
     if has("composer") {
-        return "composer require --dev phpstan/phpstan".to_string();
+        return command_hint("composer require --dev phpstan/phpstan");
     }
-    "See: https://phpstan.org/user-guide/getting-started".to_string()
+    see_hint("https://phpstan.org/user-guide/getting-started")
 }
 
 pub fn psalm_hint() -> String {
     if has("composer") {
-        return "composer require --dev vimeo/psalm".to_string();
+        return command_hint("composer require --dev vimeo/psalm");
     }
-    "See: https://psalm.dev/docs/install/".to_string()
+    see_hint("https://psalm.dev/docs/install/")
 }
 
 pub fn mypy_hint() -> String {
     if has("pipx") {
-        return "pipx install mypy".to_string();
+        return command_hint("pipx install mypy");
     }
     if has("pip3") {
-        return "pip3 install --user mypy".to_string();
+        return command_hint("pip3 install --user mypy");
     }
-    "pip install --user mypy".to_string()
+    command_hint("pip install --user mypy")
 }
 
 pub fn pyright_hint() -> String {
     if has("npm") {
-        return "npm install --save-dev pyright".to_string();
+        return command_hint("npm install --save-dev pyright");
     }
     if has("pipx") {
-        return "pipx install pyright".to_string();
+        return command_hint("pipx install pyright");
     }
-    "See: https://github.com/microsoft/pyright".to_string()
+    see_hint("https://github.com/microsoft/pyright")
 }
 
 pub fn golangci_lint_hint() -> String {
     if is_macos() && has("brew") {
-        return "brew install golangci-lint".to_string();
+        return command_hint("brew install golangci-lint");
     }
     if has("go") {
-        return "go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest".to_string();
+        return command_hint("go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest");
     }
-    "https://golangci-lint.run/usage/install/".to_string()
+    see_hint("https://golangci-lint.run/usage/install/")
 }

@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use strum_macros::Display as DeriveDisplay;
 use which::which;
 
+use crate::config;
 use crate::protocol::AskForApproval;
 use crate::protocol::SandboxPolicy;
 use crate::shell::Shell;
@@ -34,6 +35,11 @@ pub enum NetworkAccess {
 #[serde(rename = "environment_context", rename_all = "snake_case")]
 pub(crate) struct EnvironmentContext {
     pub cwd: Option<PathBuf>,
+    pub code_home: Option<PathBuf>,
+    pub config_path: Option<PathBuf>,
+    pub skills_root: Option<PathBuf>,
+    pub system_skills_root: Option<PathBuf>,
+    pub mcp_servers: Option<Vec<McpServerStatus>>,
     pub approval_policy: Option<AskForApproval>,
     pub sandbox_mode: Option<SandboxMode>,
     pub network_access: Option<NetworkAccess>,
@@ -50,6 +56,13 @@ pub struct OperatingSystemInfo {
     pub family: Option<String>,
     pub version: Option<String>,
     pub architecture: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct McpServerStatus {
+    pub name: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -122,6 +135,11 @@ impl EnvironmentContext {
     ) -> Self {
         Self {
             cwd,
+            code_home: None,
+            config_path: None,
+            skills_root: None,
+            system_skills_root: None,
+            mcp_servers: None,
             approval_policy,
             sandbox_mode: match sandbox_policy {
                 Some(SandboxPolicy::DangerFullAccess) => Some(SandboxMode::DangerFullAccess),
@@ -158,6 +176,30 @@ impl EnvironmentContext {
         }
     }
 
+    pub fn with_code_home(mut self, code_home: Option<PathBuf>) -> Self {
+        let Some(code_home) = code_home else {
+            return self;
+        };
+        self.code_home = Some(code_home.clone());
+        self.config_path = Some(code_home.join("config.toml"));
+        self.skills_root = Some(code_home.join("skills"));
+        self.system_skills_root = Some(code_home.join("skills").join(".system"));
+        if let Ok((enabled, disabled)) = config::list_mcp_servers(&code_home) {
+            let mut servers: Vec<McpServerStatus> = Vec::new();
+            for (name, _) in enabled {
+                servers.push(McpServerStatus { name, enabled: true });
+            }
+            for (name, _) in disabled {
+                servers.push(McpServerStatus { name, enabled: false });
+            }
+            if !servers.is_empty() {
+                servers.sort_by(|a, b| a.name.cmp(&b.name));
+                self.mcp_servers = Some(servers);
+            }
+        }
+        self
+    }
+
     /// Compares two environment contexts, ignoring the shell. Useful when
     /// comparing turn to turn, since the initial environment_context will
     /// include the shell, and then it is not configurable from turn to turn.
@@ -165,6 +207,11 @@ impl EnvironmentContext {
     pub fn equals_except_shell(&self, other: &EnvironmentContext) -> bool {
         let EnvironmentContext {
             cwd,
+            code_home,
+            config_path,
+            skills_root,
+            system_skills_root,
+            mcp_servers,
             approval_policy,
             sandbox_mode,
             network_access,
@@ -177,6 +224,11 @@ impl EnvironmentContext {
         } = other;
 
         self.cwd == *cwd
+            && self.code_home == *code_home
+            && self.config_path == *config_path
+            && self.skills_root == *skills_root
+            && self.system_skills_root == *system_skills_root
+            && self.mcp_servers == *mcp_servers
             && self.approval_policy == *approval_policy
             && self.sandbox_mode == *sandbox_mode
             && self.network_access == *network_access
@@ -198,10 +250,15 @@ impl EnvironmentContext {
     /// ```xml
     /// <environment_context>
     ///   <cwd>...</cwd>
+    ///   <code_home>...</code_home>
+    ///   <config_path>...</config_path>
+    ///   <skills_root>...</skills_root>
+    ///   <system_skills_root>...</system_skills_root>
     ///   <approval_policy>...</approval_policy>
     ///   <sandbox_mode>...</sandbox_mode>
     ///   <writable_roots>...</writable_roots>
     ///   <network_access>...</network_access>
+    ///   <mcp_servers>...</mcp_servers>
     ///   <operating_system>
     ///     <family>...</family>
     ///     <version>...</version>
@@ -215,6 +272,30 @@ impl EnvironmentContext {
         let mut lines = vec![ENVIRONMENT_CONTEXT_OPEN_TAG.to_string()];
         if let Some(cwd) = self.cwd {
             lines.push(format!("  <cwd>{}</cwd>", cwd.to_string_lossy()));
+        }
+        if let Some(code_home) = self.code_home {
+            lines.push(format!(
+                "  <code_home>{}</code_home>",
+                code_home.to_string_lossy()
+            ));
+        }
+        if let Some(config_path) = self.config_path {
+            lines.push(format!(
+                "  <config_path>{}</config_path>",
+                config_path.to_string_lossy()
+            ));
+        }
+        if let Some(skills_root) = self.skills_root {
+            lines.push(format!(
+                "  <skills_root>{}</skills_root>",
+                skills_root.to_string_lossy()
+            ));
+        }
+        if let Some(system_skills_root) = self.system_skills_root {
+            lines.push(format!(
+                "  <system_skills_root>{}</system_skills_root>",
+                system_skills_root.to_string_lossy()
+            ));
         }
         if let Some(approval_policy) = self.approval_policy {
             lines.push(format!(
@@ -261,6 +342,19 @@ impl EnvironmentContext {
                 lines.push("  </common_tools>".to_string());
             }
         }
+        if let Some(mcp_servers) = self.mcp_servers {
+            if !mcp_servers.is_empty() {
+                lines.push("  <mcp_servers>".to_string());
+                for server in mcp_servers {
+                    let status = if server.enabled { "enabled" } else { "disabled" };
+                    lines.push(format!(
+                        "    <server status=\"{status}\">{}</server>",
+                        server.name
+                    ));
+                }
+                lines.push("  </mcp_servers>".to_string());
+            }
+        }
         if let Some(current_date) = self.current_date {
             lines.push(format!("  <current_date>{current_date}</current_date>"));
         }
@@ -293,6 +387,14 @@ pub struct EnvironmentContextSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_home: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skills_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_skills_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_policy: Option<AskForApproval>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox_mode: Option<SandboxMode>,
@@ -304,6 +406,8 @@ pub struct EnvironmentContextSnapshot {
     pub operating_system: Option<OperatingSystemInfo>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub common_tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_servers: Vec<McpServerStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shell: Option<Shell>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -319,6 +423,13 @@ impl EnvironmentContextSnapshot {
         Self {
             version: Self::VERSION,
             cwd: ctx.cwd.as_ref().map(|p| p.display().to_string()),
+            code_home: ctx.code_home.as_ref().map(|p| p.display().to_string()),
+            config_path: ctx.config_path.as_ref().map(|p| p.display().to_string()),
+            skills_root: ctx.skills_root.as_ref().map(|p| p.display().to_string()),
+            system_skills_root: ctx
+                .system_skills_root
+                .as_ref()
+                .map(|p| p.display().to_string()),
             approval_policy: ctx.approval_policy.clone(),
             sandbox_mode: ctx.sandbox_mode.clone(),
             network_access: ctx.network_access.clone(),
@@ -329,6 +440,7 @@ impl EnvironmentContextSnapshot {
                 .unwrap_or_default(),
             operating_system: ctx.operating_system.clone(),
             common_tools: ctx.common_tools.clone().unwrap_or_default(),
+            mcp_servers: ctx.mcp_servers.clone().unwrap_or_default(),
             shell: ctx.shell.clone(),
             git_branch: None,
             reasoning_effort: None,
@@ -340,6 +452,18 @@ impl EnvironmentContextSnapshot {
         let mut map = BTreeMap::new();
         if let Some(cwd) = &self.cwd {
             map.insert("cwd", cwd.clone());
+        }
+        if let Some(code_home) = &self.code_home {
+            map.insert("code_home", code_home.clone());
+        }
+        if let Some(config_path) = &self.config_path {
+            map.insert("config_path", config_path.clone());
+        }
+        if let Some(skills_root) = &self.skills_root {
+            map.insert("skills_root", skills_root.clone());
+        }
+        if let Some(system_skills_root) = &self.system_skills_root {
+            map.insert("system_skills_root", system_skills_root.clone());
         }
         if let Some(policy) = &self.approval_policy {
             map.insert("approval_policy", format!("{policy}"));
@@ -359,6 +483,15 @@ impl EnvironmentContextSnapshot {
         if let Some(reasoning) = &self.reasoning_effort {
             map.insert("reasoning_effort", reasoning.clone());
         }
+        if !self.mcp_servers.is_empty() {
+            let joined = self
+                .mcp_servers
+                .iter()
+                .map(|s| format!("{}:{}", s.name, if s.enabled { "1" } else { "0" }))
+                .collect::<Vec<_>>()
+                .join("|");
+            map.insert("mcp_servers", joined);
+        }
 
         let encoded = serde_json::to_vec(&map).expect("serializing fingerprint fields");
         let mut sha = Sha1::new();
@@ -371,6 +504,24 @@ impl EnvironmentContextSnapshot {
 
         if self.cwd != previous.cwd {
             changes.insert("cwd".to_string(), option_string_to_json(&self.cwd));
+        }
+        if self.code_home != previous.code_home {
+            changes.insert("code_home".to_string(), option_string_to_json(&self.code_home));
+        }
+        if self.config_path != previous.config_path {
+            changes.insert(
+                "config_path".to_string(),
+                option_string_to_json(&self.config_path),
+            );
+        }
+        if self.skills_root != previous.skills_root {
+            changes.insert("skills_root".to_string(), option_string_to_json(&self.skills_root));
+        }
+        if self.system_skills_root != previous.system_skills_root {
+            changes.insert(
+                "system_skills_root".to_string(),
+                option_string_to_json(&self.system_skills_root),
+            );
         }
         if self.approval_policy != previous.approval_policy {
             changes.insert(
@@ -406,6 +557,12 @@ impl EnvironmentContextSnapshot {
             changes.insert(
                 "common_tools".to_string(),
                 JsonValue::Array(self.common_tools.iter().map(|s| JsonValue::String(s.clone())).collect()),
+            );
+        }
+        if self.mcp_servers != previous.mcp_servers {
+            changes.insert(
+                "mcp_servers".to_string(),
+                serde_json::to_value(&self.mcp_servers).unwrap_or(JsonValue::Null),
             );
         }
         if self.shell != previous.shell {

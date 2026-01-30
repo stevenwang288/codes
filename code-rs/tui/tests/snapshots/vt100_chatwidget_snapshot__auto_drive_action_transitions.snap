@@ -3,76 +3,76 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: "frames.join(\"\\n---FRAME---\\n\")"
 ---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
 
- • I can help with various tasks including:
+ • 我可以帮你处理多种任务，包括：
 
-   - Writing code
-   - Reading files
-   - Running commands
+   - 写代码
+   - 读取文件
+   - 运行命令
 
 
 
-  Auto Drive > Comparing diffs against last run.  ✶ Thinking (Xs)
+  自动运行 > Comparing diffs against last run.                    ✶ 思考中 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
- +----------------------------------------------------------------------------+
-  • Agents Enabled  • Diagnostics Enabled                              API key
-
----FRAME---
- +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
- +----------------------------------------------------------------------------+
-
- • I can help with various tasks including:
-
-   - Writing code
-   - Reading files
-   - Running commands
-
-
-
-  Auto Drive > Ready: run cargo test --workspace  ✶ Running (Xs)
- +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key
 
 ---FRAME---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
 
- • I can help with various tasks including:
+ • 我可以帮你处理多种任务，包括：
 
-   - Writing code
-   - Reading files
-   - Running commands
+   - 写代码
+   - 读取文件
+   - 运行命令
 
 
 
-  Auto Drive > waiting for code review...  ✶ Awaiting review (Xs)
+  自动运行 > Ready: run cargo test --workspace                    ✶ 运行中 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key
 
 ---FRAME---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
 
- • I can help with various tasks including:
+ • 我可以帮你处理多种任务，包括：
 
-   - Writing code
-   - Reading files
-   - Running commands
+   - 写代码
+   - 读取文件
+   - 运行命令
 
 
 
-  Auto Drive > Queued new command for execution.  ✶ Thinking (Xs)
+  自动运行 > waiting for code review...                         ✶ 等待审查 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
+ +----------------------------------------------------------------------------+
+  • Agents Enabled  • Diagnostics Enabled                              API key
+
+---FRAME---
+ +----------------------------------------------------------------------------+
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
+ +----------------------------------------------------------------------------+
+
+ • 我可以帮你处理多种任务，包括：
+
+   - 写代码
+   - 读取文件
+   - 运行命令
+
+
+
+  自动运行 > Queued new command for execution.                    ✶ 思考中 (Xs)
+ +----------------------------------------------------------------------------+
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key

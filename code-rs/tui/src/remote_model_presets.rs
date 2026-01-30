@@ -51,8 +51,8 @@ pub(crate) fn merge_remote_models(remote_models: Vec<ModelInfo>, local_presets: 
 }
 
 fn model_info_to_preset(info: ModelInfo) -> ModelPreset {
-    let show_in_picker = info.visibility == ModelVisibility::List
-        && !info.slug.eq_ignore_ascii_case("gpt-5.1-codex");
+    let show_in_picker =
+        info.visibility == ModelVisibility::List && allow_remote_slug(&info.slug);
 
     let supported_text_verbosity = if info.support_verbosity {
         REMOTE_TEXT_VERBOSITY_ALL
@@ -88,6 +88,10 @@ fn model_info_to_preset(info: ModelInfo) -> ModelPreset {
         }),
         show_in_picker,
     }
+}
+
+fn allow_remote_slug(slug: &str) -> bool {
+    matches!(slug.to_ascii_lowercase().as_str(), "gpt-5.2" | "gpt-5.2-codex")
 }
 
 fn map_reasoning_effort(effort: RemoteReasoningEffort) -> ProtocolReasoningEffort {

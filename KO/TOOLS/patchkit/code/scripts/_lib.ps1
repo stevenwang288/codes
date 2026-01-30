@@ -58,16 +58,15 @@ function Invoke-Bash {
     $bashExe = "bash.exe"
   }
 
-  # Always normalize paths for Git Bash and ensure CODES stays isolated.
-  # - Avoid leaking ~/.code or legacy ~/.codex into build caches.
-  # - Avoid Windows drive-paths (C:\...) being interpreted as relative by bash.
+  # Always normalize paths for Git Bash.
+  # Keep CODEX_HOME aligned with upstream Codex so config/state are shared.
   $escaped = $RepoRoot.Replace('"', '\"')
   $bootstrap = @(
     'repo_posix="$(cygpath -u "' + $escaped + '")"',
     'cd "${repo_posix}"',
-    'export CODE_HOME="${repo_posix}/.codes-home"',
-    'export CODEX_HOME="${repo_posix}/.codes-home"',
-    'mkdir -p "$CODE_HOME"',
+    'export CODEX_HOME="${HOME}/.codex"',
+    'export CODE_HOME="${CODEX_HOME}"',
+    'mkdir -p "$CODEX_HOME"',
     $Command
   ) -join '; '
 

@@ -3,7 +3,7 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: output
 ---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
 
 
@@ -22,6 +22,6 @@ expression: output
 
 
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
- Read Only  (Shift+Tab change)                        Ctrl+G guide  •  API key
+ Read Only  (Shift+Tab change) Ctrl+S 设置   Ctrl+G 帮助  •  Tab 模式: 开发  •

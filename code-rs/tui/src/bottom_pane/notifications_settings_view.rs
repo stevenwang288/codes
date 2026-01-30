@@ -210,7 +210,10 @@ impl<'a> BottomPaneView<'a> for NotificationsSettingsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" Notifications ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.notifications.title")
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -246,16 +249,28 @@ impl<'a> BottomPaneView<'a> for NotificationsSettingsView {
 
         let footer = match &self.mode {
             NotificationsMode::Toggle { .. } => Line::from(vec![
-                Span::styled("Up/Down", Style::default().fg(crate::colors::light_blue())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.up_down"),
+                    Style::default().fg(crate::colors::light_blue()),
+                ),
                 Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate"))),
-                Span::styled("Left/Right or Space", Style::default().fg(crate::colors::success())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.left_right_or_space"),
+                    Style::default().fg(crate::colors::success()),
+                ),
                 Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.toggle"))),
-                Span::styled("Enter", Style::default().fg(crate::colors::success())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.enter"),
+                    Style::default().fg(crate::colors::success()),
+                ),
                 Span::raw(format!(
                     " {}  ",
                     code_i18n::tr_plain("tui.notifications.toggle_or_close")
                 )),
-                Span::styled("Esc", Style::default().fg(crate::colors::error())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.esc"),
+                    Style::default().fg(crate::colors::error()),
+                ),
                 Span::raw(format!(" {}", code_i18n::tr_plain("tui.common.cancel"))),
             ]),
             NotificationsMode::Custom { .. } => Line::from(vec![

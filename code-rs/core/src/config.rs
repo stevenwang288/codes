@@ -255,8 +255,7 @@ pub struct Config {
     /// appends one extra argument containing a JSON payload describing the
     /// event.
     ///
-    /// Example `~/.code/config.toml` snippet (Code also reads legacy
-    /// `~/.codex/config.toml`):
+    /// Example `~/.codex/config.toml` snippet:
     ///
     /// ```toml
     /// notify = ["notify-send", "Codex"]
@@ -307,12 +306,11 @@ pub struct Config {
     /// Ordered list of fallback filenames to consider when loading project docs.
     pub project_doc_fallback_filenames: Vec<String>,
 
-    /// Directory containing all Codex state (defaults to `~/.code`; can be
-    /// overridden by the `CODE_HOME` or `CODEX_HOME` environment variables).
+    /// Directory containing all Codex state (defaults to `~/.codex`; can be
+    /// overridden by the `CODEX_HOME` environment variable).
     pub code_home: PathBuf,
 
-    /// Settings that govern if and what will be written to `~/.code/history.jsonl`
-    /// (Code still reads legacy `~/.codex/history.jsonl`).
+    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
     pub history: History,
 
     /// Optional URI-based file opener. If set, citations to files in the model
@@ -454,7 +452,7 @@ pub fn load_config_as_toml_with_cli_overrides(
         .load_toml()
 }
 
-/// Base config deserialized from ~/.code/config.toml (legacy ~/.codex/config.toml is still read).
+/// Base config deserialized from ~/.codex/config.toml.
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct ConfigToml {
     /// Optional override of model selection.
@@ -578,8 +576,7 @@ pub struct ConfigToml {
     #[serde(default)]
     pub profiles: HashMap<String, ConfigProfile>,
 
-    /// Settings that govern if and what will be written to `~/.code/history.jsonl`
-    /// (Code still reads legacy `~/.codex/history.jsonl`).
+    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
     #[serde(default)]
     pub history: Option<History>,
 
@@ -1398,7 +1395,7 @@ impl Config {
                 .collect(),
             code_home,
             history,
-            file_opener: cfg.file_opener.unwrap_or(UriBasedFileOpener::VsCode),
+            file_opener: UriBasedFileOpener::None,
             tui: cfg.tui.clone().unwrap_or_default(),
             auto_drive,
             auto_drive_use_chat_model,
@@ -1701,7 +1698,7 @@ persistence = "none"
     }
 
     #[test]
-    fn load_instructions_falls_back_to_legacy_codex_home() -> anyhow::Result<()> {
+    fn load_instructions_does_not_fall_back_to_home() -> anyhow::Result<()> {
         let code_home = TempDir::new()?;
         let legacy_home = TempDir::new()?;
         let legacy_codex = legacy_home.path().join(".codex");
@@ -1720,7 +1717,7 @@ persistence = "none"
 
         let loaded = Config::load_instructions(Some(code_home.path()));
 
-        assert_eq!(loaded.as_deref(), Some("legacy guidance"));
+        assert_eq!(loaded, None);
         Ok(())
     }
 

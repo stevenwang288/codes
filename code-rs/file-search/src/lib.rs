@@ -22,6 +22,21 @@ mod cli;
 
 pub use cli::Cli;
 
+const DEFAULT_EXCLUDES: &[&str] = &[
+    "**/.git/**",
+    "**/.hg/**",
+    "**/.svn/**",
+    "**/node_modules/**",
+    "**/target/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/out/**",
+    "**/.venv/**",
+    "**/.cache/**",
+    "**/vendor/**",
+    "**/Pods/**",
+];
+
 /// A single match result returned from the search.
 ///
 /// * `score` – Relevance score returned by `nucleo_matcher`.
@@ -131,6 +146,12 @@ pub fn run(
     compute_indices: bool,
 ) -> anyhow::Result<FileSearchResults> {
     let pattern = create_pattern(pattern_text);
+    let mut exclude = exclude;
+    for default_exclude in DEFAULT_EXCLUDES {
+        if !exclude.iter().any(|entry| entry == default_exclude) {
+            exclude.push((*default_exclude).to_string());
+        }
+    }
     // Create one BestMatchesList per worker thread so that each worker can
     // operate independently. The results across threads will be merged when
     // the traversal is complete.

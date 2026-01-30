@@ -169,6 +169,10 @@ impl BottomPaneView<'_> for ListSelectionView {
                 code: KeyCode::Esc, ..
             } => self.cancel(),
             KeyEvent {
+                code: KeyCode::Left,
+                ..
+            } => self.cancel(),
+            KeyEvent {
                 code: KeyCode::Enter,
                 modifiers: KeyModifiers::NONE,
                 ..

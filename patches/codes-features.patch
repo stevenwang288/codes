@@ -1,0 +1,259 @@
+diff --git a/code-rs/core/src/config/sources.rs b/code-rs/core/src/config/sources.rs
+index 2adad1d4..bdbe89a9 100644
+--- a/code-rs/core/src/config/sources.rs
++++ b/code-rs/core/src/config/sources.rs
+@@ -1590,9 +1590,25 @@ pub fn find_code_home() -> std::io::Result<PathBuf> {
+         )
+     })?;
+ 
+-    let mut write_path = home;
+-    write_path.push(".code");
+-    Ok(write_path)
++    let prefer_codex = std::env::var("CODES_PREFER_CODEX_HOME")
++        .ok()
++        .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
++
++    let mut code_home = home.clone();
++    code_home.push(".code");
++
++    let mut codex_home = home;
++    codex_home.push(".codex");
++
++    if prefer_codex {
++        return Ok(codex_home);
++    }
++
++    if path_exists(&codex_home) && !path_exists(&code_home) {
++        return Ok(codex_home);
++    }
++
++    Ok(code_home)
+ }
+ 
+ pub(crate) fn load_instructions(code_dir: Option<&Path>) -> Option<String> {
+diff --git a/code-rs/tui/src/bottom_pane/theme_selection_view.rs b/code-rs/tui/src/bottom_pane/theme_selection_view.rs
+index fa68c212..79e47989 100644
+--- a/code-rs/tui/src/bottom_pane/theme_selection_view.rs
++++ b/code-rs/tui/src/bottom_pane/theme_selection_view.rs
+@@ -1077,7 +1077,9 @@ impl ThemeSelectionView {
+                 }
+             }
+             KeyEvent { code: KeyCode::Left, modifiers: KeyModifiers::NONE, .. } => {
+-                if let Mode::CreateSpinner(ref mut s) = self.mode {
++                if matches!(self.mode, Mode::Themes | Mode::Spinner) {
++                    self.cancel_detail();
++                } else if let Mode::CreateSpinner(ref mut s) = self.mode {
+                     let new_step = match s.step.get() {
+                         CreateStep::Prompt => CreateStep::Action,
+                         CreateStep::Action => {
+@@ -1479,6 +1481,10 @@ impl ThemeSelectionView {
+                 }
+             }
+             KeyEvent { code: KeyCode::Backspace, .. } => {
++                if matches!(self.mode, Mode::Themes | Mode::Spinner) {
++                    self.cancel_detail();
++                    return;
++                }
+                 if let Mode::CreateSpinner(ref mut s) = self.mode {
+                     if s.is_loading.get() {
+                         return;
+diff --git a/code-rs/tui/src/theme.rs b/code-rs/tui/src/theme.rs
+index c9d065d2..0b12db79 100644
+--- a/code-rs/tui/src/theme.rs
++++ b/code-rs/tui/src/theme.rs
+@@ -364,6 +364,13 @@ const ANSI16_COLORS: [(u8, u8, u8); 16] = [
+ ];
+ 
+ pub(crate) fn palette_mode() -> PaletteMode {
++    if let Ok(value) = std::env::var("CODE_PALETTE_MODE") {
++        match value.trim().to_ascii_lowercase().as_str() {
++            "ansi256" | "256" => return PaletteMode::Ansi256,
++            "ansi16" | "16" => return PaletteMode::Ansi16,
++            _ => {}
++        }
++    }
+     if let Some(level) = supports_color::on_cached(supports_color::Stream::Stdout) {
+         if level.has_16m || level.has_256 {
+             return PaletteMode::Ansi256;
+diff --git a/codes.cmd b/codes.cmd
+index d5be31da..f2b8a062 100644
+--- a/codes.cmd
++++ b/codes.cmd
+@@ -34,11 +34,23 @@ if errorlevel 1 (
+   exit /b 1
+ )
+ 
+-set "CODE_HOME=%CD%\.codes-home"
+-set "CODEX_HOME=%CD%\.codes-home"
++set "HOME_MODE=%CODES_HOME_MODE%"
++if "%HOME_MODE%"=="" set "HOME_MODE=global"
++
++set "CACHE_HOME=%CD%\.codes-home"
++if not exist "%CACHE_HOME%" mkdir "%CACHE_HOME%" >nul 2>nul
++
++set "RUN_USE_REPO_HOME=0"
++if /I "%HOME_MODE%"=="repo" set "RUN_USE_REPO_HOME=1"
++
++set "LANG_HOME=%CACHE_HOME%"
++if "%RUN_USE_REPO_HOME%"=="0" (
++  set "LANG_HOME=%USERPROFILE%\.codex"
++)
++
+ if "%CODEX_LANG%"=="" (
+-  if exist "%CODE_HOME%\ui-language.txt" (
+-    for /f "usebackq delims=" %%I in ("%CODE_HOME%\ui-language.txt") do (
++  if exist "%LANG_HOME%\ui-language.txt" (
++    for /f "usebackq delims=" %%I in ("%LANG_HOME%\ui-language.txt") do (
+       set "CODEX_LANG=%%I"
+       goto :codes_lang_loaded
+     )
+@@ -47,22 +59,29 @@ if "%CODEX_LANG%"=="" (
+ :codes_lang_loaded
+ if "%CODEX_LANG%"=="" set "CODEX_LANG=zh-CN"
+ set "CODE_AUTO_TRUST=1"
++if "%CODE_PALETTE_MODE%"=="" set "CODE_PALETTE_MODE=ansi256"
+ 
+ REM Lightweight diagnostics that don't enter the TUI.
+ REM Usage: codes which
+ if /I "%~1"=="which" (
+   shift
+   echo [codes] repo-root: "%CD%"
+-  echo [codes] CODE_HOME: "%CODE_HOME%"
+-  echo [codes] CODEX_HOME: "%CODEX_HOME%"
++  echo [codes] CODES_HOME_MODE: "%HOME_MODE%"
++  echo [codes] CACHE_HOME: "%CACHE_HOME%"
++  if "%RUN_USE_REPO_HOME%"=="1" (
++    echo [codes] run-config: repo home (^"%CACHE_HOME%^")
++  ) else (
++    echo [codes] run-config: global home (^"%USERPROFILE%\.codex^")
++  )
+   echo [codes] CODEX_LANG: "%CODEX_LANG%"
+-  if exist "%CODE_HOME%\ui-language.txt" (
+-    for /f "usebackq delims=" %%I in ("%CODE_HOME%\ui-language.txt") do echo [codes] ui-language.txt: %%I
++  if not "%CODE_PALETTE_MODE%"=="" echo [codes] CODE_PALETTE_MODE: "%CODE_PALETTE_MODE%"
++  if exist "%LANG_HOME%\ui-language.txt" (
++    for /f "usebackq delims=" %%I in ("%LANG_HOME%\ui-language.txt") do echo [codes] ui-language.txt: %%I
+   ) else (
+     echo [codes] ui-language.txt: (missing)
+   )
+-  if exist "%CODE_HOME%\last-built-bin.txt" (
+-    for /f "usebackq delims=" %%I in ("%CODE_HOME%\last-built-bin.txt") do echo [codes] last-built-bin.txt: %%I
++  if exist "%CACHE_HOME%\last-built-bin.txt" (
++    for /f "usebackq delims=" %%I in ("%CACHE_HOME%\last-built-bin.txt") do echo [codes] last-built-bin.txt: %%I
+   ) else (
+     echo [codes] last-built-bin.txt: (missing)
+   )
+@@ -88,8 +107,6 @@ shift
+ goto :parse_args
+ :parse_args_done
+ 
+-if not exist "%CODE_HOME%" mkdir "%CODE_HOME%" >nul 2>nul
+-
+ if not exist "%CODES_STATE_DIR%" mkdir "%CODES_STATE_DIR%" >nul 2>nul
+ (
+   echo %CD%
+@@ -100,6 +117,7 @@ REM Use build-fast.sh only when missing or when forced via `codes --rebuild` / `
+ set "FAST_BIN=%CD%\code-rs\target\dev-fast\code"
+ set "FAST_BIN_EXE=%CD%\code-rs\target\dev-fast\code.exe"
+ if not "%FORCE_REBUILD%"=="1" if exist "%FAST_BIN_EXE%" (
++  call :set_run_env
+   "%FAST_BIN_EXE%"%CODE_ARGS%
+   set "EXIT_CODE=%ERRORLEVEL%"
+   popd >nul
+@@ -108,8 +126,8 @@ if not "%FORCE_REBUILD%"=="1" if exist "%FAST_BIN_EXE%" (
+ 
+ REM Preferred fast path: use the last-built bin recorded by build-fast.sh.
+ set "LAST_BUILT_BIN="
+-if not "%FORCE_REBUILD%"=="1" if exist "%CODE_HOME%\last-built-bin.txt" (
+-  for /f "usebackq delims=" %%I in ("%CODE_HOME%\last-built-bin.txt") do set "LAST_BUILT_BIN=%%I"
++if not "%FORCE_REBUILD%"=="1" if exist "%CACHE_HOME%\last-built-bin.txt" (
++  for /f "usebackq delims=" %%I in ("%CACHE_HOME%\last-built-bin.txt") do set "LAST_BUILT_BIN=%%I"
+   if not "%LAST_BUILT_BIN%"=="" (
+     REM Prefer running a Windows path directly to avoid cmd/PowerShell quoting edge cases.
+     set "LAST_BUILT_WIN="
+@@ -125,16 +143,19 @@ if not "%FORCE_REBUILD%"=="1" if exist "%CODE_HOME%\last-built-bin.txt" (
+     )
+ 
+     if not "%LAST_BUILT_WIN_EXE%"=="" if exist "%LAST_BUILT_WIN_EXE%" (
+-      set "CACHED_EXE=%CODE_HOME%\code.exe"
++      set "CACHED_EXE=%CACHE_HOME%\code.exe"
+       copy /Y "%LAST_BUILT_WIN_EXE%" "%CACHED_EXE%" >nul 2>nul
+       if "%ERRORLEVEL%"=="0" (
++        call :set_run_env
+         "%CACHED_EXE%"%CODE_ARGS%
+       ) else (
+         REM If the cached exe is locked by another running instance, run the fresh binary directly.
++        call :set_run_env
+         "%LAST_BUILT_WIN_EXE%"%CODE_ARGS%
+       )
+     ) else (
+       REM Fallback: run via Git Bash if the path couldn't be converted.
++      call :set_run_env
+       "%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; %LAST_BUILT_BIN%%CODE_ARGS%"
+     )
+     set "EXIT_CODE=%ERRORLEVEL%"
+@@ -144,6 +165,7 @@ if not "%FORCE_REBUILD%"=="1" if exist "%CODE_HOME%\last-built-bin.txt" (
+ )
+ if not "%FORCE_REBUILD%"=="1" if exist "%FAST_BIN%" (
+   REM Run via Git Bash so the non-.exe binary works reliably.
++  call :set_run_env
+   "%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; ./code-rs/target/dev-fast/code%CODE_ARGS%"
+   set "EXIT_CODE=%ERRORLEVEL%"
+   popd >nul
+@@ -151,26 +173,43 @@ if not "%FORCE_REBUILD%"=="1" if exist "%FAST_BIN%" (
+ )
+ 
+ REM No cached binary: build (and optionally run) via build-fast.sh.
+-if "%CODE_ARGS%"=="" (
+-  "%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; ./build-fast.sh run"
++call :set_build_env
++"%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; ./build-fast.sh"
++if errorlevel 1 (
++  set "EXIT_CODE=%ERRORLEVEL%"
++  popd >nul
++  endlocal & exit /b %EXIT_CODE%
++)
++if exist "%FAST_BIN_EXE%" (
++  call :set_run_env
++  "%FAST_BIN_EXE%"%CODE_ARGS%
+ ) else (
+-  "%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; ./build-fast.sh"
+-  if errorlevel 1 (
+-    set "EXIT_CODE=%ERRORLEVEL%"
+-    popd >nul
+-    endlocal & exit /b %EXIT_CODE%
+-  )
+-  if exist "%FAST_BIN_EXE%" (
+-    "%FAST_BIN_EXE%"%CODE_ARGS%
+-  ) else (
+-    "%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; ./code-rs/target/dev-fast/code%CODE_ARGS%"
+-  )
++  call :set_run_env
++  "%BASH_EXE%" -lc "cd \"`cygpath -u '%CD%'`\"; ./code-rs/target/dev-fast/code%CODE_ARGS%"
+ )
+ 
+ set "EXIT_CODE=%ERRORLEVEL%"
+ popd >nul
+ endlocal & exit /b %EXIT_CODE%
+ 
++:set_run_env
++if "%RUN_USE_REPO_HOME%"=="1" (
++  set "CODE_HOME=%CACHE_HOME%"
++  set "CODEX_HOME=%CACHE_HOME%"
++  set "CODES_PREFER_CODEX_HOME="
++) else (
++  set "CODE_HOME="
++  set "CODEX_HOME="
++  set "CODES_PREFER_CODEX_HOME=1"
++)
++exit /b 0
++
++:set_build_env
++set "CODE_HOME=%CACHE_HOME%"
++set "CODEX_HOME=%CACHE_HOME%"
++set "CODES_PREFER_CODEX_HOME="
++exit /b 0
++
+ :resolve_repo_root
+ set "REPO_WIN="
+ 

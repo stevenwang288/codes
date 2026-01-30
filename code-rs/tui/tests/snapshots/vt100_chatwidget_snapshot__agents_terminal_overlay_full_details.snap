@@ -3,14 +3,14 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: "&output"
 ---
  +--------------------------------------------------------------------------------------------+
- |                                         Every Code                                         |
+ |                Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui               |
  +--------------------------------------------------------------------------------------------+
- + Agents - Ctrl+A to close-------------------------------------------------------------------+
- | Filter   1 All - 2 Running - 3 Failed - 4 Done - 5 Review               Sort: ( Recent ▼ ) |
+ + 代理 - Ctrl+A 关闭-------------------------------------------------------------------------+
+ | 筛选   1 全部 - 2 运行中 - 3 失败 - 4 已完成 - 5 审查                     排序：( 最近 ▼ ) |
  | +----------------------++----------------------------------------------------------------+ |
  | |Docs Sweep            || Docs Sweep / CLAUDE-3-Opus                                     | |
- | |› CLAUDE-3-Opus ✔     || Status: ✔ Completed   Model: CLAUDE-3-Opus   ID: #docs-sw      | |
- | |  GPT-4o ✖            ||Batch: Batch batchdoc                                           | |
+ | |› CLAUDE-3-Opus ✔     || 状态： ✔ 已完成   模型： CLAUDE-3-Opus   ID： #docs-sw   批次：| |
+ | |  GPT-4o ✖            ||Batch batchdoc                                                  | |
  | |                      ||                                                                | |
  | |                      ||+ Highlights (h) ▼ --------------------------------------------+| |
  | |                      |||   • Final: ### Highlights - New Auto Drive controls - Faster  | |
@@ -21,13 +21,13 @@ expression: "&output"
  | |                      ||   Focus on October 2025 product changes                        | |
  | |                      ||                                                                | |
  | |                      ||+ Action Log (a) ▼ - 5 entries --------------------------------+| |
- | |                      |||   STATUS                                                      | |
- | |                      |||   MM:SS  Status → Running                                     | |
- | |                      |||   PROGRESS                                                    | |
+ | |                      |||   状态                                                        | |
+ | |                      |||   MM:SS  状态：运行中                                         | |
+ | |                      |||   进度                                                        | |
  | |                      |||   MM:SS  Collecting release notes                             | |
  | |                      |||          Reviewing eng updates                                | |
- | |                      |||   STATUS                                                      | |
- | |                      |||   MM:SS  Status → Completed                                   | |
+ | |                      |||   状态                                                        | |
+ | |                      |||   MM:SS  状态：已完成                                         | |
  | +----------------------++----------------------------------------------------------------+ |
- | [↑/↓/←/→] Navigate   [1-5] Filter   [S] Sort   [H/A] Toggle Details   [X] Stop   [Ctrl+A]  |
+ |     [↑/↓/←/→] 导航   [1-5] 筛选   [S] 排序   [H/A] 切换详情   [X] 停止   [Ctrl+A] 退出     |
  +--------------------------------------------------------------------------------------------+

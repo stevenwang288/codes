@@ -211,7 +211,7 @@ static PRESETS: Lazy<Vec<ModelPreset>> = Lazy::new(|| {
                 reasoning_effort_mapping: None,
                 migration_config_key: HIDE_GPT_5_2_CODEX_MIGRATION_PROMPT_CONFIG.to_string(),
             }),
-            show_in_picker: true,
+            show_in_picker: false,
         },
         ModelPreset {
             id: "gpt-5.1-codex".to_string(),
@@ -267,7 +267,7 @@ static PRESETS: Lazy<Vec<ModelPreset>> = Lazy::new(|| {
                 reasoning_effort_mapping: None,
                 migration_config_key: HIDE_GPT_5_2_CODEX_MIGRATION_PROMPT_CONFIG.to_string(),
             }),
-            show_in_picker: true,
+            show_in_picker: false,
         },
         ModelPreset {
             id: "gpt-5.1".to_string(),

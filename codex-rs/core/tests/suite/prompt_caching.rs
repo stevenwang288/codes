@@ -12,6 +12,7 @@ use codex_core::protocol_config_types::ReasoningSummary;
 use codex_core::shell::Shell;
 use codex_core::shell::default_user_shell;
 use codex_protocol::config_types::CollaborationMode;
+use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -91,7 +92,7 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
             config.user_instructions = Some("be consistent and helpful".to_string());
             config.model = Some("gpt-5.1-codex-max".to_string());
             // Keep tool expectations stable when the default web_search mode changes.
-            config.web_search_mode = Some(WebSearchMode::Cached);
+            config.web_search_mode = WebSearchMode::Cached;
             config.features.enable(Feature::CollaborationModes);
         })
         .build(&server)
@@ -353,6 +354,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
             effort: Some(Some(ReasoningEffort::High)),
             summary: Some(ReasoningSummary::Detailed),
             collaboration_mode: None,
+            personality: None,
         })
         .await?;
 
@@ -411,11 +413,14 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
 
     let TestCodex { codex, .. } = test_codex().build(&server).await?;
 
-    let collaboration_mode = CollaborationMode::Custom(Settings {
-        model: "gpt-5.1".to_string(),
-        reasoning_effort: Some(ReasoningEffort::High),
-        developer_instructions: None,
-    });
+    let collaboration_mode = CollaborationMode {
+        mode: ModeKind::Custom,
+        settings: Settings {
+            model: "gpt-5.1".to_string(),
+            reasoning_effort: Some(ReasoningEffort::High),
+            developer_instructions: None,
+        },
+    };
 
     codex
         .submit(Op::OverrideTurnContext {
@@ -426,6 +431,7 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
             effort: Some(Some(ReasoningEffort::Low)),
             summary: None,
             collaboration_mode: Some(collaboration_mode),
+            personality: None,
         })
         .await?;
 
@@ -583,6 +589,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
             summary: ReasoningSummary::Detailed,
             collaboration_mode: None,
             final_output_json_schema: None,
+            personality: None,
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
@@ -677,6 +684,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             summary: default_summary,
             collaboration_mode: None,
             final_output_json_schema: None,
+            personality: None,
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
@@ -695,6 +703,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             summary: default_summary,
             collaboration_mode: None,
             final_output_json_schema: None,
+            personality: None,
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
@@ -775,6 +784,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             summary: default_summary,
             collaboration_mode: None,
             final_output_json_schema: None,
+            personality: None,
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
@@ -793,6 +803,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             summary: ReasoningSummary::Detailed,
             collaboration_mode: None,
             final_output_json_schema: None,
+            personality: None,
         })
         .await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;

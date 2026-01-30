@@ -2320,14 +2320,17 @@ fn settings_overview_hints_clean() {
     assert!(
         output
             .lines()
-            .any(|line| line.contains("Settings ▸ Overview")),
+            .any(|line| line.contains("设置 ▸ 概览") || line.contains("Settings ▸ Overview")),
         "border title should show settings breadcrumb\n{}",
         output
     );
     assert!(
         output
             .lines()
-            .any(|line| line.contains("↑ ↓ Move    Enter Open    Esc Close    ? Help")),
+            .any(|line| {
+                line.contains("↑ ↓ 移动    Enter 打开    Esc 关闭    ? 帮助")
+                    || line.contains("↑ ↓ Move    Enter Open    Esc Close    ? Help")
+            }),
         "footer hints should appear on the last row\n{}",
         output
     );
@@ -2344,12 +2347,12 @@ fn settings_overlay_theme_swatch_visible() {
     let frame = render_chat_widget_to_vt100(&mut harness, 100, 28);
     let normalized = normalize_output(frame.clone());
     assert!(
-        normalized.contains("Theme: "),
+        normalized.contains("主题: ") || normalized.contains("Theme: "),
         "theme summary should include labeled theme value\n{}",
         frame
     );
     assert!(
-        normalized.contains("Spinner:"),
+        normalized.contains("指示器:") || normalized.contains("Spinner:"),
         "theme summary should include spinner label\n{}",
         frame
     );
@@ -2448,7 +2451,10 @@ fn agents_overlay_narrow_terminal_does_not_panic() {
 
     let output = render_chat_widget_to_vt100(&mut harness, 52, 18);
     let output = normalize_output(output);
-    assert!(output.contains("Agents"), "Agents overlay did not render");
+    assert!(
+        output.contains("代理") || output.contains("Agents"),
+        "Agents overlay did not render:\n{output}"
+    );
 }
 
 #[test]
@@ -2466,7 +2472,10 @@ fn agents_toggle_claude_opus_persists_via_slash_command() {
     harness.open_agents_settings_overlay();
 
     let overlay_initial = normalize_output(render_chat_widget_to_vt100(&mut harness, 100, 28));
-    assert!(overlay_initial.contains("Agents"), "Agents overlay did not open");
+    assert!(
+        overlay_initial.contains("代理") || overlay_initial.contains("Agents"),
+        "Agents overlay did not open:\n{overlay_initial}"
+    );
 
     harness.show_agent_editor("claude-opus-4.5");
 

@@ -3,37 +3,37 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: "frames.join(\"\\n---FRAME---\\n\")"
 ---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
 
- • I can help with various tasks including:
+ • 我可以帮你处理多种任务，包括：
 
-   - Writing code
-   - Reading files
-   - Running commands
+   - 写代码
+   - 读取文件
+   - 运行命令
 
 
 
-  Auto Drive > <status redacted>                                 
+  自动运行 > waiting for code review...                         ✶ 等待审查 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key
 ---FRAME---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
 
- • I can help with various tasks including:
+ • 我可以帮你处理多种任务，包括：
 
-   - Writing code
-   - Reading files
-   - Running commands
+   - 写代码
+   - 读取文件
+   - 运行命令
 
 
 
-  Auto Drive > <status redacted>                                 
+  自动运行 > Coordinator resumed the workflow.                    ✶ 思考中 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key

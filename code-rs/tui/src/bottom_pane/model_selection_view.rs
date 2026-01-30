@@ -34,7 +34,7 @@ impl FlatPreset {
                 FlatPreset {
                     model: preset.model.to_string(),
                     effort: effort_preset.effort.into(),
-                    label: format!("{} {}", preset.display_name, effort_label.to_lowercase()),
+                    label: format!("{} {}", preset.display_name, effort_label),
                     description: effort_preset.description.to_string(),
                 }
             })
@@ -43,12 +43,12 @@ impl FlatPreset {
 
     fn effort_id_label(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::XHigh => "XHigh",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Minimal => "Minimal",
-            ReasoningEffort::None => "None",
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
         }
     }
 }
@@ -802,9 +802,15 @@ impl ModelSelectionView {
         lines.push(Line::from(vec![
             Span::styled("↑↓", Style::default().fg(crate::colors::light_blue())),
             Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate"))),
-            Span::styled("Enter", Style::default().fg(crate::colors::success())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(crate::colors::success()),
+            ),
             Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.select_label"))),
-            Span::styled("Esc", Style::default().fg(crate::colors::error())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(crate::colors::error()),
+            ),
             Span::raw(format!(" {}", code_i18n::tr_plain("tui.common.cancel"))),
         ]));
 

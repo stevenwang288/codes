@@ -177,12 +177,18 @@ impl<'a> BottomPaneView<'a> for McpSettingsView {
                 format!(" {}  ", code_i18n::tr_plain("tui.mcp.hint.navigate_toggle")),
                 Style::default().fg(crate::colors::text_dim()),
             ),
-            Span::styled("Enter", Style::default().fg(crate::colors::success())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(crate::colors::success()),
+            ),
             Span::styled(
                 format!(" {}  ", code_i18n::tr_plain("tui.mcp.hint.toggle_open")),
                 Style::default().fg(crate::colors::text_dim()),
             ),
-            Span::styled("Esc", Style::default().fg(crate::colors::error())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(crate::colors::error()),
+            ),
             Span::styled(
                 format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
                 Style::default().fg(crate::colors::text_dim()),

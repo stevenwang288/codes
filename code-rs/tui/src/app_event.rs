@@ -135,6 +135,9 @@ pub(crate) enum AppEvent {
     /// Emit a best-effort OSC 9 notification from the terminal.
     EmitTuiNotification { title: String, body: Option<String> },
 
+    /// Emit a terminal bell (BEL, `\x07`).
+    RingBell,
+
     /// Schedule a one-shot animation frame roughly after the given duration.
     /// Multiple requests are coalesced by the central frame scheduler.
     ScheduleFrameIn(Duration),

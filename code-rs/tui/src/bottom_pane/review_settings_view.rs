@@ -314,12 +314,12 @@ impl ReviewSettingsView {
 
     fn reasoning_label(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::XHigh => "XHigh",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Minimal => "Minimal",
-            ReasoningEffort::None => "None",
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
         }
     }
 
@@ -361,7 +361,7 @@ impl ReviewSettingsView {
         match row {
             RowData::SectionReview => {
                 Line::from(vec![Span::styled(
-                    " /review (manual) ",
+                    code_i18n::tr_plain("tui.settings.review.section.manual"),
                     Style::default()
                         .fg(colors::primary())
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -369,7 +369,7 @@ impl ReviewSettingsView {
             }
             RowData::SectionAutoReview => {
                 Line::from(vec![Span::styled(
-                    " Auto Review (background) ",
+                    code_i18n::tr_plain("tui.settings.review.section.auto_review"),
                     Style::default()
                         .fg(colors::primary())
                         .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
@@ -384,22 +384,35 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text()).add_modifier(Modifier::BOLD)
                 };
                 let status_span = if self.review_auto_resolve_enabled {
-                    Span::styled("On", Style::default().fg(colors::success()))
+                    Span::styled(
+                        code_i18n::tr_plain("tui.common.on"),
+                        Style::default().fg(colors::success()),
+                    )
                 } else {
-                    Span::styled("Off", Style::default().fg(colors::text_dim()))
+                    Span::styled(
+                        code_i18n::tr_plain("tui.common.off"),
+                        Style::default().fg(colors::text_dim()),
+                    )
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Enabled", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.enabled"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     status_span,
-                    Span::raw("  (auto-resolve /review)"),
+                    Span::raw("  "),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.hint.auto_resolve"),
+                        Style::default().fg(colors::text_dim()),
+                    ),
                 ];
                 if selected {
                     let hint = if self.review_auto_resolve_enabled {
-                        "(press Enter to disable)"
+                        format!("({})", code_i18n::tr_plain("tui.common.hint.enter_disable"))
                     } else {
-                        "(press Enter to enable)"
+                        format!("({})", code_i18n::tr_plain("tui.common.hint.enter_enable"))
                     };
                     spans.push(Span::raw("  "));
                     spans.push(Span::styled(hint, Style::default().fg(colors::text_dim())));
@@ -422,7 +435,7 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text())
                 };
                 let value_text = if self.review_use_chat_model {
-                    "Follow Chat".to_string()
+                    code_i18n::tr_plain("tui.model_selection.follow_chat.title").to_string()
                 } else {
                     format!(
                         "{} ({})",
@@ -432,12 +445,19 @@ impl ReviewSettingsView {
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Review Model", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.review_model"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_text, value_style),
                 ];
                 if selected {
-                    spans.push(Span::raw("  Enter to change"));
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.common.hint.enter_to_change"),
+                        Style::default().fg(colors::text_dim()),
+                    ));
                 }
                 Line::from(spans)
             }
@@ -457,7 +477,7 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text())
                 };
                 let value_text = if self.review_resolve_use_chat_model {
-                    "Follow Chat".to_string()
+                    code_i18n::tr_plain("tui.model_selection.follow_chat.title").to_string()
                 } else {
                     format!(
                         "{} ({})",
@@ -467,12 +487,19 @@ impl ReviewSettingsView {
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Resolve Model", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.resolve_model"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_text, value_style),
                 ];
                 if selected {
-                    spans.push(Span::raw("  Enter to change"));
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.common.hint.enter_to_change"),
+                        Style::default().fg(colors::text_dim()),
+                    ));
                 }
                 Line::from(spans)
             }
@@ -494,20 +521,31 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text())
                 };
                 let value_label = if self.review_followups == 0 {
-                    "0 (no re-reviews)".to_string()
+                    code_i18n::tr_plain("tui.settings.review.followups.zero").to_string()
                 } else if self.review_followups == 1 {
-                    "1 re-review".to_string()
+                    code_i18n::tr_plain("tui.settings.review.followups.one").to_string()
                 } else {
-                    format!("{} re-reviews", self.review_followups)
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.settings.review.followups.many",
+                        &[("count", &self.review_followups.to_string())],
+                    )
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Max follow-up reviews", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.max_followups"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_label, value_style),
                 ];
                 if selected {
-                    spans.push(Span::raw("  (←→ to adjust)"));
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.hint.adjust"),
+                        Style::default().fg(colors::text_dim()),
+                    ));
                 }
                 Line::from(spans)
             }
@@ -520,22 +558,35 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text()).add_modifier(Modifier::BOLD)
                 };
                 let status_span = if self.auto_review_enabled {
-                    Span::styled("On", Style::default().fg(colors::success()))
+                    Span::styled(
+                        code_i18n::tr_plain("tui.common.on"),
+                        Style::default().fg(colors::success()),
+                    )
                 } else {
-                    Span::styled("Off", Style::default().fg(colors::text_dim()))
+                    Span::styled(
+                        code_i18n::tr_plain("tui.common.off"),
+                        Style::default().fg(colors::text_dim()),
+                    )
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Enabled", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.enabled"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     status_span,
-                    Span::raw("  (background auto review)"),
+                    Span::raw("  "),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.hint.auto_review_background"),
+                        Style::default().fg(colors::text_dim()),
+                    ),
                 ];
                 if selected {
                     let hint = if self.auto_review_enabled {
-                        "(press Enter to disable)"
+                        format!("({})", code_i18n::tr_plain("tui.common.hint.enter_disable"))
                     } else {
-                        "(press Enter to enable)"
+                        format!("({})", code_i18n::tr_plain("tui.common.hint.enter_enable"))
                     };
                     spans.push(Span::raw("  "));
                     spans.push(Span::styled(hint, Style::default().fg(colors::text_dim())));
@@ -558,7 +609,7 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text())
                 };
                 let value_text = if self.auto_review_use_chat_model {
-                    "Follow Chat".to_string()
+                    code_i18n::tr_plain("tui.model_selection.follow_chat.title").to_string()
                 } else {
                     format!(
                         "{} ({})",
@@ -568,12 +619,19 @@ impl ReviewSettingsView {
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Review Model", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.review_model"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_text, value_style),
                 ];
                 if selected {
-                    spans.push(Span::raw("  Enter to change"));
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.common.hint.enter_to_change"),
+                        Style::default().fg(colors::text_dim()),
+                    ));
                 }
                 Line::from(spans)
             }
@@ -593,7 +651,7 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text())
                 };
                 let value_text = if self.auto_review_resolve_use_chat_model {
-                    "Follow Chat".to_string()
+                    code_i18n::tr_plain("tui.model_selection.follow_chat.title").to_string()
                 } else {
                     format!(
                         "{} ({})",
@@ -603,12 +661,19 @@ impl ReviewSettingsView {
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Resolve Model", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.resolve_model"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_text, value_style),
                 ];
                 if selected {
-                    spans.push(Span::raw("  Enter to change"));
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.common.hint.enter_to_change"),
+                        Style::default().fg(colors::text_dim()),
+                    ));
                 }
                 Line::from(spans)
             }
@@ -630,20 +695,31 @@ impl ReviewSettingsView {
                     Style::default().fg(colors::text())
                 };
                 let value_label = if self.auto_review_followups == 0 {
-                    "0 (no follow-ups)".to_string()
+                    code_i18n::tr_plain("tui.settings.review.auto_followups.zero").to_string()
                 } else if self.auto_review_followups == 1 {
-                    "1 follow-up".to_string()
+                    code_i18n::tr_plain("tui.settings.review.auto_followups.one").to_string()
                 } else {
-                    format!("{} follow-ups", self.auto_review_followups)
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.settings.review.auto_followups.many",
+                        &[("count", &self.auto_review_followups.to_string())],
+                    )
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Max follow-up reviews", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.label.max_followups"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_label, value_style),
                 ];
                 if selected {
-                    spans.push(Span::raw("  (←→ to adjust)"));
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::styled(
+                        code_i18n::tr_plain("tui.settings.review.hint.adjust"),
+                        Style::default().fg(colors::text_dim()),
+                    ));
                 }
                 Line::from(spans)
             }
@@ -802,12 +878,18 @@ impl<'a> BottomPaneView<'a> for ReviewSettingsView {
                     format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
                     Style::default().fg(colors::text_dim()),
                 ),
-                Span::styled("Enter", Style::default().fg(colors::success())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.enter"),
+                    Style::default().fg(colors::success()),
+                ),
                 Span::styled(
                     format!(" {}  ", code_i18n::tr_plain("tui.common.select_label")),
                     Style::default().fg(colors::text_dim()),
                 ),
-                Span::styled("Space", Style::default().fg(colors::success())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.space"),
+                    Style::default().fg(colors::success()),
+                ),
                 Span::styled(
                     format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")),
                     Style::default().fg(colors::text_dim()),
@@ -817,7 +899,10 @@ impl<'a> BottomPaneView<'a> for ReviewSettingsView {
                     format!(" {}  ", code_i18n::tr_plain("tui.common.adjust")),
                     Style::default().fg(colors::text_dim()),
                 ),
-                Span::styled("Esc", Style::default().fg(colors::error())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.esc"),
+                    Style::default().fg(colors::error()),
+                ),
                 Span::styled(
                     format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
                     Style::default().fg(colors::text_dim()),

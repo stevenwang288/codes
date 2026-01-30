@@ -542,7 +542,10 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
         let name_block = Block::default()
             .borders(Borders::ALL)
             .border_style(name_border)
-            .title(Line::from(" ID "));
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr(ui_language, "tui.subagent_editor.label.id")
+            )));
         let name_inner = name_block.inner(name_box_rect);
         let name_padded = name_inner.inner(Margin::new(1, 0));
         name_block.render(name_box_rect, buf);
@@ -565,7 +568,10 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
         let orch_block = Block::default()
             .borders(Borders::ALL)
             .border_style(orch_border)
-            .title(Line::from(" Instructions "));
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr(ui_language, "tui.subagent_editor.label.instructions")
+            )));
         if orch_box_h >= 2 {
             let orch_inner = orch_block.inner(orch_box_rect);
             let orch_padded = orch_inner.inner(Margin::new(1, 0));

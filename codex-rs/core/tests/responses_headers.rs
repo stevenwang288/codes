@@ -104,6 +104,7 @@ async fn responses_stream_includes_subagent_header_on_review() {
         content: vec![ContentItem::InputText {
             text: "hello".into(),
         }],
+        end_turn: None,
     }];
 
     let mut stream = client_session.stream(&prompt).await.expect("stream failed");
@@ -200,6 +201,7 @@ async fn responses_stream_includes_subagent_header_on_other() {
         content: vec![ContentItem::InputText {
             text: "hello".into(),
         }],
+        end_turn: None,
     }];
 
     let mut stream = client_session.stream(&prompt).await.expect("stream failed");
@@ -262,7 +264,7 @@ async fn responses_stream_includes_web_search_eligible_header_false_when_disable
 
     let test = test_codex()
         .with_config(|config| {
-            config.web_search_mode = Some(WebSearchMode::Disabled);
+            config.web_search_mode = WebSearchMode::Disabled;
         })
         .build(&server)
         .await
@@ -354,6 +356,7 @@ async fn responses_respects_model_info_overrides_from_config() {
         content: vec![ContentItem::InputText {
             text: "hello".into(),
         }],
+        end_turn: None,
     }];
 
     let mut stream = client.stream(&prompt).await.expect("stream failed");

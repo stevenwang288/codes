@@ -13,7 +13,7 @@ Every Code supports several mechanisms for setting config values:
   - If `value` cannot be parsed as a valid TOML value, it is treated as a string value. This means that `-c model='"o3"'` and `-c model=o3` are equivalent.
     - In the first case, the value is the TOML string `"o3"`, while in the second the value is `o3`, which is not valid TOML and therefore treated as the TOML string `"o3"`.
     - Because quotes are interpreted by one's shell, `-c key="true"` will be correctly interpreted in TOML as `key = true` (a boolean) and not `key = "true"` (a string). If for some reason you needed the string `"true"`, you would need to use `-c key='"true"'` (note the two sets of quotes).
-- The `$CODE_HOME/config.toml` configuration file. `CODE_HOME` defaults to `~/.code`; Every Code (Code) also reads from `$CODEX_HOME`/`~/.codex` for backwards compatibility but only writes to `~/.code`. (Logs and other state use the same directory.)
+- The `$CODEX_HOME/config.toml` configuration file. `CODEX_HOME` defaults to `~/.codex`. (Logs and other state use the same directory.)
 
 - https://developers.openai.com/codex/config-reference
 
@@ -411,7 +411,7 @@ This config option is comparable to how Claude and Cursor define `mcpServers` in
 }
 ```
 
-Should be represented as follows in `~/.code/config.toml` (Code will also read the legacy `~/.codex/config.toml` if it exists):
+Should be represented as follows in `~/.codex/config.toml`:
 
 ```toml
 # The top-level table name must be `mcp_servers`
@@ -702,8 +702,7 @@ Set `otel.exporter` to control where events go:
   ```
 
 Both OTLP exporters accept an optional `tls` block so you can trust a custom CA
-or enable mutual TLS. Relative paths are resolved against `~/.code/` (legacy
-`~/.codex/` is also read):
+or enable mutual TLS. Relative paths are resolved against `~/.codex/`:
 
 ```toml
 [otel]
@@ -799,10 +798,10 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-To have Code use this script for notifications, you would configure it via `notify` in `~/.code/config.toml` (legacy `~/.codex/config.toml` is still read) using the appropriate path to `notify.py` on your computer:
+To have Code use this script for notifications, you would configure it via `notify` in `~/.codex/config.toml` using the appropriate path to `notify.py` on your computer:
 
 ```toml
-notify = ["python3", "/Users/mbolin/.code/notify.py"]
+notify = ["python3", "/Users/mbolin/.codex/notify.py"]
 ```
 
 > [!NOTE]
@@ -810,7 +809,7 @@ notify = ["python3", "/Users/mbolin/.code/notify.py"]
 
 ## history
 
-By default, the Code CLI records messages sent to the model in `$CODE_HOME/history.jsonl` (legacy `$CODEX_HOME/history.jsonl` is also read). On UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
+By default, the Code CLI records messages sent to the model in `$CODEX_HOME/history.jsonl`. On UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
 
 To disable this behavior, configure `[history]` as follows:
 

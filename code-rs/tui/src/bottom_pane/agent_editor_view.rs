@@ -371,12 +371,28 @@ impl AgentEditorView {
             #[cfg(target_os = "macos")]
             {
                 let brew_formula = macos_brew_formula_for_command(&v.command);
-                v.install_hint = format!("'{}' not found. On macOS, try Homebrew (brew install {brew_formula}) or consult the agent's docs.", v.command);
+                v.install_hint = code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.agent_editor.install_hint.macos",
+                    &[("command", v.command.as_str()), ("brew_formula", &brew_formula)],
+                );
             }
             #[cfg(target_os = "linux")]
-            { v.install_hint = format!("'{}' not found. On Linux, install via your package manager or consult the agent's docs.", v.command); }
+            {
+                v.install_hint = code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.agent_editor.install_hint.linux",
+                    &[("command", v.command.as_str())],
+                );
+            }
             #[cfg(target_os = "windows")]
-            { v.install_hint = format!("'{}' not found. On Windows, install the CLI from the vendor site and ensure it’s on PATH.", v.command); }
+            {
+                v.install_hint = code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.agent_editor.install_hint.windows",
+                    &[("command", v.command.as_str())],
+                );
+            }
         }
 
         v
@@ -650,7 +666,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" Configure Agent ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.agent_editor.panel.title")
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -696,7 +715,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
             }
             let name_block = Block::default()
                 .borders(Borders::ALL)
-                .title(Line::from(" ID "))
+                .title(Line::from(format!(
+                    " {} ",
+                    code_i18n::tr_plain("tui.agent_editor.field.id")
+                )))
                 .border_style(name_border);
             let name_inner = name_block.inner(name_rect);
             let name_field_inner = name_inner.inner(Margin::new(1, 0));
@@ -711,7 +733,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
         if command_rect.width > 0 && command_rect.height > 0 {
             let command_block = Block::default()
                 .borders(Borders::ALL)
-                .title(Line::from(" Command "))
+                .title(Line::from(format!(
+                    " {} ",
+                    code_i18n::tr_plain("tui.agent_editor.field.command")
+                )))
                 .border_style(if self.field == FIELD_COMMAND {
                     Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD)
                 } else {
@@ -729,7 +754,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
         let ro_rect = ro_rect.intersection(*buf.area());
         let ro_block = Block::default()
             .borders(Borders::ALL)
-            .title(Line::from(" Read-only Params "))
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.agent_editor.field.read_only_params")
+            )))
             .border_style(if self.field == FIELD_READ_ONLY { Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD) } else { Style::default().fg(crate::colors::border()) });
         if ro_rect.width > 0 && ro_rect.height > 0 {
             let ro_inner_rect = ro_block.inner(ro_rect);
@@ -744,7 +772,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
         let wr_rect = wr_rect.intersection(*buf.area());
         let wr_block = Block::default()
             .borders(Borders::ALL)
-            .title(Line::from(" Write Params "))
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.agent_editor.field.write_params")
+            )))
             .border_style(if self.field == FIELD_WRITE { Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD) } else { Style::default().fg(crate::colors::border()) });
         if wr_rect.width > 0 && wr_rect.height > 0 {
             let wr_inner_rect = wr_block.inner(wr_rect);
@@ -766,7 +797,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
         }
         let desc_block = Block::default()
             .borders(Borders::ALL)
-            .title(Line::from(" What is this agent good at? "))
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.agent_editor.field.description")
+            )))
             .border_style(desc_border_style);
         if desc_rect.width > 0 && desc_rect.height > 0 {
             let desc_inner_rect = desc_block.inner(desc_rect);
@@ -781,7 +815,10 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
         let instr_rect = instr_rect.intersection(*buf.area());
         let instr_block = Block::default()
             .borders(Borders::ALL)
-            .title(Line::from(" Instructions "))
+            .title(Line::from(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.agent_editor.field.instructions")
+            )))
             .border_style(if self.field == FIELD_INSTRUCTIONS { Style::default().fg(crate::colors::primary()).add_modifier(Modifier::BOLD) } else { Style::default().fg(crate::colors::border()) });
         if instr_rect.width > 0 && instr_rect.height > 0 {
             let instr_inner_rect = instr_block.inner(instr_rect);

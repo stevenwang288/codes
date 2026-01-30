@@ -3,13 +3,13 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: output
 ---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
- • I can help with various tasks including:
+ • 我可以帮你处理多种任务，包括：
 
-   - Writing code
-   - Reading files
-   - Running commands
+   - 写代码
+   - 读取文件
+   - 运行命令
 
 
  › /agents
@@ -17,7 +17,7 @@ expression: output
  ✖ ⚠️  status_update: missing agent batch_id. tool=agent_status
    agents=orphan-agent
 
- +----------------------------- ✶ Using tools... -----------------------------+
- | What can I code for you today?                                             |
+ +----------------------------- ✶ 使用工具... -----------------------------+
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
- Read Only  (Shift+Tab change)                        Ctrl+G guide  •  API key
+ Read Only  (Shift+Tab change) Ctrl+S 设置   Ctrl+G 帮助  •  Tab 模式: 开发  •

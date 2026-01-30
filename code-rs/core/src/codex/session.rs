@@ -317,6 +317,7 @@ pub(crate) struct Session {
     /// the model as well as sandbox policies are resolved against this path
     /// instead of `std::env::current_dir()`.
     pub(super) cwd: PathBuf,
+    pub(super) code_home: PathBuf,
     pub(super) base_instructions: Option<String>,
     pub(super) user_instructions: Option<String>,
     pub(super) demo_developer_message: Option<String>,
@@ -1460,7 +1461,8 @@ impl Session {
             Some(turn_context.approval_policy),
             Some(turn_context.sandbox_policy.clone()),
             Some(self.user_shell.clone()),
-        );
+        )
+        .with_code_home(Some(self.code_home.clone()));
 
         if let Some(mut env_ctx_items) = self.maybe_emit_env_ctx_messages(
             &env_context,

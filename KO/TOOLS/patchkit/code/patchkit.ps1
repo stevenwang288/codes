@@ -142,8 +142,8 @@ function Show-Status {
 
 function Print-TestInstructions {
   Write-Section "Test"
-  $home = "$env:USERPROFILE/.codes"
-  $log = "$env:USERPROFILE/.codes/patchkit/i18n-missing.jsonl"
+  $home = Resolve-CodeHome -RepoRoot $RepoRoot
+  $log = Resolve-I18nLogPath -RepoRoot $RepoRoot
   Write-Host "[code-patchkit] Home: $home"
   Write-Host "[code-patchkit] Log:  $log"
   Write-Host "[code-patchkit] Start: run ./codes (or patchkit start), then open Help/Popular commands." 

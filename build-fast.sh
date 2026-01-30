@@ -2,6 +2,16 @@
 # Fast build script for local development - optimized for speed
 set -euo pipefail
 
+# Windows builds can hit very high peak memory usage (LLVM) with extreme
+# codegen-unit fanout. Allow an opt-out override, but default to a safer value
+# to avoid "rustc-LLVM ERROR: out of memory" on typical developer machines.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    : "${CARGO_PROFILE_DEV_FAST_CODEGEN_UNITS:=64}"
+    export CARGO_PROFILE_DEV_FAST_CODEGEN_UNITS
+    ;;
+esac
+
 # Usage banner
 usage() {
   cat <<USAGE
@@ -558,8 +568,19 @@ if [ -z "$TRIPLE" ]; then
   fi
 fi
 
-# Check Cargo.lock validity (fast, non-blocking check) using the selected cargo
-if ! CARGO_HOME="$CARGO_HOME" RUSTUP_HOME="$RUSTUP_HOME" ${USE_CARGO} metadata --locked --format-version 1 >/dev/null 2>&1; then
+# Check Cargo.lock validity (fast, non-blocking check) using the selected cargo.
+# On some Windows/Git-Bash environments we can hit transient fork/resource
+# failures; retry once to avoid falling back to an unlocked build unnecessarily.
+LOCK_OK=0
+for _attempt in 1 2; do
+  if CARGO_HOME="$CARGO_HOME" RUSTUP_HOME="$RUSTUP_HOME" ${USE_CARGO} metadata --locked --format-version 1 >/dev/null 2>&1; then
+    LOCK_OK=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$LOCK_OK" -ne 1 ]; then
     echo "⚠️  Warning: Cargo.lock appears out of date or inconsistent"
     echo "  This might mean:"
     echo "  • You've modified Cargo.toml dependencies"

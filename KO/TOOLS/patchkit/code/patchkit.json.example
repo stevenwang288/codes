@@ -5,7 +5,7 @@
     "branch": "main"
   },
   "paths": {
-    "codeHome": ".codes",
-    "i18nLog": ".codes/patchkit/i18n-missing.jsonl"
+    "codeHome": ".codex",
+    "i18nLog": "patchkit/i18n-missing.jsonl"
   }
 }

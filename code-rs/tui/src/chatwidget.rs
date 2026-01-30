@@ -4578,6 +4578,7 @@ impl ChatWidget<'_> {
         }
     }
 
+    #[cfg(debug_assertions)]
     fn reasoning_preview(lines: &[Line<'static>]) -> String {
         const MAX_LINES: usize = 3;
         const MAX_CHARS: usize = 120;
@@ -16785,14 +16786,14 @@ impl ChatWidget<'_> {
             (
                 GroupStatus {
                     group: ValidationGroup::Functional,
-                    name: "Functional checks",
+                    name: code_i18n::tr_plain("tui.validation.group.functional"),
                 },
                 self.config.validation.groups.functional,
             ),
             (
                 GroupStatus {
                     group: ValidationGroup::Stylistic,
-                    name: "Stylistic checks",
+                    name: code_i18n::tr_plain("tui.validation.group.stylistic"),
                 },
                 self.config.validation.groups.stylistic,
             ),
@@ -24111,6 +24112,11 @@ Have we met every part of this goal and is there no further work to do?"#
             .collect();
         let mut extras: Vec<String> = Vec::new();
         for agent in &self.config.agents {
+            if let Some(spec) = agent_model_spec(&agent.name) {
+                if !spec.is_enabled() {
+                    continue;
+                }
+            }
             if !ordered.iter().any(|name| agent.name.eq_ignore_ascii_case(name)) {
                 extras.push(agent.name.to_ascii_lowercase());
             }
@@ -24118,6 +24124,11 @@ Have we met every part of this goal and is there no further work to do?"#
         let mut pending_agents: HashMap<String, AgentConfig> = HashMap::new();
         for pending in self.pending_agent_updates.values() {
             let lower = pending.cfg.name.to_ascii_lowercase();
+            if let Some(spec) = agent_model_spec(&pending.cfg.name) {
+                if !spec.is_enabled() {
+                    continue;
+                }
+            }
             pending_agents.insert(lower.clone(), pending.cfg.clone());
             if !ordered.iter().any(|name| name.eq_ignore_ascii_case(&lower)) {
                 extras.push(lower);
@@ -24228,12 +24239,56 @@ Have we met every part of this goal and is there no further work to do?"#
         if let Some(desc) = config_description {
             let trimmed = desc.trim();
             if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
+                if let Some(spec) = agent_model_spec(name).or_else(|| command.and_then(agent_model_spec))
+                {
+                    if trimmed != spec.description.trim() {
+                        return Some(trimmed.to_string());
+                    }
+                } else {
+                    return Some(trimmed.to_string());
+                }
             }
         }
         agent_model_spec(name)
             .or_else(|| command.and_then(|cmd| agent_model_spec(cmd)))
-            .map(|spec| spec.description.trim().to_string())
+            .map(|spec| match spec.slug {
+                "code-gpt-5.2" => code_i18n::tr_plain("tui.settings.agents.desc.code_gpt_5_2")
+                    .trim()
+                    .to_string(),
+                "code-gpt-5.2-codex" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.code_gpt_5_2_codex",
+                )
+                .trim()
+                .to_string(),
+                "code-gpt-5.1-codex-mini" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.code_gpt_5_1_codex_mini",
+                )
+                .trim()
+                .to_string(),
+                "claude-opus-4.5" => code_i18n::tr_plain("tui.settings.agents.desc.claude_opus_4_5")
+                    .trim()
+                    .to_string(),
+                "claude-sonnet-4.5" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.claude_sonnet_4_5",
+                )
+                .trim()
+                .to_string(),
+                "claude-haiku-4.5" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.claude_haiku_4_5",
+                )
+                .trim()
+                .to_string(),
+                "gemini-3-pro" => code_i18n::tr_plain("tui.settings.agents.desc.gemini_3_pro")
+                    .trim()
+                    .to_string(),
+                "gemini-3-flash" => code_i18n::tr_plain("tui.settings.agents.desc.gemini_3_flash")
+                    .trim()
+                    .to_string(),
+                "qwen-3-coder" => code_i18n::tr_plain("tui.settings.agents.desc.qwen_3_coder")
+                    .trim()
+                    .to_string(),
+                _ => spec.description.trim().to_string(),
+            })
             .filter(|desc| !desc.is_empty())
     }
 
@@ -27975,8 +28030,8 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn validation_group_label(group: ValidationGroup) -> &'static str {
         match group {
-            ValidationGroup::Functional => "Functional checks",
-            ValidationGroup::Stylistic => "Stylistic checks",
+            ValidationGroup::Functional => code_i18n::tr_plain("tui.validation.group.functional"),
+            ValidationGroup::Stylistic => code_i18n::tr_plain("tui.validation.group.stylistic"),
         }
     }
 
@@ -39621,6 +39676,7 @@ impl WidgetRef for &ChatWidget<'_> {
         } else {
             None
         };
+        #[cfg(debug_assertions)]
         #[derive(Debug)]
         struct HeightMismatch {
             history_id: HistoryId,
@@ -39630,6 +39686,7 @@ impl WidgetRef for &ChatWidget<'_> {
             preview: String,
         }
 
+        #[cfg(debug_assertions)]
         let mut height_mismatches: Vec<HeightMismatch> = Vec::new();
         let is_collapsed_reasoning_at = |idx: usize| {
             if idx >= request_count {
@@ -40128,6 +40185,7 @@ impl WidgetRef for &ChatWidget<'_> {
 
         drop(ps_ref);
 
+        #[cfg(debug_assertions)]
         if let Some(first) = height_mismatches.first() {
             for mismatch in &height_mismatches {
                 tracing::error!(
@@ -41672,6 +41730,7 @@ impl ChatWidget<'_> {
             title: "Code".to_string(),
             body: snippet,
         });
+        self.app_event_tx.send(AppEvent::RingBell);
     }
 
     fn should_emit_tui_notification(&self, event: &str) -> bool {

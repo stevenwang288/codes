@@ -92,6 +92,12 @@ impl App<'_> {
         let _ = stdout.flush();
     }
 
+    pub(super) fn emit_terminal_bell() {
+        let mut stdout = std::io::stdout();
+        let _ = stdout.write_all(b"\x07");
+        let _ = stdout.flush();
+    }
+
     pub(super) fn start_terminal_run(
         &mut self,
         id: u64,

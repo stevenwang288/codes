@@ -174,15 +174,24 @@ impl<'a> BottomPaneView<'a> for GithubSettingsView {
             Line::from(vec![
                 Span::styled("↑↓", Style::default().fg(crate::colors::light_blue())),
                 Span::raw(format!(" {}  ", code_i18n::tr(ui_language, "tui.common.navigate"))),
-                Span::styled("←→/Space", Style::default().fg(crate::colors::success())),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.common.key.left_right_or_space"),
+                    Style::default().fg(crate::colors::success()),
+                ),
                 Span::raw(format!(" {}  ", code_i18n::tr(ui_language, "tui.common.toggle"))),
-                Span::styled("Enter", Style::default().fg(crate::colors::success())),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.common.key.enter"),
+                    Style::default().fg(crate::colors::success()),
+                ),
                 Span::raw(format!(
                     " {}/{}  ",
                     code_i18n::tr(ui_language, "tui.common.toggle"),
                     code_i18n::tr(ui_language, "tui.common.close_label")
                 )),
-                Span::styled("Esc", Style::default().fg(crate::colors::error())),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.common.key.esc"),
+                    Style::default().fg(crate::colors::error()),
+                ),
                 Span::raw(format!(" {}", code_i18n::tr(ui_language, "tui.common.cancel"))),
             ]),
         ];

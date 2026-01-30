@@ -139,9 +139,15 @@ impl AccountSwitchSettingsView {
         lines.push(Line::from(vec![
             Span::styled(" ↑↓", Style::default().fg(colors::function())),
             Span::styled(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")), dim),
-            Span::styled("Enter", Style::default().fg(colors::success())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(colors::success()),
+            ),
             Span::styled(format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")), dim),
-            Span::styled("Esc", Style::default().fg(colors::error())),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(colors::error()),
+            ),
             Span::styled(format!(" {}", code_i18n::tr_plain("tui.common.close_label")), dim),
         ]));
 

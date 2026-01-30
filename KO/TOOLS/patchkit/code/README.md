@@ -10,9 +10,9 @@
 
 ## 目录结构
 
-- `tools/code-patchkit/patches/`：可 `git apply` 的补丁（推荐一个 patch 一个功能点）。
-- `tools/code-patchkit/templates/`：非代码的“模板配置”，例如 `.codes-home/config.toml` 片段。
-- `tools/code-patchkit/scripts/`：一键脚本：导出补丁、应用补丁、更新+重放+编译。
+- `KO/TOOLS/patchkit/code/patches/`：可 `git apply` 的补丁（推荐一个 patch 一个功能点）。
+- `KO/TOOLS/patchkit/code/templates/`：非代码的“模板配置”，例如 `~/.codex/config.toml` 片段。
+- `KO/TOOLS/patchkit/code/scripts/`：一键脚本：导出补丁、应用补丁、更新+重放+编译。
 
 ## 快速开始（Windows / PowerShell）
 
@@ -23,31 +23,31 @@
 你日常只需要记住一个入口：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/patchkit.ps1" help
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/patchkit.ps1" help
 ```
 
 1) 导出当前工作区改动为一个补丁（包含二进制 diff）：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/export-patch.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main"
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/export-patch.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main"
 ```
 
 2) 在“干净工作区”上应用补丁：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/apply-patches.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main"
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/apply-patches.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main"
 ```
 
 3) 一键：更新（ff-only）→应用补丁→编译（bash 下 `./build-fast.sh`）：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/run.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Update -Apply -Build
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/run.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Update -Apply -Build
 ```
 
 4) 一键启动（日常用）：自动确保配置（通知钩子）+ 启动 watchdog + 启动 i18n watch + 打开 `codes` 窗口：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/start.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main"
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/start.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main"
 ```
 
 ## 单一入口命令（推荐）
@@ -55,50 +55,50 @@ pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/start.ps1" -Re
 查看“我是谁/上游是谁/是否需要更新/补丁是否应用/i18n 缺口统计”：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/patchkit.ps1" status -Fetch
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/patchkit.ps1" status -Fetch
 ```
 
 向导式自更新（检查上游→询问→拉取→补丁→i18n→编译→重启）：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/patchkit.ps1" update -Fetch
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/patchkit.ps1" update -Fetch
 ```
 
 只做 i18n 向导：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/patchkit.ps1" i18n-wizard
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/patchkit.ps1" i18n-wizard
 ```
 
-建议在日常使用时加上 `-Configure`，确保本仓库的 `.codes-home/config.toml` 包含通知钩子（`notify`）等配置：
+建议在日常使用时加上 `-Configure`，确保你的 `~/.codex/config.toml` 包含通知钩子（`notify`）等配置：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/run.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Configure -Apply
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/run.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Configure -Apply
 ```
 
 ## i18n 自动化闭环
 
 你的运行时缺口采集文件默认在（归档到 PatchKit 子目录）：
 
-- `$CODE_HOME/patchkit/i18n-missing.jsonl`
+- `$CODEX_HOME/patchkit/i18n-missing.jsonl`（默认 `~/.codex/patchkit/i18n-missing.jsonl`）
 
 将其自动翻译并回写到语言包（watch 模式）：
 
 ```powershell
-  pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/i18n-sync.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Watch
+  pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/i18n-sync.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -Watch
 ```
 
 ## 子代理/长任务卡顿巡检（watchdog）
 
 由于子代理/长任务可能会因为鉴权、网络、上下文或工具异常“看起来卡住”，PatchKit 提供一个轻量 watchdog：
 
-- 监控 `./.codes-home/history.jsonl` 与 `./.codes-home/debug_logs/critical.log` 的写入活跃度
+- 监控 `${CODEX_HOME}/history.jsonl` 与 `${CODEX_HOME}/debug_logs/critical.log` 的写入活跃度
 - 如果连续一段时间没有任何新活动，会发 Windows 通知并响铃提醒你介入
 
 启动方式：
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File "./tools/code-patchkit/scripts/watchdog.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -IntervalSeconds 60 -StallSeconds 180
+pwsh -ExecutionPolicy Bypass -File "./KO/TOOLS/patchkit/code/scripts/watchdog.ps1" -RepoRoot "D:/OneDrive/steven/code/ai/12CLI/code-main" -IntervalSeconds 60 -StallSeconds 180
 ```
 
 注意：

@@ -68,11 +68,15 @@ impl MenuState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct SectionState {
     active: SettingsSection,
+    sidebar_active: bool,
 }
 
 impl SectionState {
     fn new(active: SettingsSection) -> Self {
-        Self { active }
+        Self {
+            active,
+            sidebar_active: false,
+        }
     }
 
     fn active(&self) -> SettingsSection {
@@ -81,6 +85,14 @@ impl SectionState {
 
     fn set_active(&mut self, section: SettingsSection) {
         self.active = section;
+    }
+
+    fn sidebar_active(&self) -> bool {
+        self.sidebar_active
+    }
+
+    fn set_sidebar_active(&mut self, active: bool) {
+        self.sidebar_active = active;
     }
 }
 
@@ -1396,6 +1408,19 @@ impl SettingsOverlayView {
         matches!(self.mode, SettingsOverlayMode::Menu(_))
     }
 
+    pub(crate) fn is_sidebar_active(&self) -> bool {
+        match self.mode {
+            SettingsOverlayMode::Section(state) => state.sidebar_active(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_sidebar_active(&mut self, active: bool) {
+        if let SettingsOverlayMode::Section(state) = &mut self.mode {
+            state.set_sidebar_active(active);
+        }
+    }
+
     pub(crate) fn set_mode_menu(&mut self, selected: Option<SettingsSection>) {
         let section = selected.unwrap_or(self.last_section);
         self.mode = SettingsOverlayMode::Menu(MenuState::new(section));
@@ -2217,7 +2242,13 @@ impl SettingsOverlayView {
             let is_first_visible = idx == start;
             let is_last_visible = idx + 1 == end;
 
-            let selection_indicator = if is_active { "›" } else { " " };
+            let selection_indicator = if is_active && self.is_sidebar_active() {
+                "▶"
+            } else if is_active {
+                "›"
+            } else {
+                " "
+            };
             let overflow_indicator = if is_first_visible && start > 0 {
                 "↑"
             } else if is_last_visible && end < total {

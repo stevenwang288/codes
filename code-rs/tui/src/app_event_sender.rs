@@ -50,6 +50,7 @@ impl AppEventSender {
                 | AppEvent::ExitRequest
                 | AppEvent::SetTerminalTitle { .. }
                 | AppEvent::EmitTuiNotification { .. }
+                | AppEvent::RingBell
         );
 
         let tx = if is_high { &self.high_tx } else { &self.bulk_tx };

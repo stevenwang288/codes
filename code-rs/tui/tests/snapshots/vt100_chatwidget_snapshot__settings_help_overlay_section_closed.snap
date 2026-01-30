@@ -3,29 +3,29 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: section_closed
 ---
  +------------------------------------------------------------------------------------------------+
- |                                           Every Code                                           |
+ |                  Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui                 |
  +------------------------------------------------------------------------------------------------+
- +Settings ▸ Model--------------------------------------------------------------------------------+
+ +设置 ▸ 模型-------------------------------------------------------------------------------------+
  |                                                                                                |
- | ›  Model              + Select Model & Reasoning --------------------------------------------+ |
- |    Theme              |                                                                      | |
- |    Updates            |  Current model: GPT-5.2-Codex                                        | |
- |    Accounts           |  Reasoning effort: Medium                                            | |
- |    Agents             |                                                                      | |
- |    Prompts            |  GPT-5.2                                                             | |
- |    Skills             |  Latest frontier model with improvements across knowledge, reasoning | |
- |    Auto Drive         |     XHigh - Extra high reasoning depth for complex problems          | |
- |    Review             |     High - Maximizes reasoning depth for complex or ambiguous proble | |
- |    Planning           |     Medium - Provides a solid balance of reasoning depth and latency | |
- |    Validation         |     Low - Balances speed with some reasoning; useful for straightfor | |
- |    Chrome             |                                                                      | |
+ | ›  模型               + 选择模型与推理 ------------------------------------------------------+ |
+ |    主题               |                                                                      | |
+ |    更新               |  当前模型: GPT-5.2-Codex                                             | |
+ |    账户               |  推理强度: 中                                                        | |
+ |    代理               |                                                                      | |
+ |    提示词             |  GPT-5.2                                                             | |
+ |    技能               |  最新的旗舰模型，在知识、推理与编码能力上全面提升。                  | |
+ |    自动运行           |     极高 - 为复杂问题提供极高推理深度                                | |
+ |    评审               |     高 - 为复杂或不明确的问题最大化推理深度                          | |
+ |    规划               |     中 - 在推理深度与延迟之间提供稳健平衡，适用于通用任务            | |
+ |    校验               |     低 - 兼顾速度与一定推理，适合直接问题与简短解释                  | |
+ |    浏览器             |                                                                      | |
  |    MCP                |                                                                      | |
- |  ↓ Notifications      +----------------------------------------------------------------------+ |
- | ↑ ↓ Move    Enter Open    Esc Close    ? Help                                                  |
+ |  ↓ 通知               +----------------------------------------------------------------------+ |
+ | ↑ ↓ 移动    Enter 打开    Esc 关闭    ? 帮助                                                   |
  |                                                                                                |
  +------------------------------------------------------------------------------------------------+
 
  +------------------------------------------------------------------------------------------------+
- | What can I code for you today?                                                                 |
+ | 深夜我能为你写点什么？                                                                         |
  +------------------------------------------------------------------------------------------------+
- Read Only  (Shift+Tab change)                                            Ctrl+G guide  •  API key
+ Read Only  (Shift+Tab change)                    Ctrl+S 设置   Ctrl+G 帮助  •  Tab 模式: 开发  •

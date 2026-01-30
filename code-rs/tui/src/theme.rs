@@ -364,6 +364,24 @@ const ANSI16_COLORS: [(u8, u8, u8); 16] = [
 ];
 
 pub(crate) fn palette_mode() -> PaletteMode {
+    if let Ok(value) = std::env::var("CODE_PALETTE_MODE") {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "ansi256" | "256" => return PaletteMode::Ansi256,
+            "ansi16" | "16" => return PaletteMode::Ansi16,
+            _ => {}
+        }
+    }
+    if cfg!(target_os = "windows") {
+        return PaletteMode::Ansi256;
+    }
+    if std::env::var("WT_SESSION").is_ok()
+        || matches!(
+            std::env::var("TERM_PROGRAM").ok().as_deref(),
+            Some("Windows_Terminal")
+        )
+    {
+        return PaletteMode::Ansi256;
+    }
     if let Some(level) = supports_color::on_cached(supports_color::Stream::Stdout) {
         if level.has_16m || level.has_256 {
             return PaletteMode::Ansi256;

@@ -39,15 +39,6 @@ pub(crate) async fn get_user_instructions(
 ) -> Option<String> {
     let skills_section = skills.and_then(render_skills_section);
 
-    let project_doc_parts = match read_project_doc_parts(config).await {
-        Ok(Some(parts)) => parts,
-        Ok(None) => Vec::new(),
-        Err(e) => {
-            error!("error trying to find project doc: {e:#}");
-            Vec::new()
-        }
-    };
-
     let mut seen: HashSet<String> = HashSet::new();
 
     let mut base_instructions: Option<String> = None;
@@ -59,14 +50,29 @@ pub(crate) async fn get_user_instructions(
     }
 
     let mut unique_project_docs: Vec<String> = Vec::new();
-    for doc in project_doc_parts {
-        let key = doc.trim();
-        if key.is_empty() {
-            continue;
-        }
 
-        if seen.insert(key.to_string()) {
-            unique_project_docs.push(doc);
+    // If the user configured explicit instructions (e.g. `~/.codex/AGENTS.md` or
+    // `config.toml`), treat that as the single authoritative instruction source.
+    // This avoids surprising overrides from workspace `AGENTS.md` files.
+    if base_instructions.is_none() {
+        let project_doc_parts = match read_project_doc_parts(config).await {
+            Ok(Some(parts)) => parts,
+            Ok(None) => Vec::new(),
+            Err(e) => {
+                error!("error trying to find project doc: {e:#}");
+                Vec::new()
+            }
+        };
+
+        for doc in project_doc_parts {
+            let key = doc.trim();
+            if key.is_empty() {
+                continue;
+            }
+
+            if seen.insert(key.to_string()) {
+                unique_project_docs.push(doc);
+            }
         }
     }
 
@@ -167,6 +173,14 @@ pub async fn read_project_docs(config: &Config) -> std::io::Result<Option<String
 }
 
 pub async fn read_auto_drive_docs(config: &Config) -> std::io::Result<Option<String>> {
+    if config
+        .user_instructions
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty())
+    {
+        return Ok(None);
+    }
+
     read_project_docs_with_candidates(config, AUTO_AGENT_FILENAMES).await
 }
 

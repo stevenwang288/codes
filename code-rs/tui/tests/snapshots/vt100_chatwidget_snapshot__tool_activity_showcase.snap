@@ -3,18 +3,18 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: output
 ---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
  › Can you gather details from the latest docs update?
 
-   +- Web Search · Completed
+   +- 网页搜索 · 已完成
    |
    |  Actions
-   |   MM:SS  • Searching...
+   |   MM:SS  • 正在搜索...
    |   MM:SS  • Query: "ratatui widget patterns"
    |   MM:SS  ✓ Results ready
    |
-   +- [Ctrl+S] Settings · [Esc] Stop
+   +- [Ctrl+S] 设置 · [Esc] 停止
 
    +- Browser (headless): Browser Session
    |
@@ -27,17 +27,17 @@ expression: output
    |
    |  Run targeted regression suite
    |
-   |  Agents
-   |    No agent updates yet
+   |  代理
+   |    暂无代理更新
    |
    |  Actions
-   |   MM:SS  Started agent run for qa-bot
-   |   MM:SS  Waiting for agents
+   |   MM:SS  已启动代理运行：qa-bot
+   |   MM:SS  正在等待代理
    |
    +- [Ctrl+A] Expand
 
 
- +----------------------------- ✶ Agents... -----------------------------+
- | What can I code for you today?                                             |
+ +----------------------------- ✶ 代理协作... -----------------------------+
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
- Read Only  (Shift+Tab change)                        Ctrl+G guide  •  API key
+ Read Only  (Shift+Tab change) Ctrl+S 设置   Ctrl+G 帮助  •  Tab 模式: 开发  •

@@ -1,0 +1,12 @@
+**/.git/**
+**/.hg/**
+**/.svn/**
+**/node_modules/**
+**/target/**
+**/dist/**
+**/build/**
+**/out/**
+**/.venv/**
+**/.cache/**
+**/vendor/**
+**/Pods/**

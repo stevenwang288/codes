@@ -93,18 +93,23 @@ use super::command_popup::CommandItem;
 use super::command_popup::CommandPopup;
 use super::command_popup::CommandPopupFlags;
 use super::file_search_popup::FileSearchPopup;
+use super::footer::CollaborationModeIndicator;
 use super::footer::FooterMode;
 use super::footer::FooterProps;
 use super::footer::esc_hint_mode;
 use super::footer::footer_height;
+use super::footer::footer_hint_items_width;
+use super::footer::footer_line_width;
 use super::footer::inset_footer_hint_area;
 use super::footer::render_footer;
 use super::footer::render_footer_hint_items;
+use super::footer::render_mode_indicator;
 use super::footer::reset_mode_after_activity;
 use super::footer::toggle_shortcut_mode;
 use super::paste_burst::CharDecision;
 use super::paste_burst::PasteBurst;
 use super::skill_popup::SkillPopup;
+use super::slash_commands;
 use crate::bottom_pane::paste_burst::FlushResult;
 use crate::bottom_pane::prompt_args::expand_custom_prompt;
 use crate::bottom_pane::prompt_args::expand_if_numeric_with_positional_args;
@@ -116,7 +121,6 @@ use crate::render::Insets;
 use crate::render::RectExt;
 use crate::render::renderable::Renderable;
 use crate::slash_command::SlashCommand;
-use crate::slash_command::built_in_slash_commands;
 use crate::style::user_message_style;
 use codex_common::fuzzy_match::fuzzy_match;
 use codex_protocol::custom_prompts::CustomPrompt;
@@ -143,13 +147,6 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-
-fn windows_degraded_sandbox_active() -> bool {
-    cfg!(target_os = "windows")
-        && codex_core::windows_sandbox::ELEVATED_SANDBOX_NUX_ENABLED
-        && codex_core::get_platform_sandbox().is_some()
-        && !codex_core::is_windows_elevated_sandbox_enabled()
-}
 
 /// If the pasted content exceeds this number of characters, replace it with a
 /// placeholder in the UI.
@@ -193,6 +190,44 @@ enum PromptSelectionAction {
     },
 }
 
+/// Feature flags for reusing the chat composer in other bottom-pane surfaces.
+///
+/// The default keeps today's behavior intact. Other call sites can opt out of
+/// specific behaviors by constructing a config with those flags set to `false`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ChatComposerConfig {
+    /// Whether command/file/skill popups are allowed to appear.
+    pub(crate) popups_enabled: bool,
+    /// Whether `/...` input is parsed and dispatched as slash commands.
+    pub(crate) slash_commands_enabled: bool,
+    /// Whether pasting a file path can attach local images.
+    pub(crate) image_paste_enabled: bool,
+}
+
+impl Default for ChatComposerConfig {
+    fn default() -> Self {
+        Self {
+            popups_enabled: true,
+            slash_commands_enabled: true,
+            image_paste_enabled: true,
+        }
+    }
+}
+
+impl ChatComposerConfig {
+    /// A minimal preset for plain-text inputs embedded in other surfaces.
+    ///
+    /// This disables popups, slash commands, and image-path attachment behavior
+    /// so the composer behaves like a simple notes field.
+    pub(crate) const fn plain_text() -> Self {
+        Self {
+            popups_enabled: false,
+            slash_commands_enabled: false,
+            image_paste_enabled: false,
+        }
+    }
+}
+
 pub(crate) struct ChatComposer {
     textarea: TextArea,
     textarea_state: RefCell<TextAreaState>,
@@ -208,6 +243,7 @@ pub(crate) struct ChatComposer {
     pending_pastes: Vec<(String, String)>,
     large_paste_counters: HashMap<usize, usize>,
     has_focus: bool,
+    /// Invariant: attached images are labeled `[Image #1]..[Image #N]` in vec order.
     attached_images: Vec<AttachedImage>,
     placeholder_text: String,
     is_task_running: bool,
@@ -229,6 +265,9 @@ pub(crate) struct ChatComposer {
     /// When enabled, `Enter` submits immediately and `Tab` requests queuing behavior.
     steer_enabled: bool,
     collaboration_modes_enabled: bool,
+    config: ChatComposerConfig,
+    collaboration_mode_indicator: Option<CollaborationModeIndicator>,
+    personality_command_enabled: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -254,6 +293,28 @@ impl ChatComposer {
         enhanced_keys_supported: bool,
         placeholder_text: String,
         disable_paste_burst: bool,
+    ) -> Self {
+        Self::new_with_config(
+            has_input_focus,
+            app_event_tx,
+            enhanced_keys_supported,
+            placeholder_text,
+            disable_paste_burst,
+            ChatComposerConfig::default(),
+        )
+    }
+
+    /// Construct a composer with explicit feature gating.
+    ///
+    /// This enables reuse in contexts like request-user-input where we want
+    /// the same visuals and editing behavior without slash commands or popups.
+    pub(crate) fn new_with_config(
+        has_input_focus: bool,
+        app_event_tx: AppEventSender,
+        enhanced_keys_supported: bool,
+        placeholder_text: String,
+        disable_paste_burst: bool,
+        config: ChatComposerConfig,
     ) -> Self {
         let use_shift_enter_hint = enhanced_keys_supported;
 
@@ -289,6 +350,9 @@ impl ChatComposer {
             dismissed_skill_popup_token: None,
             steer_enabled: false,
             collaboration_modes_enabled: false,
+            config,
+            collaboration_mode_indicator: None,
+            personality_command_enabled: false,
         };
         // Apply configuration via the setter to keep side-effects centralized.
         this.set_disable_paste_burst(disable_paste_burst);
@@ -313,6 +377,29 @@ impl ChatComposer {
         self.collaboration_modes_enabled = enabled;
     }
 
+    pub fn set_collaboration_mode_indicator(
+        &mut self,
+        indicator: Option<CollaborationModeIndicator>,
+    ) {
+        self.collaboration_mode_indicator = indicator;
+    }
+
+    pub fn set_personality_command_enabled(&mut self, enabled: bool) {
+        self.personality_command_enabled = enabled;
+    }
+
+    /// Centralized feature gating keeps config checks out of call sites.
+    fn popups_enabled(&self) -> bool {
+        self.config.popups_enabled
+    }
+
+    fn slash_commands_enabled(&self) -> bool {
+        self.config.slash_commands_enabled
+    }
+
+    fn image_paste_enabled(&self) -> bool {
+        self.config.image_paste_enabled
+    }
     fn layout_areas(&self, area: Rect) -> [Rect; 3] {
         let footer_props = self.footer_props();
         let footer_hint_height = self
@@ -397,7 +484,10 @@ impl ChatComposer {
             let placeholder = self.next_large_paste_placeholder(char_count);
             self.textarea.insert_element(&placeholder);
             self.pending_pastes.push((placeholder, pasted));
-        } else if char_count > 1 && self.handle_paste_image_path(pasted.clone()) {
+        } else if char_count > 1
+            && self.image_paste_enabled()
+            && self.handle_paste_image_path(pasted.clone())
+        {
             self.textarea.insert_str(" ");
         } else {
             self.textarea.insert_str(&pasted);
@@ -462,8 +552,9 @@ impl ChatComposer {
 
     /// Replace the composer content with text from an external editor.
     /// Clears pending paste placeholders and keeps only attachments whose
-    /// placeholder labels still appear in the new text. Cursor is placed at
-    /// the end after rebuilding elements.
+    /// placeholder labels still appear in the new text. Image placeholders
+    /// are renumbered to `[Image #1]..[Image #N]`. Cursor is placed at the end
+    /// after rebuilding elements.
     pub(crate) fn apply_external_edit(&mut self, text: String) {
         self.pending_pastes.clear();
 
@@ -525,6 +616,8 @@ impl ChatComposer {
             self.textarea.insert_str(&text[idx..]);
         }
 
+        // Keep image placeholders normalized to [Image #1].. in attachment order.
+        self.relabel_attached_images_and_update_placeholders();
         self.textarea.set_cursor(self.textarea.text().len());
         self.sync_popups();
     }
@@ -545,6 +638,7 @@ impl ChatComposer {
         self.footer_hint_override = items;
     }
 
+    #[cfg(test)]
     pub(crate) fn show_footer_flash(&mut self, line: Line<'static>, duration: Duration) {
         let expires_at = Instant::now()
             .checked_add(duration)
@@ -587,6 +681,16 @@ impl ChatComposer {
 
         self.textarea.set_cursor(0);
         self.sync_popups();
+    }
+
+    /// Update the placeholder text without changing input enablement.
+    pub(crate) fn set_placeholder_text(&mut self, placeholder: String) {
+        self.placeholder_text = placeholder;
+    }
+
+    /// Move the cursor to the end of the current text buffer.
+    pub(crate) fn move_cursor_to_end(&mut self) {
+        self.textarea.set_cursor(self.textarea.text().len());
     }
 
     pub(crate) fn clear_for_ctrl_c(&mut self) -> Option<String> {
@@ -1003,7 +1107,7 @@ impl ChatComposer {
     /// Because this path mixes "insert immediately" with "maybe retro-grab later", it must clamp
     /// the cursor to a UTF-8 char boundary before slicing `textarea.text()`.
     #[inline]
-    fn handle_non_ascii_char(&mut self, input: KeyEvent) -> (InputResult, bool) {
+    fn handle_non_ascii_char(&mut self, input: KeyEvent, now: Instant) -> (InputResult, bool) {
         if self.disable_paste_burst {
             // When burst detection is disabled, treat IME/non-ASCII input as normal typing.
             // In particular, do not retro-capture or buffer already-inserted prefix text.
@@ -1018,7 +1122,6 @@ impl ChatComposer {
             ..
         } = input
         {
-            let now = Instant::now();
             if self.paste_burst.try_append_char_if_active(ch, now) {
                 return (InputResult::None, true);
             }
@@ -1611,12 +1714,17 @@ impl ChatComposer {
         text = text.trim().to_string();
         text_elements = Self::trim_text_elements(&expanded_input, &text, text_elements);
 
-        if let Some((name, _rest, _rest_offset)) = parse_slash_name(&text) {
+        if self.slash_commands_enabled()
+            && let Some((name, _rest, _rest_offset)) = parse_slash_name(&text)
+        {
             let treat_as_plain_text = input_starts_with_space || name.contains('/');
             if !treat_as_plain_text {
-                let is_builtin =
-                    Self::built_in_slash_commands_for_input(self.collaboration_modes_enabled)
-                        .any(|(command_name, _)| command_name == name);
+                let is_builtin = slash_commands::find_builtin_command(
+                    name,
+                    self.collaboration_modes_enabled,
+                    self.personality_command_enabled,
+                )
+                .is_some();
                 let prompt_prefix = format!("{PROMPTS_CMD_PREFIX}:");
                 let is_known_prompt = name
                     .strip_prefix(&prompt_prefix)
@@ -1645,26 +1753,28 @@ impl ChatComposer {
             }
         }
 
-        let expanded_prompt =
-            match expand_custom_prompt(&text, &text_elements, &self.custom_prompts) {
-                Ok(expanded) => expanded,
-                Err(err) => {
-                    self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
-                        history_cell::new_error_event(err.user_message()),
-                    )));
-                    self.set_text_content(
-                        original_input.clone(),
-                        original_text_elements,
-                        original_local_image_paths,
-                    );
-                    self.pending_pastes.clone_from(&original_pending_pastes);
-                    self.textarea.set_cursor(original_input.len());
-                    return None;
-                }
-            };
-        if let Some(expanded) = expanded_prompt {
-            text = expanded.text;
-            text_elements = expanded.text_elements;
+        if self.slash_commands_enabled() {
+            let expanded_prompt =
+                match expand_custom_prompt(&text, &text_elements, &self.custom_prompts) {
+                    Ok(expanded) => expanded,
+                    Err(err) => {
+                        self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                            history_cell::new_error_event(err.user_message()),
+                        )));
+                        self.set_text_content(
+                            original_input.clone(),
+                            original_text_elements,
+                            original_local_image_paths,
+                        );
+                        self.pending_pastes.clone_from(&original_pending_pastes);
+                        self.textarea.set_cursor(original_input.len());
+                        return None;
+                    }
+                };
+            if let Some(expanded) = expanded_prompt {
+                text = expanded.text;
+                text_elements = expanded.text_elements;
+            }
         }
         // Custom prompt expansion can remove or rewrite image placeholders, so prune any
         // attachments that no longer have a corresponding placeholder in the expanded text.
@@ -1682,6 +1792,14 @@ impl ChatComposer {
     /// Common logic for handling message submission/queuing.
     /// Returns the appropriate InputResult based on `should_queue`.
     fn handle_submission(&mut self, should_queue: bool) -> (InputResult, bool) {
+        self.handle_submission_with_time(should_queue, Instant::now())
+    }
+
+    fn handle_submission_with_time(
+        &mut self,
+        should_queue: bool,
+        now: Instant,
+    ) -> (InputResult, bool) {
         // If the first line is a bare built-in slash command (no args),
         // dispatch it even when the slash popup isn't visible. This preserves
         // the workflow: type a prefix ("/di"), press Tab to complete to
@@ -1696,23 +1814,24 @@ impl ChatComposer {
         // If we're in a paste-like burst capture, treat Enter/Ctrl+Shift+Q as part of the burst
         // and accumulate it rather than submitting or inserting immediately.
         // Do not treat as paste inside a slash-command context.
-        let in_slash_context = matches!(self.active_popup, ActivePopup::Command(_))
-            || self
-                .textarea
-                .text()
-                .lines()
-                .next()
-                .unwrap_or("")
-                .starts_with('/');
-        if !self.disable_paste_burst && self.paste_burst.is_active() && !in_slash_context {
-            let now = Instant::now();
-            if self.paste_burst.append_newline_if_active(now) {
-                return (InputResult::None, true);
-            }
+        let in_slash_context = self.slash_commands_enabled()
+            && (matches!(self.active_popup, ActivePopup::Command(_))
+                || self
+                    .textarea
+                    .text()
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .starts_with('/'));
+        if !self.disable_paste_burst
+            && self.paste_burst.is_active()
+            && !in_slash_context
+            && self.paste_burst.append_newline_if_active(now)
+        {
+            return (InputResult::None, true);
         }
 
         // During a paste-like burst, treat Enter/Ctrl+Shift+Q as a newline instead of submit.
-        let now = Instant::now();
         if !in_slash_context
             && !self.disable_paste_burst
             && self
@@ -1770,12 +1889,17 @@ impl ChatComposer {
     /// Check if the first line is a bare slash command (no args) and dispatch it.
     /// Returns Some(InputResult) if a command was dispatched, None otherwise.
     fn try_dispatch_bare_slash_command(&mut self) -> Option<InputResult> {
+        if !self.slash_commands_enabled() {
+            return None;
+        }
         let first_line = self.textarea.text().lines().next().unwrap_or("");
         if let Some((name, rest, _rest_offset)) = parse_slash_name(first_line)
             && rest.is_empty()
-            && let Some((_n, cmd)) =
-                Self::built_in_slash_commands_for_input(self.collaboration_modes_enabled)
-                    .find(|(n, _)| *n == name)
+            && let Some(cmd) = slash_commands::find_builtin_command(
+                name,
+                self.collaboration_modes_enabled,
+                self.personality_command_enabled,
+            )
         {
             self.textarea.set_text_clearing_elements("");
             Some(InputResult::Command(cmd))
@@ -1787,6 +1911,9 @@ impl ChatComposer {
     /// Check if the input is a slash command with args (e.g., /review args) and dispatch it.
     /// Returns Some(InputResult) if a command was dispatched, None otherwise.
     fn try_dispatch_slash_command_with_args(&mut self) -> Option<InputResult> {
+        if !self.slash_commands_enabled() {
+            return None;
+        }
         let original_input = self.textarea.text().to_string();
         let input_starts_with_space = original_input.starts_with(' ');
 
@@ -1795,9 +1922,11 @@ impl ChatComposer {
             if let Some((name, rest, _rest_offset)) = parse_slash_name(&text)
                 && !rest.is_empty()
                 && !name.contains('/')
-                && let Some((_n, cmd)) =
-                    Self::built_in_slash_commands_for_input(self.collaboration_modes_enabled)
-                        .find(|(command_name, _)| *command_name == name)
+                && let Some(cmd) = slash_commands::find_builtin_command(
+                    name,
+                    self.collaboration_modes_enabled,
+                    self.personality_command_enabled,
+                )
                 && cmd == SlashCommand::Review
             {
                 self.textarea.set_text_clearing_elements("");
@@ -1920,9 +2049,16 @@ impl ChatComposer {
     ///   otherwise `clear_window_after_non_char()` can leave buffered text waiting without a
     ///   timestamp to time out against.
     fn handle_input_basic(&mut self, input: KeyEvent) -> (InputResult, bool) {
+        self.handle_input_basic_with_time(input, Instant::now())
+    }
+
+    fn handle_input_basic_with_time(
+        &mut self,
+        input: KeyEvent,
+        now: Instant,
+    ) -> (InputResult, bool) {
         // If we have a buffered non-bracketed paste burst and enough time has
         // elapsed since the last char, flush it before handling a new input.
-        let now = Instant::now();
         self.handle_paste_burst_flush(now);
 
         if !matches!(input.code, KeyCode::Esc) {
@@ -1954,7 +2090,7 @@ impl ChatComposer {
                 // Non-ASCII characters (e.g., from IMEs) can arrive in quick bursts, so avoid
                 // holding the first char while still allowing burst detection for paste input.
                 if !ch.is_ascii() {
-                    return self.handle_non_ascii_char(input);
+                    return self.handle_non_ascii_char(input, now);
                 }
 
                 match self.paste_burst.on_plain_char(ch, now) {
@@ -2007,15 +2143,6 @@ impl ChatComposer {
         {
             self.handle_paste(pasted);
         }
-        // Backspace at the start of an image placeholder should delete that placeholder (rather
-        // than deleting content before it). Do this without scanning the full text by consulting
-        // the textarea's element list.
-        if matches!(input.code, KeyCode::Backspace)
-            && self.try_remove_image_element_at_cursor_start()
-        {
-            return (InputResult::None, true);
-        }
-
         // For non-char inputs (or after flushing), handle normally.
         // Track element removals so we can drop any corresponding placeholders without scanning
         // the full text. (Placeholders are atomic elements; when deleted, the element disappears.)
@@ -2052,29 +2179,6 @@ impl ChatComposer {
         }
 
         (InputResult::None, true)
-    }
-
-    fn try_remove_image_element_at_cursor_start(&mut self) -> bool {
-        if self.attached_images.is_empty() {
-            return false;
-        }
-
-        let p = self.textarea.cursor();
-        let Some(payload) = self.textarea.element_payload_starting_at(p) else {
-            return false;
-        };
-        let Some(idx) = self
-            .attached_images
-            .iter()
-            .position(|img| img.placeholder == payload)
-        else {
-            return false;
-        };
-
-        self.textarea.replace_range(p..p + payload.len(), "");
-        self.attached_images.remove(idx);
-        self.relabel_attached_images_and_update_placeholders();
-        true
     }
 
     fn reconcile_deleted_elements(&mut self, elements_before: Vec<String>) {
@@ -2176,6 +2280,10 @@ impl ChatComposer {
     }
 
     fn sync_popups(&mut self) {
+        if !self.popups_enabled() {
+            self.active_popup = ActivePopup::None;
+            return;
+        }
         let file_token = Self::current_at_token(&self.textarea);
         let browsing_history = self
             .history
@@ -2188,7 +2296,8 @@ impl ChatComposer {
         }
         let skill_token = self.current_skill_token();
 
-        let allow_command_popup = file_token.is_none() && skill_token.is_none();
+        let allow_command_popup =
+            self.slash_commands_enabled() && file_token.is_none() && skill_token.is_none();
         self.sync_command_popup(allow_command_popup);
 
         if matches!(self.active_popup, ActivePopup::Command(_)) {
@@ -2249,22 +2358,24 @@ impl ChatComposer {
     /// prefix for any known command (built-in or custom prompt).
     /// Empty names only count when there is no extra content after the '/'.
     fn looks_like_slash_prefix(&self, name: &str, rest_after_name: &str) -> bool {
+        if !self.slash_commands_enabled() {
+            return false;
+        }
         if name.is_empty() {
             return rest_after_name.is_empty();
         }
 
-        let builtin_match =
-            Self::built_in_slash_commands_for_input(self.collaboration_modes_enabled)
-                .any(|(cmd_name, _)| fuzzy_match(cmd_name, name).is_some());
-
-        if builtin_match {
+        if slash_commands::has_builtin_prefix(
+            name,
+            self.collaboration_modes_enabled,
+            self.personality_command_enabled,
+        ) {
             return true;
         }
 
-        let prompt_prefix = format!("{PROMPTS_CMD_PREFIX}:");
-        self.custom_prompts
-            .iter()
-            .any(|p| fuzzy_match(&format!("{prompt_prefix}{}", p.name), name).is_some())
+        self.custom_prompts.iter().any(|prompt| {
+            fuzzy_match(&format!("{PROMPTS_CMD_PREFIX}:{}", prompt.name), name).is_some()
+        })
     }
 
     /// Synchronize `self.command_popup` with the current text in the
@@ -2307,13 +2418,13 @@ impl ChatComposer {
             }
             _ => {
                 if is_editing_slash_command_name {
-                    let skills_enabled = self.skills_enabled();
                     let collaboration_modes_enabled = self.collaboration_modes_enabled;
+                    let personality_command_enabled = self.personality_command_enabled;
                     let mut command_popup = CommandPopup::new(
                         self.custom_prompts.clone(),
                         CommandPopupFlags {
-                            skills_enabled,
                             collaboration_modes_enabled,
+                            personality_command_enabled,
                         },
                     );
                     command_popup.on_composer_text_change(first_line.to_string());
@@ -2322,17 +2433,6 @@ impl ChatComposer {
             }
         }
     }
-
-    fn built_in_slash_commands_for_input(
-        collaboration_modes_enabled: bool,
-    ) -> impl Iterator<Item = (&'static str, SlashCommand)> {
-        let allow_elevate_sandbox = windows_degraded_sandbox_active();
-        built_in_slash_commands()
-            .into_iter()
-            .filter(move |(_, cmd)| allow_elevate_sandbox || *cmd != SlashCommand::ElevateSandbox)
-            .filter(move |(_, cmd)| collaboration_modes_enabled || *cmd != SlashCommand::Collab)
-    }
-
     pub(crate) fn set_custom_prompts(&mut self, prompts: Vec<CustomPrompt>) {
         self.custom_prompts = prompts.clone();
         if let ActivePopup::Command(popup) = &mut self.active_popup {
@@ -2498,15 +2598,26 @@ impl Renderable for ChatComposer {
                 } else {
                     popup_rect
                 };
+                let mut left_content_width = None;
                 if self.footer_flash_visible() {
                     if let Some(flash) = self.footer_flash.as_ref() {
                         flash.line.render(inset_footer_hint_area(hint_rect), buf);
+                        left_content_width = Some(flash.line.width() as u16);
                     }
                 } else if let Some(items) = self.footer_hint_override.as_ref() {
                     render_footer_hint_items(hint_rect, buf, items);
+                    left_content_width = Some(footer_hint_items_width(items));
                 } else {
                     render_footer(hint_rect, buf, footer_props);
+                    left_content_width = Some(footer_line_width(footer_props));
                 }
+                render_mode_indicator(
+                    hint_rect,
+                    buf,
+                    self.collaboration_mode_indicator,
+                    !footer_props.is_task_running,
+                    left_content_width,
+                );
             }
         }
         let style = user_message_style();
@@ -3356,26 +3467,38 @@ mod tests {
         composer.set_steer_enabled(true);
         composer.set_steer_enabled(true);
 
-        // Force an active burst so this test doesn't depend on tight timing.
-        composer
-            .paste_burst
-            .begin_with_retro_grabbed(String::new(), Instant::now());
+        let mut now = Instant::now();
+        let step = Duration::from_millis(1);
 
-        let _ = composer.handle_key_event(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
-        let _ = composer.handle_key_event(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+        let _ = composer.handle_input_basic_with_time(
+            KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+            now,
+        );
+        now += step;
+        let _ = composer.handle_input_basic_with_time(
+            KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
+            now,
+        );
+        now += step;
 
-        let (result, _) =
-            composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let (result, _) = composer.handle_submission_with_time(!composer.steer_enabled, now);
         assert!(
             matches!(result, InputResult::None),
             "Enter during a burst should insert newline, not submit"
         );
 
         for ch in ['t', 'h', 'e', 'r', 'e'] {
-            let _ = composer.handle_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+            now += step;
+            let _ = composer.handle_input_basic_with_time(
+                KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+                now,
+            );
         }
 
-        let _ = flush_after_paste_burst(&mut composer);
+        assert!(composer.textarea.text().is_empty());
+        let flush_time = now + PasteBurst::recommended_active_flush_delay() + step;
+        let flushed = composer.handle_paste_burst_flush(flush_time);
+        assert!(flushed, "expected paste burst to flush");
         assert_eq!(composer.textarea.text(), "hi\nthere");
     }
 
@@ -4609,8 +4732,7 @@ mod tests {
         assert!(!composer.textarea.text().contains(&placeholder));
         assert!(composer.attached_images.is_empty());
 
-        // Re-add and test backspace in middle: should break the placeholder string
-        // and drop the image mapping (same as text placeholder behavior).
+        // Re-add and ensure backspace at element start does not delete the placeholder.
         composer.attach_image(path);
         let placeholder2 = composer.attached_images[0].placeholder.clone();
         // Move cursor to roughly middle of placeholder
@@ -4618,8 +4740,8 @@ mod tests {
             let mid_pos = start_pos + (placeholder2.len() / 2);
             composer.textarea.set_cursor(mid_pos);
             composer.handle_key_event(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
-            assert!(!composer.textarea.text().contains(&placeholder2));
-            assert!(composer.attached_images.is_empty());
+            assert!(composer.textarea.text().contains(&placeholder2));
+            assert_eq!(composer.attached_images.len(), 1);
         } else {
             panic!("Placeholder not found in textarea");
         }
@@ -4799,7 +4921,7 @@ mod tests {
         assert_eq!(composer.textarea.text(), "[Image #1][Image #2]");
         assert_eq!(composer.attached_images.len(), 2);
 
-        // Delete the first element using normal textarea editing (Delete at cursor start).
+        // Delete the first element using normal textarea editing (forward Delete at cursor start).
         composer.textarea.set_cursor(0);
         composer.handle_key_event(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
 
@@ -5849,9 +5971,13 @@ mod tests {
         );
 
         let count = 32;
+        let mut now = Instant::now();
+        let step = Duration::from_millis(1);
         for _ in 0..count {
-            let _ =
-                composer.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+            let _ = composer.handle_input_basic_with_time(
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+                now,
+            );
             assert!(
                 composer.is_in_paste_burst(),
                 "expected active paste burst during fast typing"
@@ -5860,13 +5986,15 @@ mod tests {
                 composer.textarea.text().is_empty(),
                 "text should not appear during burst"
             );
+            now += step;
         }
 
         assert!(
             composer.textarea.text().is_empty(),
             "text should remain empty until flush"
         );
-        let flushed = flush_after_paste_burst(&mut composer);
+        let flush_time = now + PasteBurst::recommended_active_flush_delay() + step;
+        let flushed = composer.handle_paste_burst_flush(flush_time);
         assert!(flushed, "expected buffered text to flush after stop");
         assert_eq!(composer.textarea.text(), "a".repeat(count));
         assert!(
@@ -5879,10 +6007,6 @@ mod tests {
     /// the payload is large, it should insert a placeholder and defer the full text until submit.
     #[test]
     fn burst_paste_fast_large_inserts_placeholder_on_flush() {
-        use crossterm::event::KeyCode;
-        use crossterm::event::KeyEvent;
-        use crossterm::event::KeyModifiers;
-
         let (tx, _rx) = unbounded_channel::<AppEvent>();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(
@@ -5894,14 +6018,20 @@ mod tests {
         );
 
         let count = LARGE_PASTE_CHAR_THRESHOLD + 1; // > threshold to trigger placeholder
+        let mut now = Instant::now();
+        let step = Duration::from_millis(1);
         for _ in 0..count {
-            let _ =
-                composer.handle_key_event(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+            let _ = composer.handle_input_basic_with_time(
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+                now,
+            );
+            now += step;
         }
 
         // Nothing should appear until we stop and flush
         assert!(composer.textarea.text().is_empty());
-        let flushed = flush_after_paste_burst(&mut composer);
+        let flush_time = now + PasteBurst::recommended_active_flush_delay() + step;
+        let flushed = composer.handle_paste_burst_flush(flush_time);
         assert!(flushed, "expected flush after stopping fast input");
 
         let expected_placeholder = format!("[Pasted Content {count} chars]");
@@ -6024,7 +6154,7 @@ mod tests {
             false,
         );
 
-        let placeholder = "[image 10x10]".to_string();
+        let placeholder = local_image_label_text(1);
         composer.textarea.insert_element(&placeholder);
         composer.attached_images.push(AttachedImage {
             placeholder: placeholder.clone(),
@@ -6058,7 +6188,7 @@ mod tests {
             false,
         );
 
-        let placeholder = "[image 10x10]".to_string();
+        let placeholder = local_image_label_text(1);
         composer.textarea.insert_element(&placeholder);
         composer.attached_images.push(AttachedImage {
             placeholder: placeholder.clone(),
@@ -6108,7 +6238,7 @@ mod tests {
             false,
         );
 
-        let placeholder = "[image 10x10]".to_string();
+        let placeholder = local_image_label_text(1);
         composer.textarea.insert_element(&placeholder);
         composer.attached_images.push(AttachedImage {
             placeholder: placeholder.clone(),

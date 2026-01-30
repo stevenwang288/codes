@@ -149,6 +149,8 @@ branches/
 # coder directories
 .coder/
 .code/
+.codes-home/
+.serena/
 
 # trigger: test non-notes change (no [skip ci])
 

@@ -1493,92 +1493,21 @@ fn env_path(var: &str) -> std::io::Result<Option<PathBuf>> {
     }
 }
 
-fn env_overrides_present() -> bool {
-    matches!(std::env::var("CODE_HOME"), Ok(ref v) if !v.trim().is_empty())
-        || matches!(std::env::var("CODEX_HOME"), Ok(ref v) if !v.trim().is_empty())
-}
 
-fn default_code_home_dir() -> Option<PathBuf> {
-    let mut path = home_dir()?;
-    path.push(".code");
-    Some(path)
-}
-
-fn compute_legacy_code_home_dir() -> Option<PathBuf> {
-    if env_overrides_present() {
-        return None;
-    }
-    let Some(home) = home_dir() else {
-        return None;
-    };
-    let candidate = home.join(".codex");
-    if path_exists(&candidate) {
-        Some(candidate)
-    } else {
-        None
-    }
-}
-
-fn legacy_code_home_dir() -> Option<PathBuf> {
-    #[cfg(test)]
-    {
-        return compute_legacy_code_home_dir();
-    }
-
-    #[cfg(not(test))]
-    {
-        static LEGACY: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-        LEGACY
-            .get_or_init(compute_legacy_code_home_dir)
-            .clone()
-    }
-}
-
-fn path_exists(path: &Path) -> bool {
-    std::fs::metadata(path).is_ok()
-}
-
-/// Resolve the filesystem path used for *reading* Codex state that may live in
-/// a legacy `~/.codex` directory. Writes should continue targeting `code_home`.
+/// Resolve the filesystem path used for *reading* Codex state under `CODEX_HOME`.
+/// Writes should continue targeting `code_home`.
 pub fn resolve_code_path_for_read(code_home: &Path, relative: &Path) -> PathBuf {
-    let default_path = code_home.join(relative);
-
-    if env_overrides_present() {
-        return default_path;
-    }
-
-    if path_exists(&default_path) {
-        return default_path;
-    }
-
-    if let Some(default_home) = default_code_home_dir() {
-        if default_home != code_home {
-            return default_path;
-        }
-    }
-
-    if let Some(legacy) = legacy_code_home_dir() {
-        let candidate = legacy.join(relative);
-        if path_exists(&candidate) {
-            return candidate;
-        }
-    }
-
-    default_path
+    code_home.join(relative)
 }
 
 /// Returns the path to the Code/Codex configuration directory, which can be
-/// specified by the `CODE_HOME` or `CODEX_HOME` environment variables. If not set,
-/// defaults to `~/.code` for the fork.
+/// specified by the `CODEX_HOME` environment variable. If not set, defaults to
+/// `~/.codex` for the fork.
 ///
-/// - If `CODE_HOME` or `CODEX_HOME` is set, the value will be canonicalized and this
-///   function will Err if the path does not exist.
+/// - If `CODEX_HOME` is set, the value will be canonicalized and this function
+///   will Err if the path does not exist.
 /// - If neither is set, this function does not verify that the directory exists.
 pub fn find_code_home() -> std::io::Result<PathBuf> {
-    if let Some(path) = env_path("CODE_HOME")? {
-        return Ok(path);
-    }
-
     if let Some(path) = env_path("CODEX_HOME")? {
         return Ok(path);
     }
@@ -1590,9 +1519,10 @@ pub fn find_code_home() -> std::io::Result<PathBuf> {
         )
     })?;
 
-    let mut write_path = home;
-    write_path.push(".code");
-    Ok(write_path)
+    let mut codex_home = home;
+    codex_home.push(".codex");
+
+    Ok(codex_home)
 }
 
 pub(crate) fn load_instructions(code_dir: Option<&Path>) -> Option<String> {
@@ -1601,19 +1531,7 @@ pub(crate) fn load_instructions(code_dir: Option<&Path>) -> Option<String> {
 
     let contents = match std::fs::read_to_string(&read_path) {
         Ok(s) => s,
-        Err(_) => {
-            if env_overrides_present() {
-                return None;
-            }
-            let Some(legacy_home) = legacy_code_home_dir() else {
-                return None;
-            };
-            let legacy_path = legacy_home.join("AGENTS.md");
-            match std::fs::read_to_string(&legacy_path) {
-                Ok(s) => s,
-                Err(_) => return None,
-            }
-        }
+        Err(_) => return None,
     };
 
     let trimmed = contents.trim();

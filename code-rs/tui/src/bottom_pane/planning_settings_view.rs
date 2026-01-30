@@ -98,8 +98,8 @@ impl PlanningSettingsView {
                 };
                 let (value_text, hint_text) = if self.use_chat_model {
                     (
-                        "Follow Chat Mode".to_string(),
-                        Some("Enter to change".to_string()),
+                        code_i18n::tr_plain("tui.model_selection.follow_chat.title").to_string(),
+                        Some(code_i18n::tr_plain("tui.common.hint.enter_to_change").to_string()),
                     )
                 } else {
                     (
@@ -108,12 +108,15 @@ impl PlanningSettingsView {
                             Self::format_model_label(&self.planning_model),
                             Self::reasoning_label(self.planning_reasoning)
                         ),
-                        Some("Enter to change".to_string()),
+                        Some(code_i18n::tr_plain("tui.common.hint.enter_to_change").to_string()),
                     )
                 };
                 let mut spans = vec![
                     Span::styled(arrow, arrow_style),
-                    Span::styled("Planning model", label_style),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.settings.planning.model_label"),
+                        label_style,
+                    ),
                     Span::raw("  "),
                     Span::styled(value_text, value_style),
                 ];
@@ -130,12 +133,12 @@ impl PlanningSettingsView {
 
     fn reasoning_label(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::XHigh => "XHigh",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Minimal => "Minimal",
-            ReasoningEffort::None => "None",
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
         }
     }
 

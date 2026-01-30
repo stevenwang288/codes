@@ -47,6 +47,12 @@ struct PostPasteSpaceGuard {
     cursor_pos: usize,
 }
 
+enum PendingEscape {
+    Esc,
+    Csi,
+    Ss3,
+}
+
 fn parse_slash_name(line: &str) -> Option<(&str, &str)> {
     let stripped = line.strip_prefix('/')?;
     let mut name_end = stripped.len();
@@ -182,6 +188,7 @@ pub(crate) struct ChatComposer {
     // Detect and coalesce paste bursts for smoother UX
     paste_burst: PasteBurst,
     post_paste_space_guard: Option<PostPasteSpaceGuard>,
+    pending_escape: Option<PendingEscape>,
     footer_hint_override: Option<Vec<(String, String)>>,
     embedded_mode: bool,
     render_mode: ComposerRenderMode,
@@ -247,6 +254,7 @@ impl ChatComposer {
             next_down_scrolls_history: false,
             paste_burst: PasteBurst::default(),
             post_paste_space_guard: None,
+            pending_escape: None,
             footer_hint_override: None,
             embedded_mode: false,
             render_mode: ComposerRenderMode::Full,
@@ -975,6 +983,9 @@ impl ChatComposer {
     /// Handle a key event coming from the main UI.
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> (InputResult, bool) {
         let now = Instant::now();
+        let Some(key_event) = self.translate_raw_escape_sequence(key_event) else {
+            return (InputResult::None, false);
+        };
 
         // Track rapid plain-character bursts (common when bracketed paste is
         // unavailable) so we can suppress Enter-based submissions and insert
@@ -1767,6 +1778,71 @@ impl ChatComposer {
             }
             input => self.handle_input_basic(input),
         }
+    }
+
+    fn translate_raw_escape_sequence(&mut self, key_event: KeyEvent) -> Option<KeyEvent> {
+        if key_event.kind == KeyEventKind::Release {
+            return Some(key_event);
+        }
+
+        if let Some(state) = self.pending_escape.take() {
+            match state {
+                PendingEscape::Esc => match key_event.code {
+                    KeyCode::Char('[') if key_event.modifiers.is_empty() => {
+                        self.pending_escape = Some(PendingEscape::Csi);
+                        return None;
+                    }
+                    KeyCode::Char('O') if key_event.modifiers.is_empty() => {
+                        self.pending_escape = Some(PendingEscape::Ss3);
+                        return None;
+                    }
+                    KeyCode::Char('b') if key_event.modifiers.is_empty() => {
+                        return Some(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::ALT));
+                    }
+                    KeyCode::Char('f') if key_event.modifiers.is_empty() => {
+                        return Some(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::ALT));
+                    }
+                    _ => {}
+                },
+                PendingEscape::Csi | PendingEscape::Ss3 => {
+                    if let KeyCode::Char(c) = key_event.code {
+                        if let Some(code) = match c {
+                            'A' => Some(KeyCode::Up),
+                            'B' => Some(KeyCode::Down),
+                            'C' => Some(KeyCode::Right),
+                            'D' => Some(KeyCode::Left),
+                            'H' => Some(KeyCode::Home),
+                            'F' => Some(KeyCode::End),
+                            'Z' => Some(KeyCode::BackTab),
+                            _ => None,
+                        } {
+                            return Some(KeyEvent::new(code, KeyModifiers::NONE));
+                        }
+                        if matches!(c, '0'..='9' | ';') {
+                            self.pending_escape = Some(PendingEscape::Csi);
+                            return None;
+                        }
+                        return None;
+                    }
+                    return None;
+                }
+            }
+        }
+
+        if matches!(
+            key_event,
+            KeyEvent {
+                code: KeyCode::Char('\u{1b}'),
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            }
+        ) {
+            self.pending_escape = Some(PendingEscape::Esc);
+            return None;
+        }
+
+        Some(key_event)
     }
 
     fn handle_backslash_continuation(&mut self) -> bool {

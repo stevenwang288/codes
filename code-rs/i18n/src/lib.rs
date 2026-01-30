@@ -47,6 +47,9 @@ pub fn current_language() -> Language {
 }
 
 pub fn set_language(language: Language) {
+    if language != Language::ZhCn {
+        return;
+    }
     CURRENT_LANGUAGE.store(language as u8, Ordering::Relaxed);
     persist_language(language);
     let _ = LANGUAGE_INIT.set(());
@@ -78,13 +81,17 @@ fn init_language_from_env() {
             .or_else(|| std::env::var("OPENCODE_LANGUAGE").ok());
         if let Some(raw) = env {
             if let Some(lang) = parse_language(&raw) {
-                CURRENT_LANGUAGE.store(lang as u8, Ordering::Relaxed);
+                if lang == Language::ZhCn {
+                    CURRENT_LANGUAGE.store(lang as u8, Ordering::Relaxed);
+                }
                 return;
             }
         }
 
         if let Some(lang) = read_language_from_file() {
-            CURRENT_LANGUAGE.store(lang as u8, Ordering::Relaxed);
+            if lang == Language::ZhCn {
+                CURRENT_LANGUAGE.store(lang as u8, Ordering::Relaxed);
+            }
         }
     });
 }

@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 const CLAUDE_ALLOWED_TOOLS: &str = "Bash(ls:*), Bash(cat:*), Bash(grep:*), Bash(git status:*), Bash(git log:*), Bash(find:*), Read, Grep, Glob, LS, WebFetch, TodoRead, TodoWrite, WebSearch";
 const CLOUD_MODEL_ENV_FLAG: &str = "CODE_ENABLE_CLOUD_AGENT_MODEL";
+const EXTRA_MODELS_ENV_FLAG: &str = "CODE_ENABLE_EXTRA_AGENT_MODELS";
 
 const CODE_GPT5_CODEX_READ_ONLY: &[&str] = &["-s", "read-only", "exec", "--skip-git-repo-check"];
 const CODE_GPT5_CODEX_WRITE: &[&str] = &["-s", "workspace-write", "--dangerously-bypass-approvals-and-sandbox", "exec", "--skip-git-repo-check"];
@@ -33,19 +34,8 @@ const CLOUD_GPT5_CODEX_WRITE: &[&str] = &[];
 /// entries are configured. The ordering here controls priority for legacy
 /// CLI-name lookups.
 pub const DEFAULT_AGENT_NAMES: &[&str] = &[
-    // Frontline for moderate/challenging tasks
     "code-gpt-5.2",
     "code-gpt-5.2-codex",
-    "claude-opus-4.5",
-    "gemini-3-pro",
-    // Straightforward / cost-aware
-    "code-gpt-5.1-codex-mini",
-    "claude-sonnet-4.5",
-    "gemini-3-flash",
-    // Mixed/general and alternates
-    "claude-haiku-4.5",
-    "qwen-3-coder",
-    "cloud-gpt-5.1-codex-max",
 ];
 
 #[derive(Debug, Clone)]
@@ -138,7 +128,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: CODE_GPT5_CODEX_WRITE,
         model_args: &["--model", "gpt-5.1-codex-mini"],
         description: "Budget coding agent for small changes and quick refactors; use when speed and cost matter.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &[
             "code-gpt-5-codex-mini",
             "gpt-5.1-codex-mini",
@@ -146,7 +136,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
             "codex-mini",
             "coder-mini",
         ],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: false,
     },
     AgentModelSpec {
@@ -157,9 +147,9 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: CLAUDE_OPUS_WRITE,
         model_args: &["--model", "opus"],
         description: "Higher-capacity Claude model for complex reasoning; use when you want the strongest Claude.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &["claude-opus", "claude-opus-4.1"],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: true,
     },
     AgentModelSpec {
@@ -170,9 +160,9 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: CLAUDE_SONNET_WRITE,
         model_args: &["--model", "sonnet"],
         description: "Balanced Claude model for implementation and debugging; a solid default when you want Claude.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &["claude", "claude-sonnet"],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: false,
     },
     AgentModelSpec {
@@ -183,9 +173,9 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: CLAUDE_HAIKU_WRITE,
         model_args: &["--model", "haiku"],
         description: "Fast Claude model for simple tasks, drafts, and quick iterations; pick when latency matters.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &["claude-haiku"],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: false,
     },
     AgentModelSpec {
@@ -196,7 +186,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: GEMINI_PRO_WRITE,
         model_args: &["--model", "pro"],
         description: "Higher-capacity Gemini model for harder tasks; use when gemini-3-flash misses details.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &[
             "gemini-3-pro-preview",
             "gemini-3",
@@ -204,7 +194,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
             "gemini-pro",
             "gemini-2.5-pro",
         ],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: true,
     },
     AgentModelSpec {
@@ -215,9 +205,9 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: GEMINI_FLASH_WRITE,
         model_args: &["--model", "flash"],
         description: "Primary Gemini default for most tasks; fast and low-cost with near gemini-3-pro quality.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &["gemini", "gemini-flash", "gemini-2.5-flash"],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: false,
     },
     AgentModelSpec {
@@ -228,9 +218,9 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
         write_args: QWEN_3_CODER_WRITE,
         model_args: &["-m", "qwen-3-coder"],
         description: "Fast and capable alternative; useful as a second opinion or for cross-checking.",
-        enabled_by_default: true,
+        enabled_by_default: false,
         aliases: &["qwen", "qwen3"],
-        gating_env: None,
+        gating_env: Some(EXTRA_MODELS_ENV_FLAG),
         is_frontline: false,
     },
     AgentModelSpec {

@@ -156,12 +156,18 @@ impl AgentsOverviewView {
                 format!(" {}  ", code_i18n::tr(ui_language, "tui.common.navigate")),
                 Style::default().fg(crate::colors::text_dim()),
             ),
-            Span::styled("Enter", Style::default().fg(crate::colors::success())),
+            Span::styled(
+                code_i18n::tr(ui_language, "tui.common.key.enter"),
+                Style::default().fg(crate::colors::success()),
+            ),
             Span::styled(
                 format!(" {}  ", code_i18n::tr(ui_language, "tui.common.configure")),
                 Style::default().fg(crate::colors::text_dim()),
             ),
-            Span::styled("Esc", Style::default().fg(crate::colors::error())),
+            Span::styled(
+                code_i18n::tr(ui_language, "tui.common.key.esc"),
+                Style::default().fg(crate::colors::error()),
+            ),
             Span::styled(
                 format!(" {}", code_i18n::tr(ui_language, "tui.common.close_label")),
                 Style::default().fg(crate::colors::text_dim()),

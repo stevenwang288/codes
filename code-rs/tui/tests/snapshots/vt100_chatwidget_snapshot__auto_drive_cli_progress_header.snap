@@ -3,39 +3,39 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: "frames.join(\"\\n---FRAME---\\n\")"
 ---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
-   - Running commands
+   - 运行命令
 
 
-  Auto Drive > Ready: run cargo check  ✶ Running (Xs)
+  自动运行 > Ready: run cargo check                               ✶ 运行中 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key
 
 ---FRAME---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
-   - Running commands
+   - 运行命令
 
 
-  Auto Drive > Running cargo check... · Installed dependencies  ✶ Thinking (Xs)
+  自动运行 > Running cargo check... · Installed dependencies      ✶ 思考中 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key
 
 ---FRAME---
  +----------------------------------------------------------------------------+
- |                                 Every Code                                 |
+ |        Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui       |
  +----------------------------------------------------------------------------+
-   - Running commands
+   - 运行命令
 
 
-  Auto Drive > Running cargo check... · Installed dependencies  ✶ Running (Xs)
+  自动运行 > Running cargo check... · Installed dependencies      ✶ 运行中 (Xs)
  +----------------------------------------------------------------------------+
- | What can I code for you today?                                             |
+ | 深夜我能为你写点什么？                                                     |
  +----------------------------------------------------------------------------+
   • Agents Enabled  • Diagnostics Enabled                              API key

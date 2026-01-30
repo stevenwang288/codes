@@ -3,29 +3,29 @@ source: tui/tests/vt100_chatwidget_snapshot.rs
 expression: output
 ---
  +------------------------------------------------------------------------------------------------+
- |                                           Every Code                                           |
+ |                  Every Code  •  模型：GPT-5.2-Codex  •  推理：中  •  目录：tui                 |
  +------------------------------------------------------------------------------------------------+
- +Settings ▸ Overview-----------------------------------------------------------------------------+
+ +设置 ▸ 概览-------------------------------------------------------------------------------------+
  |                                                                                                |
- | › Model              Model: GPT-5.2-Codex (Medium)                                             |
- |   + Choose the language model used for new completions.                                        |
+ | › 模型                 模型: GPT-5.2-Codex (中)                                                |
+ |   + 选择新对话使用的语言模型。                                                                 |
  |                                                                                                |
- |   Theme              Theme: Light - Photon (16-color) · Spinner: Diamond                       |
- |   + Switch between preset color palettes and adjust contrast.                                  |
+ |   主题                 主题: 浅色 - Photon（16 色） · 指示器: Diamond                          |
+ |   + 切换预设配色并调整对比度。                                                                 |
  |                                                                                                |
- |   Updates            Auto update: Disabled                                                     |
- |   + Control CLI auto-update cadence and release channels.                                      |
+ |   更新                 自动更新: 已禁用                                                        |
+ |   + 控制 CLI 自动更新频率与发布通道。                                                          |
  |                                                                                                |
  |                                                                                                |
 
- |   Accounts           Auto-switch: On · API key fallback: Off                                   |
- |   + Configure account switching behavior under rate and usage limits.                          |
+ |   账户                 自动切换: 开 · API Key 兜底: 关                                         |
+ |   + 在速率与用量限制下配置账户切换行为。                                                       |
  |                                                                                                |
- | ↑ ↓ Move    Enter Open    Esc Close    ? Help                                                  |
+ | ↑ ↓ 移动    Enter 打开    Esc 关闭    ? 帮助                                                   |
  |                                                                                                |
  +------------------------------------------------------------------------------------------------+
 
  +------------------------------------------------------------------------------------------------+
- | What can I code for you today?                                                                 |
+ | 深夜我能为你写点什么？                                                                         |
  +------------------------------------------------------------------------------------------------+
- Read Only  (Shift+Tab change)                                            Ctrl+G guide  •  API key
+ Read Only  (Shift+Tab change)                    Ctrl+S 设置   Ctrl+G 帮助  •  Tab 模式: 开发  •
