@@ -87,7 +87,7 @@ jobs:
       - name: Resolve issue metadata (manual trigger support)
         if: github.event_name == 'workflow_dispatch'
         id: resolve_issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo;
@@ -101,7 +101,7 @@ jobs:
 
       - name: Manual kick-off comment (optional)
         if: github.event_name == 'workflow_dispatch' && inputs.note != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo; const issue_number = Number(process.env.ISSUE_NUMBER);
@@ -131,7 +131,7 @@ jobs:
         timeout-minutes: 5
         id: bot
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.CODE_GH_PAT }}
           script: |
@@ -148,7 +148,7 @@ jobs:
       - name: Guard self-trigger (skip if actor is bot)
         if: always()
         id: guard_self
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const actor = context.actor;
@@ -200,7 +200,7 @@ jobs:
 
       - name: Collect issue history and past PRs (context for agent)
         timeout-minutes: 5
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
@@ -257,7 +257,7 @@ jobs:
       - name: Rate limit check (actor + overall)
         timeout-minutes: 5
         id: rate_limit
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.CODE_GH_PAT }}
           script: |
@@ -306,7 +306,7 @@ jobs:
         timeout-minutes: 5
         if: steps.rate_limit.outputs.allow == 'true'
         id: safety
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         with:
@@ -530,7 +530,7 @@ jobs:
 
       - name: Ensure codex slug (single source of truth)
         id: slug
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo;
@@ -572,7 +572,7 @@ jobs:
           SUGGESTED_ID: ${{ steps.safety.outputs.suggested_id }}
 
       - name: Apply code/<slug> label and remove ID marker comments
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo; const issue_number = Number(process.env.ISSUE_NUMBER);
@@ -592,7 +592,7 @@ jobs:
             } catch {}
 
       - name: Apply triage state label (allow/block)
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo; const issue_number = Number(process.env.ISSUE_NUMBER);
@@ -603,7 +603,7 @@ jobs:
 
       - name: Queue issue-comment (comment mode)
         if: steps.safety.outputs.decision == 'comment_only'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo;
@@ -621,7 +621,7 @@ jobs:
 
       - name: Queue implementation (issue-code workflow)
         if: steps.safety.outputs.decision == 'allow' && steps.gate.outputs.allow_agent == 'true' && steps.gate.outputs.agent_mode == 'full'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner; const repo = context.repo.repo;
