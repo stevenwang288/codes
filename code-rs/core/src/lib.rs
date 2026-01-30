@@ -136,7 +136,7 @@ mod function_tool;
 mod user_notification;
 pub mod util;
 
-pub use apply_patch::CODEX_APPLY_PATCH_ARG1;
+pub use apply_patch::CODES_APPLY_PATCH_ARG1;
 pub use command_safety::is_safe_command;
 pub use agent_tool::smoke_test_agent_blocking;
 pub use agent_tool::split_command_and_args;

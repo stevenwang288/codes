@@ -13,7 +13,7 @@ fn key(code: KeyCode) -> KeyEvent {
 #[test]
 fn settings_model_overlay_left_returns_to_overview() {
     // Safe: tests run single-threaded by design in this crate's harness.
-    unsafe { std::env::set_var("CODEX_LANG", "zh-CN") };
+    unsafe { std::env::set_var("CODES_LANG", "zh-CN") };
 
     let mut harness = ChatWidgetHarness::new();
     harness.open_model_settings_overlay();
@@ -32,4 +32,3 @@ fn settings_model_overlay_left_returns_to_overview() {
         "expected settings overview after Left:\n{in_overview}"
     );
 }
-

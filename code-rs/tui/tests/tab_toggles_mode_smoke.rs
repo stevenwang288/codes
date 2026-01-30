@@ -13,7 +13,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
 #[test]
 fn tab_toggles_mode_when_input_empty() {
     // Safe: tests run single-threaded by design in this crate's harness.
-    unsafe { std::env::set_var("CODEX_LANG", "zh-CN") };
+    unsafe { std::env::set_var("CODES_LANG", "zh-CN") };
 
     let mut harness = ChatWidgetHarness::new();
 
@@ -40,4 +40,3 @@ fn tab_toggles_mode_when_input_empty() {
         );
     }
 }
-

@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Generate a plan for how an agent should accomplish a complex coding task. Use when a user asks for a plan, and optionally when they want to save, find, read, update, or delete plan files in $CODEX_HOME/plans (default ~/.codex/plans).
+description: Generate a plan for how an agent should accomplish a complex coding task. Use when a user asks for a plan, and optionally when they want to save, find, read, update, or delete plan files in ~/.codes/plans.
 metadata:
   short-description: Generate a plan for a complex task
 ---
@@ -17,7 +17,7 @@ This skill can also be used to draft codebase or system overviews.
 
 ## Core rules
 
-- Resolve the plans directory as `$CODEX_HOME/plans` or `~/.codex/plans` when `CODEX_HOME` is not set.
+- Resolve the plans directory as `~/.codes/plans`.
 - Create the plans directory if it does not exist.
 - Never write to the repo; only read files to understand context.
 - Require frontmatter with **only** `name` and `description` (single-line values) for on-disk plans.
@@ -62,15 +62,15 @@ Create a plan file (body only; frontmatter is written for you). Run from the pla
 
 ```bash
 python ./scripts/create_plan.py \
-  --name codex-rate-limit-overview \
-  --description "Scope and update plan for Codex rate limiting" \
+  --name codes-rate-limit-overview \
+  --description "Scope and update plan for CODES rate limiting" \
   --body-file /tmp/plan-body.md
 ```
 
 Read frontmatter summary for a plan (run from the plan skill directory):
 
 ```bash
-python ./scripts/read_plan_frontmatter.py ~/.codex/plans/codex-rate-limit-overview.md
+python ./scripts/read_plan_frontmatter.py ~/.codes/plans/codes-rate-limit-overview.md
 ```
 
 List plan summaries (optional filter; run from the plan skill directory):

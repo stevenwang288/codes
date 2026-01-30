@@ -76,9 +76,7 @@ pub fn with_test_language<R>(language: Language, f: impl FnOnce() -> R) -> R {
 
 fn init_language_from_env() {
     LANGUAGE_INIT.get_or_init(|| {
-        let env = std::env::var("CODEX_LANG")
-            .ok()
-            .or_else(|| std::env::var("OPENCODE_LANGUAGE").ok());
+        let env = std::env::var("CODES_LANG").ok();
         if let Some(raw) = env {
             if let Some(lang) = parse_language(&raw) {
                 if lang == Language::ZhCn {
@@ -103,6 +101,18 @@ pub fn parse_language(raw: &str) -> Option<Language> {
         "zh" | "zh-cn" | "zh-hans" => Some(Language::ZhCn),
         _ => None,
     }
+}
+
+fn resolve_codes_home() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("CODES_HOME") {
+        return Some(PathBuf::from(path));
+    }
+
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)?;
+
+    Some(home.join(".codes"))
 }
 
 pub fn language_name(ui_language: Language, target: Language) -> &'static str {
@@ -233,7 +243,7 @@ fn log_missing_if_needed(requested_language: Language, key: &'static str, fallba
 
     let line = serde_json::json!({
         "ts_ms": ts_ms,
-        "app": "code",
+        "app": "codes",
         "missing_in": requested_language.as_bcp47(),
         "key": key,
         "fallback_text": fallback_text,
@@ -246,9 +256,7 @@ fn log_missing_if_needed(requested_language: Language, key: &'static str, fallba
 }
 
 fn missing_log_path() -> Option<PathBuf> {
-    let base = std::env::var_os("CODE_HOME")
-        .or_else(|| std::env::var_os("CODEX_HOME"))
-        .map(PathBuf::from)?;
+    let base = resolve_codes_home()?;
     Some(base.join("i18n-missing.jsonl"))
 }
 
@@ -269,9 +277,7 @@ fn persist_language(language: Language) {
 }
 
 fn persisted_language_path() -> Option<PathBuf> {
-    let base = std::env::var_os("CODE_HOME")
-        .or_else(|| std::env::var_os("CODEX_HOME"))
-        .map(PathBuf::from)?;
+    let base = resolve_codes_home()?;
     Some(base.join("ui-language.txt"))
 }
 

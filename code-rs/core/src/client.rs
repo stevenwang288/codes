@@ -35,14 +35,11 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-const AUTH_REQUIRED_MESSAGE_EN: &str = "Authentication required. Run `code login` to continue.";
-const AUTH_REQUIRED_MESSAGE_ZH_CN: &str = "需要登录。请运行 `code login`（或 `codes login`）后继续。";
+const AUTH_REQUIRED_MESSAGE_EN: &str = "Authentication required. Run `codes login` to continue.";
+const AUTH_REQUIRED_MESSAGE_ZH_CN: &str = "需要登录。请运行 `codes login` 后继续。";
 
 fn auth_required_message() -> &'static str {
-    let env = std::env::var("CODEX_LANG")
-        .ok()
-        .or_else(|| std::env::var("OPENCODE_LANGUAGE").ok())
-        .unwrap_or_default();
+    let env = std::env::var("CODES_LANG").unwrap_or_default();
     let normalized = env.trim().to_ascii_lowercase().replace('_', "-");
     match normalized.as_str() {
         "zh" | "zh-cn" | "zh-hans" => AUTH_REQUIRED_MESSAGE_ZH_CN,

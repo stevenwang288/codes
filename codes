@@ -3,16 +3,16 @@ set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-export CODE_HOME="${REPO_ROOT}/.codes-home"
-export CODEX_HOME="${REPO_ROOT}/.codes-home"
-export CODE_AUTO_TRUST="1"
+export CODES_HOME="${CODES_HOME:-${HOME}/.codes}"
+export CODES_BUILD_HOME="${REPO_ROOT}/.codes-home"
+export CODES_AUTO_TRUST="1"
 
-mkdir -p "${CODE_HOME}" || true
+mkdir -p "${CODES_HOME}" "${CODES_BUILD_HOME}" || true
 
-if [[ -z "${CODEX_LANG:-}" && -f "${CODE_HOME}/ui-language.txt" ]]; then
-  CODEX_LANG="$(head -n 1 "${CODE_HOME}/ui-language.txt" | tr -d '\r' || true)"
+if [[ -z "${CODES_LANG:-}" && -f "${CODES_HOME}/ui-language.txt" ]]; then
+  CODES_LANG="$(head -n 1 "${CODES_HOME}/ui-language.txt" | tr -d '\r' || true)"
 fi
-export CODEX_LANG="${CODEX_LANG:-zh-CN}"
+export CODES_LANG="${CODES_LANG:-zh-CN}"
 
 if [[ "${1:-}" == "build" || "${1:-}" == "--rebuild" ]]; then
   shift || true
@@ -20,7 +20,7 @@ if [[ "${1:-}" == "build" || "${1:-}" == "--rebuild" ]]; then
 fi
 
 # Preferred fast path: run the last-built bin recorded by build-fast.sh.
-LAST_BUILT_FILE="${CODE_HOME}/last-built-bin.txt"
+LAST_BUILT_FILE="${CODES_BUILD_HOME}/last-built-bin.txt"
 if [[ -f "${LAST_BUILT_FILE}" ]]; then
   LAST_BUILT_BIN="$(cat "${LAST_BUILT_FILE}" | head -n 1)"
   if [[ -n "${LAST_BUILT_BIN}" && -f "${LAST_BUILT_BIN}" ]]; then

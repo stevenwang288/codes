@@ -306,11 +306,10 @@ pub struct Config {
     /// Ordered list of fallback filenames to consider when loading project docs.
     pub project_doc_fallback_filenames: Vec<String>,
 
-    /// Directory containing all Codex state (defaults to `~/.codex`; can be
-    /// overridden by the `CODEX_HOME` environment variable).
+    /// Directory containing all CODES state (defaults to `~/.codes`).
     pub code_home: PathBuf,
 
-    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
+    /// Settings that govern if and what will be written to `~/.codes/history.jsonl`.
     pub history: History,
 
     /// Optional URI-based file opener. If set, citations to files in the model
@@ -1701,18 +1700,16 @@ persistence = "none"
     fn load_instructions_does_not_fall_back_to_home() -> anyhow::Result<()> {
         let code_home = TempDir::new()?;
         let legacy_home = TempDir::new()?;
-        let legacy_codex = legacy_home.path().join(".codex");
-        std::fs::create_dir_all(&legacy_codex)?;
-        std::fs::write(legacy_codex.join("AGENTS.md"), " legacy guidance \n")?;
+        let legacy_codes = legacy_home.path().join(".codes");
+        std::fs::create_dir_all(&legacy_codes)?;
+        std::fs::write(legacy_codes.join("AGENTS.md"), " legacy guidance \n")?;
 
         let _home_guard = EnvVarGuard::new("HOME");
-        let _code_home_guard = EnvVarGuard::new("CODE_HOME");
-        let _codex_home_guard = EnvVarGuard::new("CODEX_HOME");
+        let _codes_home_guard = EnvVarGuard::new("CODES_HOME");
 
         unsafe {
             std::env::set_var("HOME", legacy_home.path());
-            std::env::remove_var("CODE_HOME");
-            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODES_HOME");
         }
 
         let loaded = Config::load_instructions(Some(code_home.path()));

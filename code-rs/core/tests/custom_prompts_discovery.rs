@@ -65,7 +65,7 @@ fn normalize_path_for_assertion(path: &Path) -> PathBuf {
 #[tokio::test]
 async fn discovers_prompts_from_code_home() -> Result<()> {
     let _env_lock = ENV_MUTEX.lock().unwrap();
-    let env = EnvBackup::new(&["HOME", "CODE_HOME", "CODEX_HOME"]);
+    let env = EnvBackup::new(&["HOME", "CODES_HOME"]);
 
     let code_home = TempDir::new()?;
     let prompts_dir = code_home.path().join("prompts");
@@ -73,8 +73,7 @@ async fn discovers_prompts_from_code_home() -> Result<()> {
     fs::write(prompts_dir.join("alpha.md"), "# alpha")?;
     fs::write(prompts_dir.join("beta.MD"), "# beta")?;
 
-    env.set_path("CODE_HOME", code_home.path());
-    env.remove("CODEX_HOME");
+    env.set_path("CODES_HOME", code_home.path());
 
     let default_dir = default_prompts_dir().expect("expected prompts dir");
     assert_eq!(
@@ -92,7 +91,7 @@ async fn discovers_prompts_from_code_home() -> Result<()> {
 #[tokio::test]
 async fn discovers_prompts_from_legacy_codex_home() -> Result<()> {
     let _env_lock = ENV_MUTEX.lock().unwrap();
-    let env = EnvBackup::new(&["HOME", "CODE_HOME", "CODEX_HOME"]);
+    let env = EnvBackup::new(&["HOME", "CODES_HOME"]);
 
     let fake_home = TempDir::new()?;
     let codex_home = fake_home.path().join(".codex");
@@ -101,8 +100,7 @@ async fn discovers_prompts_from_legacy_codex_home() -> Result<()> {
     fs::write(legacy_prompts.join("legacy.md"), "# legacy")?;
 
     env.set_path("HOME", fake_home.path());
-    env.remove("CODE_HOME");
-    env.remove("CODEX_HOME");
+    env.remove("CODES_HOME");
 
     let default_dir = default_prompts_dir().expect("expected prompts dir");
     assert_eq!(
@@ -120,7 +118,7 @@ async fn discovers_prompts_from_legacy_codex_home() -> Result<()> {
 #[tokio::test]
 async fn prefers_code_home_when_both_locations_exist() -> Result<()> {
     let _env_lock = ENV_MUTEX.lock().unwrap();
-    let env = EnvBackup::new(&["HOME", "CODE_HOME", "CODEX_HOME"]);
+    let env = EnvBackup::new(&["HOME", "CODES_HOME"]);
 
     let fake_home = TempDir::new()?;
     let code_home = fake_home.path().join(".code");
@@ -133,8 +131,7 @@ async fn prefers_code_home_when_both_locations_exist() -> Result<()> {
     fs::write(codex_prompts.join("legacy.md"), "# legacy")?;
 
     env.set_path("HOME", fake_home.path());
-    env.remove("CODE_HOME");
-    env.remove("CODEX_HOME");
+    env.remove("CODES_HOME");
 
     let default_dir = default_prompts_dir().expect("expected prompts dir");
     assert_eq!(
@@ -152,7 +149,7 @@ async fn prefers_code_home_when_both_locations_exist() -> Result<()> {
 #[tokio::test]
 async fn ignores_non_markdown_files() -> Result<()> {
     let _env_lock = ENV_MUTEX.lock().unwrap();
-    let env = EnvBackup::new(&["HOME", "CODE_HOME", "CODEX_HOME"]);
+    let env = EnvBackup::new(&["HOME", "CODES_HOME"]);
 
     let code_home = TempDir::new()?;
     let prompts_dir = code_home.path().join("prompts");
@@ -160,8 +157,7 @@ async fn ignores_non_markdown_files() -> Result<()> {
     fs::write(prompts_dir.join("keep.md"), "# keep")?;
     fs::write(prompts_dir.join("ignore.txt"), "# ignore")?;
 
-    env.set_path("CODE_HOME", code_home.path());
-    env.remove("CODEX_HOME");
+    env.set_path("CODES_HOME", code_home.path());
 
     let prompts = discover_prompts_in(&prompts_dir).await;
     let names = prompt_names(&prompts);

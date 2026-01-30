@@ -560,12 +560,12 @@ mod tests_windows {
                 }),
                 vec![
                     "code-mcp-server.exe",
-                    "--codex-run-as-apply-patch",
+                    "--codes-run-as-apply-patch",
                     "*** Begin Patch\n*** Update File: C:\\Users\\person\\destination_file.txt\n-original content\n+modified content\n*** End Patch",
                 ],
                 vec![
                     "code-mcp-server.exe",
-                    "--codex-run-as-apply-patch",
+                    "--codes-run-as-apply-patch",
                     "*** Begin Patch\n*** Update File: C:\\Users\\person\\destination_file.txt\n-original content\n+modified content\n*** End Patch",
                 ],
             ),

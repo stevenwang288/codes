@@ -3,7 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use code_core::config::resolve_code_path_for_read;
-use code_core::CODEX_APPLY_PATCH_ARG1;
+use code_core::CODES_APPLY_PATCH_ARG1;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 use tempfile::TempDir;
@@ -55,7 +55,7 @@ where
     }
 
     let argv1 = args.next().unwrap_or_default();
-    if argv1 == CODEX_APPLY_PATCH_ARG1 {
+    if argv1 == CODES_APPLY_PATCH_ARG1 {
         let patch_arg = args.next().and_then(|s| s.to_str().map(str::to_owned));
         let exit_code = match patch_arg {
             Some(patch_arg) => {
@@ -67,7 +67,7 @@ where
                 }
             }
             None => {
-                eprintln!("Error: {CODEX_APPLY_PATCH_ARG1} requires a UTF-8 PATCH argument.");
+                eprintln!("Error: {CODES_APPLY_PATCH_ARG1} requires a UTF-8 PATCH argument.");
                 1
             }
         };
@@ -105,14 +105,14 @@ where
     })
 }
 
-const ILLEGAL_ENV_VAR_PREFIX: &str = "CODEX_";
+const ILLEGAL_ENV_VAR_PREFIX: &str = "CODES_";
 
 /// Load env vars from ~/.code/.env (legacy ~/.codex/.env is still read) and `$(pwd)/.env`.
 ///
 /// Security: Do not allow `.env` files to create or modify any variables
-/// with names starting with `CODEX_`.
+/// with names starting with `CODES_`.
 fn load_dotenv() {
-    // 1) Load from global ~/.code/.env (or ~/.codex/.env) first.
+    // 1) Load from global ~/.codes/.env first.
     if let Ok(code_home) = code_core::config::find_code_home() {
         let global_env_path = resolve_code_path_for_read(&code_home, Path::new(".env"));
         if let Ok(iter) = dotenvy::from_path_iter(global_env_path) {
@@ -123,36 +123,25 @@ fn load_dotenv() {
 
     // 2) Load from the current project's .env, but with extra safety:
     //    - Do NOT import provider API keys by default (e.g., OPENAI_API_KEY, AZURE_OPENAI_API_KEY).
-    //    - Users can opt back in via CODEX_ALLOW_PROJECT_OPENAI_KEYS=1 (either exported
-    //      in the shell or placed in ~/.code/.env).
+    //    - Users can opt back in via CODES_ALLOW_PROJECT_OPENAI_KEYS=1 (either exported
+    //      in the shell or placed in ~/.codes/.env).
     if let Ok(iter) = dotenvy::dotenv_iter() {
         // Filtered setter that always blocks provider keys from the project's .env.
         for (key, value) in iter.into_iter().flatten() {
             let upper = key.to_ascii_uppercase();
-            // Never allow CODEX_* to be set from .env files for safety.
-            if upper.starts_with(ILLEGAL_ENV_VAR_PREFIX) && upper != "CODEX_HOME" { continue; }
+            // Never allow CODES_* to be set from .env files for safety.
+            if upper.starts_with(ILLEGAL_ENV_VAR_PREFIX) && upper != "CODES_HOME" {
+                continue;
+            }
             // Always ignore provider keys from project .env (must be set globally or in shell).
             if upper == "OPENAI_API_KEY" || upper == "AZURE_OPENAI_API_KEY" { continue; }
             // Safe: still single-threaded during startup.
             unsafe { std::env::set_var(&key, &value) };
         }
     }
-
-    // Bridge CODE_HOME to CODEX_HOME for legacy components that still read only CODEX_HOME.
-    let codex_home_missing = std::env::var("CODEX_HOME")
-        .map(|v| v.trim().is_empty())
-        .unwrap_or(true);
-    if codex_home_missing {
-        if let Ok(code_home) = std::env::var("CODE_HOME") {
-            if !code_home.trim().is_empty() {
-                // Safe: still single-threaded during startup.
-                unsafe { std::env::set_var("CODEX_HOME", code_home) };
-            }
-        }
-    }
 }
 
-/// Helper to set vars from a dotenvy iterator while filtering out `CODEX_` keys.
+/// Helper to set vars from a dotenvy iterator while filtering out `CODES_` keys.
 fn set_filtered<I>(iter: I)
 where
     I: IntoIterator<Item = Result<(String, String), dotenvy::Error>>,
@@ -170,7 +159,7 @@ where
 ///
 /// - UNIX: `apply_patch` symlink to the current executable
 /// - WINDOWS: `apply_patch.bat` batch script to invoke the current executable
-///   with the "secret" --codex-run-as-apply-patch flag.
+///   with the "secret" --codes-run-as-apply-patch flag.
 ///
 /// This temporary directory is prepended to the PATH environment variable so
 /// that `apply_patch` can be on the PATH without requiring the user to
@@ -199,7 +188,7 @@ fn prepend_path_entry_for_apply_patch() -> std::io::Result<TempDir> {
                 &batch_script,
                 format!(
                     r#"@echo off
-"{}" {CODEX_APPLY_PATCH_ARG1} %*
+"{}" {CODES_APPLY_PATCH_ARG1} %*
 "#,
                     exe.display()
                 ),

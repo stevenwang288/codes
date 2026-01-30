@@ -13,7 +13,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
 #[test]
 fn ctrl_panels_are_chinese_by_default() {
     // Safe: tests run single-threaded by design in this crate's harness.
-    unsafe { std::env::set_var("CODEX_LANG", "zh-CN") };
+    unsafe { std::env::set_var("CODES_LANG", "zh-CN") };
 
     let mut harness = ChatWidgetHarness::new();
 

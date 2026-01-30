@@ -8,13 +8,13 @@ This file has moved. Please see the latest configuration documentation here:
   - Values can contain objects, such as `--config shell_environment_policy.include_only=["PATH", "HOME", "USER"]`.
   - For consistency with `config.toml`, values are in TOML format rather than JSON format, so use `{a = 1, b = 2}` rather than `{"a": 1, "b": 2}`.
   - If `value` cannot be parsed as a valid TOML value, it is treated as a string value. This means that both `-c model="o3"` and `-c model=o3` are equivalent.
-- The `$CODEX_HOME/config.toml` configuration file. `CODEX_HOME` defaults to `~/.codex`. (Logs and other state use the same directory.)
+- The `~/.codes/config.toml` configuration file. (Logs and other state use the same directory.)
 
 Both the `--config` flag and the `config.toml` file support the following options:
 
 ## model
 
-The model that Codex should use.
+The model that CODES should use.
 
 ```toml
 model = "o3"  # overrides the default of "gpt-5.1"
@@ -22,7 +22,7 @@ model = "o3"  # overrides the default of "gpt-5.1"
 
 ## model_providers
 
-This option lets you override and amend the default set of model providers bundled with Codex. This value is a map where the key is the value to use with `model_provider` to select the corresponding provider. Providers must expose an OpenAI-compatible HTTP API (Chat Completions or Responses); native Anthropic/Gemini APIs are not supported directly without a proxy.
+This option lets you override and amend the default set of model providers bundled with CODES. This value is a map where the key is the value to use with `model_provider` to select the corresponding provider. Providers must expose an OpenAI-compatible HTTP API (Chat Completions or Responses); native Anthropic/Gemini APIs are not supported directly without a proxy.
 
 For example, if you wanted to add a provider that uses the OpenAI 4o model via the chat completions API, then you could add the following configuration:
 
@@ -32,7 +32,7 @@ model = "gpt-4o"
 model_provider = "openai-chat-completions"
 
 [model_providers.openai-chat-completions]
-# Name of the provider that will be displayed in the Codex UI.
+# Name of the provider that will be displayed in the CODES UI.
 name = "OpenAI using Chat Completions"
 # The path `/chat/completions` will be amended to this URL to make the POST
 # request for the chat completions.
@@ -655,7 +655,7 @@ notify = ["python3", "/Users/mbolin/.codex/notify.py"]
 
 ## history
 
-By default, Codex CLI records messages sent to the model in `$CODEX_HOME/history.jsonl`. Note that on UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
+By default, CODES records messages sent to the model in `~/.codes/history.jsonl`. Note that on UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
 
 To disable this behavior, configure `[history]` as follows:
 

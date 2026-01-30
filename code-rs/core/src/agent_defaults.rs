@@ -79,7 +79,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
     AgentModelSpec {
         slug: "code-gpt-5.2",
         family: "code",
-        cli: "coder",
+        cli: "codes",
         read_only_args: CODE_GPT5_READ_ONLY,
         write_args: CODE_GPT5_WRITE,
         model_args: &["--model", "gpt-5.2"],
@@ -99,7 +99,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
     AgentModelSpec {
         slug: "code-gpt-5.2-codex",
         family: "code",
-        cli: "coder",
+        cli: "codes",
         read_only_args: CODE_GPT5_CODEX_READ_ONLY,
         write_args: CODE_GPT5_CODEX_WRITE,
         model_args: &["--model", "gpt-5.2-codex"],
@@ -123,7 +123,7 @@ const AGENT_MODEL_SPECS: &[AgentModelSpec] = &[
     AgentModelSpec {
         slug: "code-gpt-5.1-codex-mini",
         family: "code",
-        cli: "coder",
+        cli: "codes",
         read_only_args: CODE_GPT5_CODEX_READ_ONLY,
         write_args: CODE_GPT5_CODEX_WRITE,
         model_args: &["--model", "gpt-5.1-codex-mini"],

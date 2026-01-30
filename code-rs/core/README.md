@@ -19,4 +19,4 @@ Expects the binary containing `codex-core` to run the equivalent of `codex debug
 
 ### All Platforms
 
-Expects the binary containing `codex-core` to simulate the virtual `apply_patch` CLI when `arg1` is `--codex-run-as-apply-patch`. See the `codex-arg0` crate for details.
+Expects the binary containing `code-core` to simulate the virtual `apply_patch` CLI when `arg1` is `--codes-run-as-apply-patch`. See the `code-arg0` crate for details.

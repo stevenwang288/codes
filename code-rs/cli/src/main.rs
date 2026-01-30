@@ -41,14 +41,14 @@ mod mcp_cmd;
 
 use crate::mcp_cmd::McpCli;
 
-const CLI_COMMAND_NAME: &str = "code";
-pub(crate) const CODEX_SECURE_MODE_ENV_VAR: &str = "CODEX_SECURE_MODE";
+const CLI_COMMAND_NAME: &str = "codes";
+pub(crate) const CODES_SECURE_MODE_ENV_VAR: &str = "CODES_SECURE_MODE";
 
 /// As early as possible in the process lifecycle, apply hardening measures
-/// if the CODEX_SECURE_MODE environment variable is set to "1".
+/// if the CODES_SECURE_MODE environment variable is set to "1".
 #[ctor::ctor]
 fn pre_main_hardening() {
-    let secure_mode = match std::env::var(CODEX_SECURE_MODE_ENV_VAR) {
+    let secure_mode = match std::env::var(CODES_SECURE_MODE_ENV_VAR) {
         Ok(value) => value,
         Err(_) => return,
     };
@@ -59,24 +59,24 @@ fn pre_main_hardening() {
 
     // Always clear this env var so child processes don't inherit it.
     unsafe {
-        std::env::remove_var(CODEX_SECURE_MODE_ENV_VAR);
+        std::env::remove_var(CODES_SECURE_MODE_ENV_VAR);
     }
 }
 
-/// Codex CLI
+/// CODES CLI
 ///
 /// If no subcommand is specified, options will be forwarded to the interactive CLI.
 #[derive(Debug, Parser)]
 #[clap(
     author,
-    name = "code",
+    name = "codes",
     version = code_version::version(),
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
     // `codex-x86_64-unknown-linux-musl`, but the help output should always use
-    // the generic `code` command name that users run.
-    bin_name = "code"
+    // the generic `codes` command name that users run.
+    bin_name = "codes"
 )]
 struct MultitoolCli {
     #[clap(flatten)]
@@ -99,7 +99,7 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
-    /// Run Codex non-interactively.
+    /// Run CODES non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
 
@@ -113,11 +113,11 @@ enum Subcommand {
     /// Remove stored authentication credentials.
     Logout(LogoutCommand),
 
-    /// [experimental] Run Codex as an MCP server and manage MCP servers.
+    /// [experimental] Run CODES as an MCP server and manage MCP servers.
     #[clap(visible_alias = "acp")]
     Mcp(McpCli),
 
-    /// [experimental] Run the Codex MCP server (stdio transport).
+    /// [experimental] Run the CODES MCP server (stdio transport).
     McpServer,
 
     /// [experimental] Run the app server.
@@ -133,7 +133,7 @@ enum Subcommand {
     #[clap(hide = false)]
     OrderReplay(OrderReplayArgs),
 
-    /// Apply the latest diff produced by Codex agent as a `git apply` to your local working tree.
+    /// Apply the latest diff produced by the CODES agent as a `git apply` to your local working tree.
     #[clap(visible_alias = "a")]
     Apply(ApplyCommand),
 
@@ -143,7 +143,7 @@ enum Subcommand {
     /// Internal: generate TypeScript protocol bindings.
     #[clap(hide = true)]
     GenerateTs(GenerateTsCommand),
-    /// [EXPERIMENTAL] Browse tasks from Codex Cloud and apply changes locally.
+    /// [EXPERIMENTAL] Browse tasks from CODES Cloud and apply changes locally.
     #[clap(name = "cloud", alias = "cloud-tasks")]
     Cloud(CloudTasksCli),
 
@@ -1682,11 +1682,14 @@ mod tests {
     use code_protocol::protocol::UserMessageEvent;
 
     #[test]
-    fn bash_completion_uses_code_command_name() {
+    fn bash_completion_uses_codes_command_name() {
         let mut buf = Vec::new();
         write_completion(Shell::Bash, &mut buf);
         let script = String::from_utf8(buf).expect("completion output should be valid UTF-8");
-        assert!(script.contains("_code()"), "expected bash completion function to be named _code");
+        assert!(
+            script.contains("_codes()"),
+            "expected bash completion function to be named _codes"
+        );
         assert!(!script.contains("_codex()"), "bash completion output should not use legacy codex prefix");
     }
 
@@ -1740,20 +1743,14 @@ where
         .lock()
         .unwrap_or_else(|poison| poison.into_inner());
         let temp_home = TempDir::new().expect("temp code home");
-        let prev_code_home = std::env::var("CODE_HOME").ok();
-        let prev_codex_home = std::env::var("CODEX_HOME").ok();
-        set_env_var("CODE_HOME", temp_home.path());
-        remove_env_var("CODEX_HOME");
+        let prev_codes_home = std::env::var("CODES_HOME").ok();
+        set_env_var("CODES_HOME", temp_home.path());
 
         let result = f(temp_home.path());
 
-        match prev_code_home {
-            Some(val) => set_env_var("CODE_HOME", val),
-            None => remove_env_var("CODE_HOME"),
-        }
-        match prev_codex_home {
-            Some(val) => set_env_var("CODEX_HOME", val),
-            None => remove_env_var("CODEX_HOME"),
+        match prev_codes_home {
+            Some(val) => set_env_var("CODES_HOME", val),
+            None => remove_env_var("CODES_HOME"),
         }
 
         result

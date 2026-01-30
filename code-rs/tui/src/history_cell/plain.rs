@@ -777,7 +777,7 @@ mod tests {
     fn popular_commands_are_localized_in_zh_cn() {
         let code_home = make_temp_code_home("popular-zh");
         unsafe {
-            std::env::set_var("CODE_HOME", &code_home);
+            std::env::set_var("CODES_HOME", &code_home);
         }
 
         code_i18n::with_test_language(code_i18n::Language::ZhCn, || {
@@ -805,7 +805,7 @@ mod tests {
     fn popular_commands_are_english_in_en() {
         let code_home = make_temp_code_home("popular-en");
         unsafe {
-            std::env::set_var("CODE_HOME", &code_home);
+            std::env::set_var("CODES_HOME", &code_home);
         }
 
         code_i18n::with_test_language(code_i18n::Language::En, || {

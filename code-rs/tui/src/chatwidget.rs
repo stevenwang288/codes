@@ -823,7 +823,7 @@ use uuid::Uuid;
 
 fn history_cell_logging_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    if let Ok(value) = std::env::var("CODEX_TRACE_HISTORY") {
+    if let Ok(value) = std::env::var("CODES_TRACE_HISTORY") {
         let trimmed = value.trim();
         if !matches!(trimmed, "" | "0") {
             return true;
@@ -24011,7 +24011,7 @@ Have we met every part of this goal and is there no further work to do?"#
         let home = match code_core::config::find_code_home() {
             Ok(home) => home,
             Err(e) => {
-                let msg = format!("Failed to locate CODE_HOME: {}", e);
+                let msg = format!("Failed to locate config directory (~/.codes): {}", e);
                 self.history_push_plain_state(history_cell::new_error_event(msg));
                 return None;
             }
@@ -24057,10 +24057,12 @@ Have we met every part of this goal and is there no further work to do?"#
         }
 
         name.eq_ignore_ascii_case("code")
+            || name.eq_ignore_ascii_case("codes")
             || name.eq_ignore_ascii_case("codex")
             || name.eq_ignore_ascii_case("cloud")
             || name.eq_ignore_ascii_case("coder")
             || command.eq_ignore_ascii_case("code")
+            || command.eq_ignore_ascii_case("codes")
             || command.eq_ignore_ascii_case("codex")
             || command.eq_ignore_ascii_case("cloud")
             || command.eq_ignore_ascii_case("coder")
@@ -25089,7 +25091,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
         self.submit_op(op);
 
-        // Persist selection into CODEX_HOME/config.toml for this project directory so it sticks.
+        // Persist selection into ~/.codes/config.toml for this project directory so it sticks.
         let _ = set_project_access_mode(
             &self.config.code_home,
             &self.config.cwd,
@@ -25244,7 +25246,7 @@ Have we met every part of this goal and is there no further work to do?"#
     }
 
     fn save_theme_to_config(&self, new_theme: code_core::config_types::ThemeName) {
-        // Persist the theme selection to CODE_HOME/CODEX_HOME config.toml
+        // Persist the theme selection to ~/.codes/config.toml
         match code_core::config::find_code_home() {
             Ok(home) => {
                 if let Err(e) = code_core::config::set_tui_theme_name(&home, new_theme) {
@@ -28391,7 +28393,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     }
                 },
                 Err(e) => {
-                    let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                    let msg = format!("Failed to locate config directory (~/.codes): {}", e);
                     self.history_push_plain_state(history_cell::new_error_event(msg));
                 }
             },
@@ -28447,7 +28449,7 @@ Have we met every part of this goal and is there no further work to do?"#
                         }
                     }
                     Err(e) => {
-                        let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                        let msg = format!("Failed to locate config directory (~/.codes): {}", e);
                         self.history_push_plain_state(history_cell::new_error_event(msg));
                     }
                 }
@@ -28582,7 +28584,7 @@ Have we met every part of this goal and is there no further work to do?"#
                         }
                     }
                     Err(e) => {
-                        let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                        let msg = format!("Failed to locate config directory (~/.codes): {}", e);
                         self.history_push_plain_state(history_cell::new_error_event(msg));
                     }
                 }
@@ -29445,7 +29447,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         // Start with all items in production; tests can opt-in to a minimal header via env flag.
-        let minimal_header = std::env::var_os("CODEX_TUI_FORCE_MINIMAL_HEADER").is_some();
+        let minimal_header = std::env::var_os("CODES_TUI_FORCE_MINIMAL_HEADER").is_some();
         let demo_mode = self.config.demo_developer_message.is_some();
         let mut include_reasoning = !minimal_header;
         let mut include_model = !minimal_header;
@@ -41706,7 +41708,7 @@ impl ChatWidget<'_> {
             }
             Err(_) => {
                 let msg = format!(
-                    "✅ {} TUI notifications (not persisted: CODE_HOME/CODEX_HOME not found)",
+                    "✅ {} TUI notifications (not persisted: config directory unavailable)",
                     if enabled { "Enabled" } else { "Disabled" }
                 );
                 self.push_background_tail(msg);
@@ -41802,7 +41804,7 @@ impl ChatWidget<'_> {
                 }
             },
             Err(e) => {
-                let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                let msg = format!("Failed to locate config directory (~/.codes): {}", e);
                 self.history_push_plain_state(history_cell::new_error_event(msg));
             }
         }

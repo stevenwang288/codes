@@ -121,7 +121,7 @@ fn current_code_binary_path() -> Result<std::path::PathBuf, String> {
     }
 
     Err(format!(
-        "Current code binary is missing on disk ({}). It may have been deleted while running. Rebuild with ./build-fast.sh or reinstall 'code' to continue.",
+        "Current CODES binary is missing on disk ({}). It may have been deleted while running. Rebuild with ./build-fast.sh or reinstall 'codes' to continue.",
         exe.display()
     ))
 }
@@ -143,11 +143,11 @@ fn fallback_code_binary_path() -> Option<std::path::PathBuf> {
 
     // Probe likely build outputs in priority order.
     let mut candidates = vec![
-        workspace.join("target/dev-fast/code"),
-        workspace.join("target/debug/code"),
-        workspace.join("target/release-prod/code"),
-        workspace.join("target/release/code"),
-        workspace.join("bin/code"),
+        workspace.join("target/dev-fast/codes"),
+        workspace.join("target/debug/codes"),
+        workspace.join("target/release-prod/codes"),
+        workspace.join("target/release/codes"),
+        workspace.join("bin/codes"),
     ];
 
     if let Some(found) = candidates.iter().find(|p| p.exists()).cloned() {
@@ -1222,7 +1222,10 @@ fn command_exists(cmd: &str) -> bool {
     let model_lower = model.to_lowercase();
     let command_lower = command_for_spawn.to_ascii_lowercase();
     fn is_known_family(s: &str) -> bool {
-        matches!(s, "claude" | "gemini" | "qwen" | "codex" | "code" | "cloud" | "coder")
+        matches!(
+            s,
+            "claude" | "gemini" | "qwen" | "codex" | "code" | "codes" | "cloud" | "coder"
+        )
     }
 
     let slug_for_defaults = spec_opt.map(|spec| spec.slug).unwrap_or(model);
@@ -1657,7 +1660,7 @@ pub(crate) fn should_use_current_exe_for_agent(
     command_missing: bool,
     config: Option<&AgentConfig>,
 ) -> bool {
-    if !matches!(family, "code" | "codex" | "cloud" | "coder") {
+    if !matches!(family, "code" | "codes" | "codex" | "cloud" | "coder") {
         return false;
     }
 
@@ -2490,8 +2493,8 @@ mod tests {
     }
 
     #[test]
-    fn code_family_prefers_current_exe_even_if_coder_in_path() {
-        let cfg = agent_with_command("coder");
+    fn code_family_prefers_current_exe_even_if_codes_in_path() {
+        let cfg = agent_with_command("codes");
         let use_current = should_use_current_exe_for_agent("code", false, Some(&cfg));
         assert!(use_current);
     }
@@ -2506,7 +2509,7 @@ mod tests {
     #[test]
     fn program_path_uses_current_exe_when_requested() {
         let expected = current_code_binary_path().expect("current binary path");
-        let resolved = resolve_program_path(true, "coder").expect("resolved program");
+        let resolved = resolve_program_path(true, "codes").expect("resolved program");
         assert_eq!(resolved, expected);
 
         let custom = resolve_program_path(false, "custom-coder").expect("resolved custom");
@@ -2521,7 +2524,7 @@ mod tests {
 
         let dir = tempdir().expect("tempdir");
         let current = script_path(dir.path(), "current");
-        let shim = script_path(dir.path(), "coder");
+        let shim = script_path(dir.path(), "codes");
 
         write_script(&current, "current");
         write_script(&shim, "path");

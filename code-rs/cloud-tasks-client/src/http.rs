@@ -234,7 +234,7 @@ mod api {
                 "content": [{ "content_type": "text", "text": prompt }]
             }));
 
-            if let Ok(diff) = std::env::var("CODEX_STARTING_DIFF")
+            if let Ok(diff) = std::env::var("CODES_STARTING_DIFF")
                 && !diff.is_empty()
             {
                 input_items.push(serde_json::json!({
@@ -773,7 +773,7 @@ enum CloudLogLevel {
 }
 
 fn log_level_from_env() -> CloudLogLevel {
-    if let Ok(raw) = std::env::var("CODEX_CLOUD_TASKS_LOG_LEVEL") {
+    if let Ok(raw) = std::env::var("CODES_CLOUD_TASKS_LOG_LEVEL") {
         let value = raw.trim().to_ascii_lowercase();
         return match value.as_str() {
             "off" | "none" | "0" => CloudLogLevel::Off,
@@ -784,7 +784,7 @@ fn log_level_from_env() -> CloudLogLevel {
         };
     }
 
-    if env_truthy("CODE_SUBAGENT_DEBUG") || env_truthy("CODEX_CLOUD_TASKS_DEBUG") {
+    if env_truthy("CODES_SUBAGENT_DEBUG") || env_truthy("CODES_CLOUD_TASKS_DEBUG") {
         return CloudLogLevel::Debug;
     }
 
@@ -813,19 +813,19 @@ fn user_home_dir() -> Option<PathBuf> {
 }
 
 fn resolve_log_path() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("CODEX_CLOUD_TASKS_LOG_PATH") {
+    if let Ok(path) = std::env::var("CODES_CLOUD_TASKS_LOG_PATH") {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
             return Some(PathBuf::from(trimmed));
         }
     }
 
-    let base = if let Ok(dir) = std::env::var("CODEX_CLOUD_TASKS_LOG_DIR") {
+    let base = if let Ok(dir) = std::env::var("CODES_CLOUD_TASKS_LOG_DIR") {
         PathBuf::from(dir)
-    } else if let Ok(home) = std::env::var("CODE_HOME").or_else(|_| std::env::var("CODEX_HOME")) {
+    } else if let Ok(home) = std::env::var("CODES_HOME") {
         PathBuf::from(home).join("debug_logs")
     } else if let Some(home) = user_home_dir() {
-        home.join(".code").join("debug_logs")
+        home.join(".codes").join("debug_logs")
     } else {
         return None;
     };

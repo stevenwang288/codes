@@ -81,8 +81,8 @@ impl ChatWidgetHarness {
 
             // Stabilize time-of-day dependent greeting so VT100 snapshots remain deterministic.
             // Safe: tests use process-wide env vars for determinism.
-            unsafe { std::env::set_var("CODEX_TUI_FAKE_HOUR", "12"); }
-            unsafe { std::env::set_var("CODEX_TUI_FORCE_MINIMAL_HEADER", "1"); }
+            unsafe { std::env::set_var("CODES_TUI_FAKE_HOUR", "12"); }
+            unsafe { std::env::set_var("CODES_TUI_FORCE_MINIMAL_HEADER", "1"); }
             unsafe { std::env::set_var("CODE_TUI_TEST_MODE", "1"); }
             unsafe { std::env::set_var("CODE_ENABLE_EXTRA_AGENT_MODELS", "1"); }
             code_i18n::set_language_for_tests(code_i18n::Language::ZhCn);

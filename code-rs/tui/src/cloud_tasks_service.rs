@@ -200,10 +200,10 @@ fn build_backend(config: &CloudTasksConfig) -> Result<Arc<dyn CloudBackend>> {
 }
 
 async fn load_config() -> Result<CloudTasksConfig> {
-    let base_url_env = std::env::var("CODEX_CLOUD_TASKS_BASE_URL")
+    let base_url_env = std::env::var("CODES_CLOUD_TASKS_BASE_URL")
         .unwrap_or_else(|_| "https://chatgpt.com/backend-api".to_string());
     let base_url = normalize_base_url(&base_url_env);
-    let use_mock = std::env::var("CODEX_CLOUD_TASKS_MODE")
+    let use_mock = std::env::var("CODES_CLOUD_TASKS_MODE")
         .ok()
         .map(|mode| mode.eq_ignore_ascii_case("mock"))
         .unwrap_or(false);
@@ -217,7 +217,7 @@ async fn load_config() -> Result<CloudTasksConfig> {
     }
 
     let code_home = code_core::config::find_code_home()
-        .context("determine codex home directory")?;
+        .context("determine config directory")?;
     let auth_manager = AuthManager::new(
         code_home,
         AuthMode::ChatGPT,
@@ -225,7 +225,7 @@ async fn load_config() -> Result<CloudTasksConfig> {
     );
     let auth = auth_manager
         .auth()
-        .ok_or_else(|| anyhow!("Not signed in. Run `codex login` to authenticate with ChatGPT."))?;
+        .ok_or_else(|| anyhow!("Not signed in. Run `codes login` to authenticate with ChatGPT."))?;
     let token = auth
         .get_token()
         .await

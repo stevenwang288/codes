@@ -24,7 +24,7 @@ Environment flags:
   DETERMINISTIC=1                     Add -C debuginfo=0; promotes to release-prod unless DETERMINISTIC_FORCE_RELEASE=0
   DETERMINISTIC_FORCE_RELEASE=0|1     Keep dev-fast (0) or switch to release-prod (1, default)
   DETERMINISTIC_NO_UUID=1             macOS only: strip LC_UUID on final executables
-  BUILD_FAST_BINS="code code-tui"      Override bins to build (space or comma separated)
+  BUILD_FAST_BINS="codes code-tui"     Override bins to build (space or comma separated)
   --workspace codex|code|both         Select workspace to build (default: code)
 
 Examples:
@@ -120,16 +120,30 @@ resolve_bin_path() {
   fi
 
   TARGET_DIR_ABS="${target_root}"
-  BIN_CARGO_FILENAME="${CRATE_PREFIX}"
-  BIN_FILENAME="${CRATE_PREFIX}"
+  BIN_CARGO_FILENAME="${PRIMARY_BIN}"
+  BIN_FILENAME="${PRIMARY_BIN}"
   if [ "$PROFILE" = "perf" ]; then
-    BIN_FILENAME="${CRATE_PREFIX}-perf"
+    BIN_FILENAME="${PRIMARY_BIN}-perf"
   fi
   BIN_SUBPATH="${BIN_SUBDIR}/${BIN_FILENAME}"
   BIN_CARGO_SUBPATH="${BIN_SUBDIR}/${BIN_CARGO_FILENAME}"
   BIN_PATH="${TARGET_DIR_ABS}/${BIN_SUBPATH}"
   BIN_CARGO_PATH="${TARGET_DIR_ABS}/${BIN_CARGO_SUBPATH}"
   BIN_LINK_PATH="./target/${BIN_SUBPATH}"
+
+  # On Windows hosts, Cargo emits `.exe` binaries. Prefer the extension when
+  # needed so downstream copy/run steps work from Git Bash/MSYS shells.
+  if [ ! -e "${BIN_CARGO_PATH}" ] && [ -e "${BIN_CARGO_PATH}.exe" ]; then
+    BIN_CARGO_FILENAME="${BIN_CARGO_FILENAME}.exe"
+    BIN_CARGO_SUBPATH="${BIN_SUBDIR}/${BIN_CARGO_FILENAME}"
+    BIN_CARGO_PATH="${TARGET_DIR_ABS}/${BIN_CARGO_SUBPATH}"
+  fi
+  if [ ! -e "${BIN_PATH}" ] && [ -e "${BIN_PATH}.exe" ]; then
+    BIN_FILENAME="${BIN_FILENAME}.exe"
+    BIN_SUBPATH="${BIN_SUBDIR}/${BIN_FILENAME}"
+    BIN_PATH="${TARGET_DIR_ABS}/${BIN_SUBPATH}"
+    BIN_LINK_PATH="./target/${BIN_SUBPATH}"
+  fi
 
   if [ -n "${REPO_TARGET_ABS:-}" ] && [ "${TARGET_DIR_ABS}" = "${REPO_TARGET_ABS}" ]; then
     BIN_DISPLAY_PATH="./${WORKSPACE_DIR}/target/${BIN_SUBPATH}"
@@ -224,10 +238,8 @@ if [ "$WORKSPACE_CHOICE" = "both" ]; then
   exit 0
 fi
 
-if [ -n "${CODE_HOME:-}" ] && [ -n "${CODE_HOME}" ]; then
-  CACHE_HOME="${CODE_HOME%/}"
-elif [ -n "${CODEX_HOME:-}" ] && [ -n "${CODEX_HOME}" ]; then
-  CACHE_HOME="${CODEX_HOME%/}"
+if [ -n "${CODES_BUILD_HOME:-}" ] && [ -n "${CODES_BUILD_HOME}" ]; then
+  CACHE_HOME="${CODES_BUILD_HOME%/}"
 else
   if [ -d "/mnt/data" ] && [ -w "/mnt/data" ]; then
     CACHE_HOME="/mnt/data/.code"
@@ -236,9 +248,9 @@ else
   fi
 fi
 
-# On Windows, callers may pass CODE_HOME/CODEX_HOME using a native path like
-# "C:\Users\name\.codex". When running under Git Bash/MSYS, treat that as an
-# absolute path and convert it to a POSIX path (e.g., "/c/Users/name/.codex").
+# On Windows, callers may pass CODES_BUILD_HOME using a native path like
+# "C:\Users\name\.codes". When running under Git Bash/MSYS, treat that as an
+# absolute path and convert it to a POSIX path (e.g., "/c/Users/name/.codes").
 if [[ "${CACHE_HOME}" =~ ^[A-Za-z]:[\\/].* ]]; then
   if command -v cygpath >/dev/null 2>&1; then
     CACHE_HOME="$(cygpath -u "${CACHE_HOME}")"
@@ -331,7 +343,15 @@ CLI_PACKAGE="$(sed -En 's/^name[[:space:]]*=[[:space:]]*"(.*)"/\1/p' cli/Cargo.t
 TUI_PACKAGE="$(sed -En 's/^name[[:space:]]*=[[:space:]]*"(.*)"/\1/p' tui/Cargo.toml | head -n1)"
 EXEC_PACKAGE="$(sed -En 's/^name[[:space:]]*=[[:space:]]*"(.*)"/\1/p' exec/Cargo.toml | head -n1)"
 CRATE_PREFIX="${CLI_PACKAGE%%-*}"
-EXEC_BIN="$(awk 'BEGIN{inbin=0} /^\[\[bin\]\]/{inbin=1; next} inbin && /^name[[:space:]]*=/{gsub(/.*"/,"",$0); gsub(/"/,"",$0); print; exit}' exec/Cargo.toml)"
+CLI_BIN="$(awk 'BEGIN{inbin=0} /^\[\[bin\]\]/{inbin=1; next} inbin && /^name[[:space:]]*=/{print $3; exit}' cli/Cargo.toml | tr -d '"')"
+if [ -z "${CLI_BIN}" ]; then
+  CLI_BIN="${CRATE_PREFIX}"
+fi
+TUI_BIN="$(awk 'BEGIN{inbin=0} /^\[\[bin\]\]/{inbin=1; next} inbin && /^name[[:space:]]*=/{print $3; exit}' tui/Cargo.toml | tr -d '"')"
+if [ -z "${TUI_BIN}" ]; then
+  TUI_BIN="${CRATE_PREFIX}-tui"
+fi
+EXEC_BIN="$(awk 'BEGIN{inbin=0} /^\[\[bin\]\]/{inbin=1; next} inbin && /^name[[:space:]]*=/{print $3; exit}' exec/Cargo.toml | tr -d '"')"
 if [ -z "${EXEC_BIN}" ]; then
   EXEC_BIN="${EXEC_PACKAGE}"
 fi
@@ -346,17 +366,17 @@ if [ -n "${BUILD_FAST_BINS:-}" ]; then
   done
 fi
 if [ "${#TARGET_BINS[@]}" -eq 0 ]; then
-  TARGET_BINS=("${CRATE_PREFIX}")
+  TARGET_BINS=("${CLI_BIN}")
 fi
 PRIMARY_PRESENT=0
 for candidate in "${TARGET_BINS[@]}"; do
-  if [ "${candidate}" = "${CRATE_PREFIX}" ]; then
+  if [ "${candidate}" = "${CLI_BIN}" ]; then
     PRIMARY_PRESENT=1
     break
   fi
 done
 if [ "$PRIMARY_PRESENT" -eq 0 ]; then
-  TARGET_BINS=("${CRATE_PREFIX}" "${TARGET_BINS[@]}")
+  TARGET_BINS=("${CLI_BIN}" "${TARGET_BINS[@]}")
 fi
 PRIMARY_BIN="${TARGET_BINS[0]}"
 
@@ -520,7 +540,7 @@ if [ "${DEBUG_SYMBOLS:-}" = "1" ]; then
   export CARGO_PROFILE_RELEASE_PROD_STRIP="none"
 fi
 
-echo "Building ${CRATE_PREFIX} binary (${PROFILE} mode)..."
+echo "Building ${PRIMARY_BIN} binary (${PROFILE} mode)..."
 
 # Ensure Cargo cache locations are stable.
 # In CI, we can optionally enforce a specific CARGO_HOME regardless of caller env
@@ -611,8 +631,8 @@ if [ "${TRACE_BUILD:-}" = "1" ]; then
     rustup run "$TOOLCHAIN" cargo -vV || true
   fi
   echo "CANONICAL_ENV_APPLIED: ${CANONICAL_ENV_APPLIED} (KEEP_ENV=${KEEP_ENV})"
-  echo "Filtered env (CARGO|RUST*|PROFILE|CODE_HOME|CODEX_HOME):"
-  env | egrep '^(CARGO|RUST|RUSTUP|PROFILE|CODE_HOME|CODEX_HOME)=' | sort || true
+  echo "Filtered env (CARGO|RUST*|PROFILE|CODES_BUILD_HOME):"
+  env | egrep '^(CARGO|RUST|RUSTUP|PROFILE|CODES_BUILD_HOME)=' | sort || true
   echo "--------------------------------"
 fi
 
@@ -645,8 +665,7 @@ SCCACHE=${SCCACHE:-}
 SCCACHE_BIN=${SCCACHE_BIN:-}
 CARGO_INCREMENTAL=${CARGO_INCREMENTAL:-}
 MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-}
-CODE_HOME=${CODE_HOME:-}
-CODEX_HOME=${CODEX_HOME:-}
+CODES_BUILD_HOME=${CODES_BUILD_HOME:-}
 FP
 }
 
@@ -715,10 +734,7 @@ if [ $? -eq 0 ]; then
     release_link_target="../${BIN_SUBDIR}/${BIN_FILENAME}"
     dev_fast_link_target="../${BIN_SUBDIR}/${BIN_FILENAME}"
 
-    SYMLINK_PREFIXES=("${CRATE_PREFIX}")
-    if [ "${CRATE_PREFIX}" = "code" ]; then
-      SYMLINK_PREFIXES+=("coder")
-    fi
+    SYMLINK_PREFIXES=("${CLI_BIN}")
 
     create_cli_symlinks() {
       local cli_dir="$1"
@@ -760,10 +776,10 @@ if [ $? -eq 0 ]; then
     fi
 
     mkdir -p ./target/release
-    if [ -e "./target/release/${CRATE_PREFIX}" ]; then
-        rm -f "./target/release/${CRATE_PREFIX}"
+    if [ -e "./target/release/${CLI_BIN}" ]; then
+        rm -f "./target/release/${CLI_BIN}"
     fi
-    ln -sf "${release_link_target}" "./target/release/${CRATE_PREFIX}"
+    ln -sf "${release_link_target}" "./target/release/${CLI_BIN}"
 
     # Update the symlinks in CLI wrapper directories
     if [ -d "../codex-cli/bin" ]; then
@@ -778,27 +794,32 @@ if [ $? -eq 0 ]; then
     BIN_DIR_ABS="$(cd "${BIN_DIR}" >/dev/null 2>&1 && pwd)"
     for BIN_NAME in "${TARGET_BINS[@]}"; do
       BIN_TARGET_PATH="${TARGET_DIR_ABS}/${BIN_SUBDIR}/${BIN_NAME}"
+      BIN_TARGET_NAME="${BIN_NAME}"
+      if [ ! -e "${BIN_TARGET_PATH}" ] && [ -e "${BIN_TARGET_PATH}.exe" ]; then
+        BIN_TARGET_PATH="${BIN_TARGET_PATH}.exe"
+        BIN_TARGET_NAME="${BIN_NAME}.exe"
+      fi
       if [ -e "${BIN_TARGET_PATH}" ]; then
         # Use a per-process temp file to avoid races when multiple build-fast
         # invocations run concurrently in the same repo.
-        TMP_BIN_PATH="${BIN_DIR}/${BIN_NAME}.tmp.${BASHPID:-$$}"
+        TMP_BIN_PATH="${BIN_DIR}/${BIN_TARGET_NAME}.tmp.${BASHPID:-$$}"
         rm -f "${TMP_BIN_PATH}" 2>/dev/null || true
         cp -f "${BIN_TARGET_PATH}" "${TMP_BIN_PATH}"
-        mv -f "${TMP_BIN_PATH}" "${BIN_DIR}/${BIN_NAME}"
-        chmod +x "${BIN_DIR}/${BIN_NAME}" 2>/dev/null || true
+        mv -f "${TMP_BIN_PATH}" "${BIN_DIR}/${BIN_TARGET_NAME}"
+        chmod +x "${BIN_DIR}/${BIN_TARGET_NAME}" 2>/dev/null || true
       fi
     done
-    RUN_BIN_PATH="${BIN_DIR_ABS}/${PRIMARY_BIN}"
+    RUN_BIN_PATH="${BIN_DIR_ABS}/${BIN_FILENAME}"
 
     # Ensure repo-local developer alias stays mapped to latest build output
-    # so the user's `${CRATE_PREFIX}-dev` alias keeps working when pointing at target/dev-fast/${CRATE_PREFIX}
+    # so the user's `${CLI_BIN}-dev` alias keeps working when pointing at target/dev-fast/${CLI_BIN}
     # Only create this symlink if we're not already building in dev-fast profile
     if [ "$PROFILE" != "dev-fast" ]; then
       mkdir -p ./target/dev-fast
-      if [ -e "./target/dev-fast/${CRATE_PREFIX}" ]; then
-        rm -f "./target/dev-fast/${CRATE_PREFIX}"
+      if [ -e "./target/dev-fast/${CLI_BIN}" ]; then
+        rm -f "./target/dev-fast/${CLI_BIN}"
       fi
-      ln -sf "${dev_fast_link_target}" "./target/dev-fast/${CRATE_PREFIX}"
+      ln -sf "${dev_fast_link_target}" "./target/dev-fast/${CLI_BIN}"
     fi
 
     # Optional post-link step for deterministic builds: re-link executables
@@ -806,11 +827,11 @@ if [ $? -eq 0 ]; then
     # dependencies/proc-macro dylibs are not affected.
     if [ "${DETERMINISTIC_NO_UUID:-}" = "1" ] && [ "$(uname -s)" = "Darwin" ]; then
       echo "Deterministic post-link: removing LC_UUID from executables"
-      if bin_requested "${CRATE_PREFIX}"; then
-        ${USE_CARGO} rustc ${USE_LOCKED} --profile "${PROFILE}" -p "${CLI_PACKAGE}" --bin "${CRATE_PREFIX}" -- -C link-arg=-Wl,-no_uuid || true
+      if bin_requested "${CLI_BIN}"; then
+        ${USE_CARGO} rustc ${USE_LOCKED} --profile "${PROFILE}" -p "${CLI_PACKAGE}" --bin "${CLI_BIN}" -- -C link-arg=-Wl,-no_uuid || true
       fi
-      if bin_requested "${CRATE_PREFIX}-tui"; then
-        ${USE_CARGO} rustc ${USE_LOCKED} --profile "${PROFILE}" -p "${TUI_PACKAGE}" --bin "${CRATE_PREFIX}-tui" -- -C link-arg=-Wl,-no_uuid || true
+      if bin_requested "${TUI_BIN}"; then
+        ${USE_CARGO} rustc ${USE_LOCKED} --profile "${PROFILE}" -p "${TUI_PACKAGE}" --bin "${TUI_BIN}" -- -C link-arg=-Wl,-no_uuid || true
       fi
       if bin_requested "${EXEC_BIN}"; then
         ${USE_CARGO} rustc ${USE_LOCKED} --profile "${PROFILE}" -p "${EXEC_PACKAGE}" --bin "${EXEC_BIN}" -- -C link-arg=-Wl,-no_uuid || true
@@ -841,15 +862,15 @@ if [ $? -eq 0 ]; then
     fi
 
     # Persist the last-built binary path so launchers can run without rebuilding.
-    if [ -n "${CODE_HOME:-}" ]; then
-      mkdir -p "${CODE_HOME}" 2>/dev/null || true
-      printf '%s\n' "${ABS_BIN_PATH}" > "${CODE_HOME}/last-built-bin.txt" 2>/dev/null || true
+    if [ -n "${CODES_BUILD_HOME:-}" ]; then
+      mkdir -p "${CODES_BUILD_HOME}" 2>/dev/null || true
+      printf '%s\n' "${ABS_BIN_PATH}" > "${CODES_BUILD_HOME}/last-built-bin.txt" 2>/dev/null || true
     fi
 
     if [ "$RUN_AFTER_BUILD" -eq 1 ]; then
       RUN_PATH="${RUN_BIN_PATH}"
       if [ ! -x "${RUN_PATH}" ]; then
-        RUN_PATH="${TARGET_DIR_ABS}/${BIN_SUBDIR}/${PRIMARY_BIN}"
+        RUN_PATH="${TARGET_DIR_ABS}/${BIN_SUBDIR}/${BIN_FILENAME}"
       fi
       if [ ! -x "${RUN_PATH}" ]; then
         echo "❌ Run failed: ${RUN_PATH} is missing or not executable"

@@ -65,28 +65,27 @@ $cacheHome = Join-Path $repoRoot ".codes-home"
 New-Item -ItemType Directory -Force -Path $cacheHome | Out-Null
 $cacheHomeMsys = Convert-ToMsysPath $cacheHome
 
-$langHome = Join-Path $HOME ".codex"
+$langHome = Join-Path $HOME ".codes"
 
-if (-not $env:CODEX_LANG) {
+if (-not $env:CODES_LANG) {
   $lang = Read-FirstLine (Join-Path $langHome "ui-language.txt")
-  if ($lang) { $env:CODEX_LANG = $lang }
+  if ($lang) { $env:CODES_LANG = $lang }
 }
-if (-not $env:CODEX_LANG) { $env:CODEX_LANG = "zh-CN" }
+if (-not $env:CODES_LANG) { $env:CODES_LANG = "zh-CN" }
 
 if (-not $env:CODE_PALETTE_MODE) { $env:CODE_PALETTE_MODE = "ansi256" }
 
-$env:CODE_AUTO_TRUST = "1"
+$env:CODES_AUTO_TRUST = "1"
 
-Remove-Item Env:\CODE_HOME -ErrorAction SilentlyContinue
-Remove-Item Env:\CODEX_HOME -ErrorAction SilentlyContinue
-$env:CODEX_HOME = $langHome
-$env:CODES_PREFER_CODEX_HOME = "1"
+Remove-Item Env:\CODES_HOME -ErrorAction SilentlyContinue
+$env:CODES_HOME = $langHome
+$env:CODES_BUILD_HOME = $cacheHomeMsys
 
 if ($RemainingArgs.Count -gt 0 -and $RemainingArgs[0] -ieq "which") {
   Write-Host ("[codes] repo-root: ""{0}""" -f $repoRoot)
   Write-Host ("[codes] CACHE_HOME: ""{0}""" -f $cacheHome)
-  Write-Host ("[codes] run-config: global home ""{0}""" -f (Join-Path $HOME ".codex"))
-  Write-Host ("[codes] CODEX_LANG: ""{0}""" -f $env:CODEX_LANG)
+  Write-Host ("[codes] run-config: global home ""{0}""" -f (Join-Path $HOME ".codes"))
+  Write-Host ("[codes] CODES_LANG: ""{0}""" -f $env:CODES_LANG)
   Write-Host ("[codes] CODE_PALETTE_MODE: ""{0}""" -f $env:CODE_PALETTE_MODE)
   $lb = Read-FirstLine (Join-Path $cacheHome "last-built-bin.txt")
   if ($lb) { Write-Host ("[codes] last-built-bin.txt: {0}" -f $lb) } else { Write-Host "[codes] last-built-bin.txt: missing" }
@@ -108,10 +107,9 @@ if (-not $forceRebuild -and $lastBuilt) {
   exit $rc
 }
 
-# Build fast by default; keep CODE_HOME pointing at the repo cache so we record last-built-bin.txt.
+# Build fast by default; keep CODES_BUILD_HOME pointing at the repo cache so we record last-built-bin.txt.
 $rcBuild = Invoke-Bash $repoRoot "./build-fast.sh" @{
-  CODE_HOME = $cacheHomeMsys
-  CODEX_HOME = $cacheHomeMsys
+  CODES_BUILD_HOME = $cacheHomeMsys
 }
 if ($rcBuild -ne 0) { exit $rcBuild }
 

@@ -3,7 +3,7 @@ use code_tui::test_helpers::{render_chat_widget_to_vt100, ChatWidgetHarness};
 #[test]
 fn lang_overlay_shows_choices() {
     // Safe: tests run single-threaded by design in this crate's harness.
-    unsafe { std::env::set_var("CODEX_LANG", "zh-CN"); }
+    unsafe { std::env::set_var("CODES_LANG", "zh-CN"); }
 
     let mut harness = ChatWidgetHarness::new();
     harness.open_lang_overlay();

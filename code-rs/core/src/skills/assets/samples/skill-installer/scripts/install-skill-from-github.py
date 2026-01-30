@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a skill from a GitHub repo path into $CODEX_HOME/skills."""
+"""Install a skill from a GitHub repo path into ~/.codes/skills."""
 
 from __future__ import annotations
 
@@ -43,8 +43,8 @@ class InstallError(Exception):
     pass
 
 
-def _codex_home() -> str:
-    return os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex"))
+def _codes_home() -> str:
+    return os.environ.get("CODES_HOME", os.path.expanduser("~/.codes"))
 
 
 def _tmp_root() -> str:
@@ -240,7 +240,7 @@ def _resolve_source(args: Args) -> Source:
 
 
 def _default_dest() -> str:
-    return os.path.join(_codex_home(), "skills")
+    return os.path.join(_codes_home(), "skills")
 
 
 def _parse_args(argv: list[str]) -> Args:

@@ -569,7 +569,7 @@ fn load_auth(
     }))
 }
 
-/// Attempt to read and refresh the `auth.json` file in the given `CODEX_HOME` directory.
+/// Attempt to read and refresh the `auth.json` file in the given config directory (typically `~/.codes`).
 /// Returns the full AuthDotJson structure after refreshing if necessary.
 pub fn try_read_auth_json(auth_file: &Path) -> std::io::Result<AuthDotJson> {
     let mut file = File::open(auth_file)?;
@@ -782,7 +782,7 @@ fn summarize_body(body: &str) -> String {
     }
 }
 
-/// Expected structure for $CODEX_HOME/auth.json.
+/// Expected structure for `~/.codes/auth.json`.
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct AuthDotJson {
     #[serde(rename = "OPENAI_API_KEY")]

@@ -21,7 +21,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-pub const CODEX_APPLY_PATCH_ARG1: &str = "--codex-run-as-apply-patch";
+pub const CODES_APPLY_PATCH_ARG1: &str = "--codes-run-as-apply-patch";
 
 pub(crate) struct ApplyPatchRun {
     pub auto_approved: bool,
