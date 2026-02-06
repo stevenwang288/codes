@@ -315,7 +315,7 @@ jobs:
           printf 'Skipping prerelease upload: missing code/<slug> label or <!-- codex-id: ... --> marker.\n' >> "$GITHUB_STEP_SUMMARY"
       - name: Download all artifacts
         if: steps.slug.outputs.skip != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts/
 
