@@ -1,6 +1,7 @@
 use crate::agent::AgentStatus;
 use crate::agent::status::is_final as is_final_agent_status;
 use crate::codex::Session;
+use crate::memories::phase_two;
 use codex_protocol::ThreadId;
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,10 +9,6 @@ use tokio::sync::watch;
 use tracing::debug;
 use tracing::info;
 use tracing::warn;
-
-use super::super::PHASE_TWO_JOB_HEARTBEAT_SECONDS;
-use super::super::PHASE_TWO_JOB_LEASE_SECONDS;
-use super::super::PHASE_TWO_JOB_RETRY_DELAY_SECONDS;
 
 pub(super) fn spawn_phase2_completion_task(
     session: &Session,
@@ -43,7 +40,7 @@ pub(super) fn spawn_phase2_completion_task(
             }
         };
 
-        run_phase2_completion_task(
+        let final_status = run_phase2_completion_task(
             Arc::clone(&state_db),
             ownership_token,
             completion_watermark,
@@ -51,6 +48,17 @@ pub(super) fn spawn_phase2_completion_task(
             status_rx,
         )
         .await;
+        if matches!(final_status, AgentStatus::Shutdown | AgentStatus::NotFound) {
+            return;
+        }
+
+        tokio::spawn(async move {
+            if let Err(err) = agent_control.shutdown_agent(consolidation_agent_id).await {
+                warn!(
+                    "failed to auto-close global memory consolidation agent {consolidation_agent_id}: {err}"
+                );
+            }
+        });
     });
 }
 
@@ -60,10 +68,10 @@ async fn run_phase2_completion_task(
     completion_watermark: i64,
     consolidation_agent_id: ThreadId,
     mut status_rx: watch::Receiver<AgentStatus>,
-) {
+) -> AgentStatus {
     let final_status = {
         let mut heartbeat_interval =
-            tokio::time::interval(Duration::from_secs(PHASE_TWO_JOB_HEARTBEAT_SECONDS));
+            tokio::time::interval(Duration::from_secs(phase_two::JOB_HEARTBEAT_SECONDS));
         heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
@@ -83,7 +91,10 @@ async fn run_phase2_completion_task(
                 }
                 _ = heartbeat_interval.tick() => {
                     match state_db
-                        .heartbeat_global_phase2_job(&ownership_token, PHASE_TWO_JOB_LEASE_SECONDS)
+                        .heartbeat_global_phase2_job(
+                            &ownership_token,
+                            phase_two::JOB_LEASE_SECONDS,
+                        )
                         .await
                     {
                         Ok(true) => {}
@@ -109,7 +120,12 @@ async fn run_phase2_completion_task(
         }
     };
 
-    if is_phase2_success(&final_status) {
+    let phase2_success = is_phase2_success(&final_status);
+    info!(
+        "memory phase-2 global consolidation complete: agent_id={consolidation_agent_id} success={phase2_success} final_status={final_status:?}"
+    );
+
+    if phase2_success {
         match state_db
             .mark_global_phase2_job_succeeded(&ownership_token, completion_watermark)
             .await
@@ -126,10 +142,7 @@ async fn run_phase2_completion_task(
                 );
             }
         }
-        info!(
-            "memory phase-2 global consolidation agent finished: agent_id={consolidation_agent_id} final_status={final_status:?}"
-        );
-        return;
+        return final_status;
     }
 
     let failure_reason = phase2_failure_reason(&final_status);
@@ -137,6 +150,7 @@ async fn run_phase2_completion_task(
     warn!(
         "memory phase-2 global consolidation agent finished with non-success status: agent_id={consolidation_agent_id} final_status={final_status:?}"
     );
+    final_status
 }
 
 async fn mark_phase2_failed_with_recovery(
@@ -148,7 +162,7 @@ async fn mark_phase2_failed_with_recovery(
         .mark_global_phase2_job_failed(
             ownership_token,
             failure_reason,
-            PHASE_TWO_JOB_RETRY_DELAY_SECONDS,
+            phase_two::JOB_RETRY_DELAY_SECONDS,
         )
         .await
     {
@@ -157,7 +171,7 @@ async fn mark_phase2_failed_with_recovery(
             .mark_global_phase2_job_failed_if_unowned(
                 ownership_token,
                 failure_reason,
-                PHASE_TWO_JOB_RETRY_DELAY_SECONDS,
+                phase_two::JOB_RETRY_DELAY_SECONDS,
             )
             .await
         {
