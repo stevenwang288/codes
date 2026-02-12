@@ -12,6 +12,7 @@ use ratatui::prelude::Widget;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 /// Flattened preset entry combining a model with a specific reasoning effort.
@@ -29,25 +30,25 @@ impl FlatPreset {
             .supported_reasoning_efforts
             .iter()
             .map(|effort_preset| {
-                let effort_label = Self::effort_label(effort_preset.effort.into());
+                let effort_label = Self::effort_id_label(effort_preset.effort.into());
                 FlatPreset {
                     model: preset.model.to_string(),
                     effort: effort_preset.effort.into(),
-                    label: format!("{} {}", preset.display_name, effort_label.to_lowercase()),
+                    label: format!("{} {}", preset.display_name, effort_label),
                     description: effort_preset.description.to_string(),
                 }
             })
             .collect()
     }
 
-    fn effort_label(effort: ReasoningEffort) -> &'static str {
+    fn effort_id_label(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::XHigh => "XHigh",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Minimal => "Minimal",
-            ReasoningEffort::None => "None",
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
         }
     }
 }
@@ -80,37 +81,43 @@ impl From<ModelSelectionTarget> for ModelSelectionKind {
 impl ModelSelectionTarget {
     fn panel_title(self) -> &'static str {
         match self {
-            ModelSelectionTarget::Session => "Select Model & Reasoning",
-            ModelSelectionTarget::Review => "Select Review Model & Reasoning",
-            ModelSelectionTarget::Planning => "Select Planning Model & Reasoning",
-            ModelSelectionTarget::AutoDrive => "Select Auto Drive Model & Reasoning",
-            ModelSelectionTarget::ReviewResolve => "Select Resolve Model & Reasoning",
-            ModelSelectionTarget::AutoReview => "Select Auto Review Model & Reasoning",
-            ModelSelectionTarget::AutoReviewResolve => "Select Auto Review Resolve Model & Reasoning",
+            ModelSelectionTarget::Session => code_i18n::tr_plain("tui.model_selection.title.session"),
+            ModelSelectionTarget::Review => code_i18n::tr_plain("tui.model_selection.title.review"),
+            ModelSelectionTarget::Planning => code_i18n::tr_plain("tui.model_selection.title.planning"),
+            ModelSelectionTarget::AutoDrive => code_i18n::tr_plain("tui.model_selection.title.auto_drive"),
+            ModelSelectionTarget::ReviewResolve => code_i18n::tr_plain("tui.model_selection.title.resolve"),
+            ModelSelectionTarget::AutoReview => code_i18n::tr_plain("tui.model_selection.title.auto_review"),
+            ModelSelectionTarget::AutoReviewResolve => {
+                code_i18n::tr_plain("tui.model_selection.title.auto_review_resolve")
+            }
         }
     }
 
     fn current_label(self) -> &'static str {
         match self {
-            ModelSelectionTarget::Session => "Current model",
-            ModelSelectionTarget::Review => "Review model",
-            ModelSelectionTarget::Planning => "Planning model",
-            ModelSelectionTarget::AutoDrive => "Auto Drive model",
-            ModelSelectionTarget::ReviewResolve => "Resolve model",
-            ModelSelectionTarget::AutoReview => "Auto Review model",
-            ModelSelectionTarget::AutoReviewResolve => "Auto Review resolve model",
+            ModelSelectionTarget::Session => code_i18n::tr_plain("tui.model_selection.label.current.session"),
+            ModelSelectionTarget::Review => code_i18n::tr_plain("tui.model_selection.label.current.review"),
+            ModelSelectionTarget::Planning => code_i18n::tr_plain("tui.model_selection.label.current.planning"),
+            ModelSelectionTarget::AutoDrive => code_i18n::tr_plain("tui.model_selection.label.current.auto_drive"),
+            ModelSelectionTarget::ReviewResolve => code_i18n::tr_plain("tui.model_selection.label.current.resolve"),
+            ModelSelectionTarget::AutoReview => code_i18n::tr_plain("tui.model_selection.label.current.auto_review"),
+            ModelSelectionTarget::AutoReviewResolve => {
+                code_i18n::tr_plain("tui.model_selection.label.current.auto_review_resolve")
+            }
         }
     }
 
     fn reasoning_label(self) -> &'static str {
         match self {
-            ModelSelectionTarget::Session => "Reasoning effort",
-            ModelSelectionTarget::Review => "Review reasoning",
-            ModelSelectionTarget::Planning => "Planning reasoning",
-            ModelSelectionTarget::AutoDrive => "Auto Drive reasoning",
-            ModelSelectionTarget::ReviewResolve => "Resolve reasoning",
-            ModelSelectionTarget::AutoReview => "Auto Review reasoning",
-            ModelSelectionTarget::AutoReviewResolve => "Auto Review resolve reasoning",
+            ModelSelectionTarget::Session => code_i18n::tr_plain("tui.model_selection.label.reasoning.session"),
+            ModelSelectionTarget::Review => code_i18n::tr_plain("tui.model_selection.label.reasoning.review"),
+            ModelSelectionTarget::Planning => code_i18n::tr_plain("tui.model_selection.label.reasoning.planning"),
+            ModelSelectionTarget::AutoDrive => code_i18n::tr_plain("tui.model_selection.label.reasoning.auto_drive"),
+            ModelSelectionTarget::ReviewResolve => code_i18n::tr_plain("tui.model_selection.label.reasoning.resolve"),
+            ModelSelectionTarget::AutoReview => code_i18n::tr_plain("tui.model_selection.label.reasoning.auto_review"),
+            ModelSelectionTarget::AutoReviewResolve => {
+                code_i18n::tr_plain("tui.model_selection.label.reasoning.auto_review_resolve")
+            }
         }
     }
 
@@ -485,40 +492,36 @@ impl ModelSelectionView {
     }
 
     fn model_rank(model: &str) -> u8 {
-        if model.eq_ignore_ascii_case("gpt-5.3-codex") {
+        if model.eq_ignore_ascii_case("gpt-5.2-codex") {
             0
-        } else if model.eq_ignore_ascii_case("gpt-5.2-codex") {
-            1
         } else if model.eq_ignore_ascii_case("gpt-5.2") {
-            2
+            1
         } else if model.eq_ignore_ascii_case("gpt-5.1-codex-max") {
-            3
+            2
         } else if model.eq_ignore_ascii_case("gpt-5.1-codex") {
-            4
+            3
         } else if model.eq_ignore_ascii_case("gpt-5.1-codex-mini") {
-            5
+            4
         } else if model.eq_ignore_ascii_case("gpt-5.1") {
-            6
+            5
         } else {
-            7
+            6
         }
     }
 
     fn model_description(model: &str) -> Option<&'static str> {
-        if model.eq_ignore_ascii_case("gpt-5.3-codex") {
-            Some("Latest frontier agentic coding model.")
-        } else if model.eq_ignore_ascii_case("gpt-5.2-codex") {
-            Some("Frontier agentic coding model.")
+        if model.eq_ignore_ascii_case("gpt-5.2-codex") {
+            Some(code_i18n::tr_plain("tui.model.desc.gpt_5_2_codex"))
         } else if model.eq_ignore_ascii_case("gpt-5.2") {
-            Some("Latest frontier model with improvements across knowledge, reasoning, and coding.")
+            Some(code_i18n::tr_plain("tui.model.desc.gpt_5_2"))
         } else if model.eq_ignore_ascii_case("gpt-5.1-codex-max") {
-            Some("Latest Codex-optimized flagship for deep and fast reasoning.")
+            Some(code_i18n::tr_plain("tui.model.desc.gpt_5_1_codex_max"))
         } else if model.eq_ignore_ascii_case("gpt-5.1-codex") {
-            Some("Optimized for Code.")
+            Some(code_i18n::tr_plain("tui.model.desc.gpt_5_1_codex"))
         } else if model.eq_ignore_ascii_case("gpt-5.1-codex-mini") {
-            Some("Optimized for Code. Cheaper, faster, but less capable.")
+            Some(code_i18n::tr_plain("tui.model.desc.gpt_5_1_codex_mini"))
         } else if model.eq_ignore_ascii_case("gpt-5.1") {
-            Some("Broad world knowledge with strong general reasoning.")
+            Some(code_i18n::tr_plain("tui.model.desc.gpt_5_1"))
         } else {
             None
         }
@@ -537,12 +540,55 @@ impl ModelSelectionView {
 
     fn effort_label(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::XHigh => "XHigh",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Minimal => "Minimal",
-            ReasoningEffort::None => "None",
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
+        }
+    }
+
+    fn localize_preset_description<'a>(description: &'a str) -> Cow<'a, str> {
+        let translated = match description {
+            "Fast responses with lighter reasoning" => Some(code_i18n::tr_plain("tui.reasoning_desc.fast_light")),
+            "Fastest responses with limited reasoning" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.fastest_limited"))
+            }
+            "Fastest responses with little reasoning" => Some(code_i18n::tr_plain("tui.reasoning_desc.fastest_little")),
+            "Balances speed and reasoning depth for everyday tasks" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.balance_everyday"))
+            }
+            "Maximizes reasoning depth for complex problems" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.maximize_complex"))
+            }
+            "Extra high reasoning depth for complex problems" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.extra_high_complex"))
+            }
+            "Extra high reasoning for complex problems" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.extra_high_complex_short"))
+            }
+            "Balances speed with some reasoning; useful for straightforward queries and short explanations" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.balance_straightforward"))
+            }
+            "Provides a solid balance of reasoning depth and latency for general-purpose tasks" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.solid_general"))
+            }
+            "Dynamically adjusts reasoning based on the task" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.dynamic_adjust"))
+            }
+            "Maximizes reasoning depth for complex or ambiguous problems" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.maximize_ambiguous"))
+            }
+            "Greater reasoning depth for complex problems" => {
+                Some(code_i18n::tr_plain("tui.reasoning_desc.greater_complex"))
+            }
+            _ => None,
+        };
+
+        match translated {
+            Some(value) => Cow::Owned(value.to_string()),
+            None => Cow::Borrowed(description),
         }
     }
 }
@@ -594,7 +640,7 @@ impl ModelSelectionView {
             ),
             Span::styled(
                 if self.target.supports_follow_chat() && self.use_chat_model {
-                    "Follow Chat Mode".to_string()
+                    code_i18n::tr_plain("tui.model_selection.follow_chat.title").to_string()
                 } else {
                     Self::format_model_header(&self.current_model)
                 },
@@ -610,7 +656,7 @@ impl ModelSelectionView {
             ),
             Span::styled(
                 if self.target.supports_follow_chat() && self.use_chat_model {
-                    "From chat".to_string()
+                    code_i18n::tr_plain("tui.model_selection.from_chat").to_string()
                 } else {
                     Self::effort_label(self.current_effort).to_string()
                 },
@@ -628,9 +674,12 @@ impl ModelSelectionView {
                 .fg(crate::colors::text_bright())
                 .add_modifier(Modifier::BOLD);
             let desc_style = Style::default().fg(crate::colors::text_dim());
-            lines.push(Line::from(vec![Span::styled("Follow Chat Mode", header_style)]));
             lines.push(Line::from(vec![Span::styled(
-                "Use the active chat model and reasoning; stays in sync as chat changes.",
+                code_i18n::tr_plain("tui.model_selection.follow_chat.title"),
+                header_style,
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                code_i18n::tr_plain("tui.model_selection.follow_chat.desc"),
                 desc_style,
             )]));
 
@@ -653,13 +702,16 @@ impl ModelSelectionView {
             };
             let mut status = String::new();
             if self.use_chat_model {
-                status.push_str("(current)");
+                status.push_str(code_i18n::tr_plain("tui.model_selection.current"));
             }
             let arrow = if is_selected { "› " } else { "  " };
             let mut spans = vec![
                 Span::styled(arrow, arrow_style),
                 Span::styled("   ", indent_style),
-                Span::styled("Use chat model", label_style),
+                Span::styled(
+                    code_i18n::tr_plain("tui.model_selection.follow_chat.option"),
+                    label_style,
+                ),
             ];
             if !status.is_empty() {
                 spans.push(Span::raw(format!("  {}", status)));
@@ -702,7 +754,8 @@ impl ModelSelectionView {
             let label = Self::effort_label(flat_preset.effort);
             let mut row_text = label.to_string();
             if is_current {
-                row_text.push_str(" (current)");
+                row_text.push(' ');
+                row_text.push_str(code_i18n::tr_plain("tui.common.current"));
             }
 
             let mut indent_style = Style::default();
@@ -736,22 +789,29 @@ impl ModelSelectionView {
                     .add_modifier(Modifier::BOLD);
             }
 
+            let description = Self::localize_preset_description(&flat_preset.description);
             lines.push(Line::from(vec![
                 Span::styled("   ", indent_style),
                 Span::styled(row_text, label_style),
                 Span::styled(" - ", divider_style),
-                Span::styled(&flat_preset.description, description_style),
+                Span::styled(description, description_style),
             ]));
         }
 
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("↑↓", Style::default().fg(crate::colors::light_blue())),
-            Span::raw(" Navigate  "),
-            Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::raw(" Select  "),
-            Span::styled("Esc", Style::default().fg(crate::colors::error())),
-            Span::raw(" Cancel"),
+            Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate"))),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(crate::colors::success()),
+            ),
+            Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.select_label"))),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(crate::colors::error()),
+            ),
+            Span::raw(format!(" {}", code_i18n::tr_plain("tui.common.cancel"))),
         ]));
 
         let padded = Rect {

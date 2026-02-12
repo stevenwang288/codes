@@ -4,6 +4,7 @@ use code_core::config_types::ThemeName;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
+use code_i18n;
 use unicode_segmentation::UnicodeSegmentation;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Alignment;
@@ -99,13 +100,13 @@ impl ThemeSelectionView {
             return vec![
                 (
                     ThemeName::LightPhotonAnsi16,
-                    "Light (16-color)",
-                    "High-contrast light palette for limited terminals",
+                    code_i18n::tr_plain("tui.theme.light_ansi16.name"),
+                    code_i18n::tr_plain("tui.theme.light_ansi16.desc"),
                 ),
                 (
                     ThemeName::DarkCarbonAnsi16,
-                    "Dark (16-color)",
-                    "High-contrast dark palette for limited terminals",
+                    code_i18n::tr_plain("tui.theme.dark_ansi16.name"),
+                    code_i18n::tr_plain("tui.theme.dark_ansi16.desc"),
                 ),
             ];
         }
@@ -114,74 +115,74 @@ impl ThemeSelectionView {
             // Light themes (at top)
             (
                 ThemeName::LightPhoton,
-                "Light - Photon",
-                "Clean professional light theme",
+                code_i18n::tr_plain("tui.theme.light_photon.name"),
+                code_i18n::tr_plain("tui.theme.light_photon.desc"),
             ),
             (
                 ThemeName::LightPrismRainbow,
-                "Light - Prism Rainbow",
-                "Vibrant rainbow accents",
+                code_i18n::tr_plain("tui.theme.light_prism_rainbow.name"),
+                code_i18n::tr_plain("tui.theme.light_prism_rainbow.desc"),
             ),
             (
                 ThemeName::LightVividTriad,
-                "Light - Vivid Triad",
-                "Cyan, pink, amber triad",
+                code_i18n::tr_plain("tui.theme.light_vivid_triad.name"),
+                code_i18n::tr_plain("tui.theme.light_vivid_triad.desc"),
             ),
             (
                 ThemeName::LightPorcelain,
-                "Light - Porcelain",
-                "Refined porcelain tones",
+                code_i18n::tr_plain("tui.theme.light_porcelain.name"),
+                code_i18n::tr_plain("tui.theme.light_porcelain.desc"),
             ),
             (
                 ThemeName::LightSandbar,
-                "Light - Sandbar",
-                "Warm sandy beach colors",
+                code_i18n::tr_plain("tui.theme.light_sandbar.name"),
+                code_i18n::tr_plain("tui.theme.light_sandbar.desc"),
             ),
             (
                 ThemeName::LightGlacier,
-                "Light - Glacier",
-                "Cool glacier blues",
+                code_i18n::tr_plain("tui.theme.light_glacier.name"),
+                code_i18n::tr_plain("tui.theme.light_glacier.desc"),
             ),
             (
                 ThemeName::DarkPaperLightPro,
-                "Light - Paper Pro",
-                "Premium paper-like",
+                code_i18n::tr_plain("tui.theme.light_paper_pro.name"),
+                code_i18n::tr_plain("tui.theme.light_paper_pro.desc"),
             ),
             // Dark themes (below)
             (
                 ThemeName::DarkCarbonNight,
-                "Dark - Carbon Night",
-                "Sleek modern dark theme",
+                code_i18n::tr_plain("tui.theme.dark_carbon_night.name"),
+                code_i18n::tr_plain("tui.theme.dark_carbon_night.desc"),
             ),
             (
                 ThemeName::DarkShinobiDusk,
-                "Dark - Shinobi Dusk",
-                "Japanese-inspired twilight",
+                code_i18n::tr_plain("tui.theme.dark_shinobi_dusk.name"),
+                code_i18n::tr_plain("tui.theme.dark_shinobi_dusk.desc"),
             ),
             (
                 ThemeName::DarkOledBlackPro,
-                "Dark - OLED Black Pro",
-                "True black for OLED displays",
+                code_i18n::tr_plain("tui.theme.dark_oled_black_pro.name"),
+                code_i18n::tr_plain("tui.theme.dark_oled_black_pro.desc"),
             ),
             (
                 ThemeName::DarkAmberTerminal,
-                "Dark - Amber Terminal",
-                "Retro amber CRT aesthetic",
+                code_i18n::tr_plain("tui.theme.dark_amber_terminal.name"),
+                code_i18n::tr_plain("tui.theme.dark_amber_terminal.desc"),
             ),
             (
                 ThemeName::DarkAuroraFlux,
-                "Dark - Aurora Flux",
-                "Northern lights inspired",
+                code_i18n::tr_plain("tui.theme.dark_aurora_flux.name"),
+                code_i18n::tr_plain("tui.theme.dark_aurora_flux.desc"),
             ),
             (
                 ThemeName::DarkCharcoalRainbow,
-                "Dark - Charcoal Rainbow",
-                "High-contrast accessible",
+                code_i18n::tr_plain("tui.theme.dark_charcoal_rainbow.name"),
+                code_i18n::tr_plain("tui.theme.dark_charcoal_rainbow.desc"),
             ),
             (
                 ThemeName::DarkZenGarden,
-                "Dark - Zen Garden",
-                "Calm and peaceful",
+                code_i18n::tr_plain("tui.theme.dark_zen_garden.name"),
+                code_i18n::tr_plain("tui.theme.dark_zen_garden.desc"),
             ),
         ];
         // Append custom theme if available (use saved label and light/dark prefix)
@@ -198,14 +199,22 @@ impl ThemeSelectionView {
                 }
             }
             let name = if crate::theme::custom_theme_is_dark().unwrap_or(false) {
-                format!("Dark - {}", label)
+                code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.theme.custom_prefix_dark",
+                    &[("label", &label)],
+                )
             } else {
-                format!("Light - {}", label)
+                code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.theme.custom_prefix_light",
+                    &[("label", &label)],
+                )
             };
             v.push((
                 ThemeName::Custom,
                 Box::leak(name.into_boxed_str()),
-                "Your saved custom theme",
+                code_i18n::tr_plain("tui.theme.custom.desc"),
             ));
         }
         v
@@ -213,6 +222,48 @@ impl ThemeSelectionView {
 
     fn allow_custom_theme_generation() -> bool {
         !matches!(palette_mode(), PaletteMode::Ansi16)
+    }
+
+    fn nav_overview() -> &'static str {
+        code_i18n::tr_plain("tui.theme.nav.overview")
+    }
+
+    fn nav_change_theme() -> &'static str {
+        code_i18n::tr_plain("tui.theme.nav.change_theme")
+    }
+
+    fn nav_change_spinner() -> &'static str {
+        code_i18n::tr_plain("tui.theme.nav.change_spinner")
+    }
+
+    fn nav_create_custom() -> &'static str {
+        code_i18n::tr_plain("tui.theme.nav.create_custom")
+    }
+
+    fn nav_overview_change_theme() -> String {
+        format!("{} » {}", Self::nav_overview(), Self::nav_change_theme())
+    }
+
+    fn nav_overview_change_spinner() -> String {
+        format!("{} » {}", Self::nav_overview(), Self::nav_change_spinner())
+    }
+
+    fn nav_overview_change_theme_create_custom() -> String {
+        format!(
+            "{} » {} » {}",
+            Self::nav_overview(),
+            Self::nav_change_theme(),
+            Self::nav_create_custom()
+        )
+    }
+
+    fn nav_overview_change_spinner_create_custom() -> String {
+        format!(
+            "{} » {} » {}",
+            Self::nav_overview(),
+            Self::nav_change_spinner(),
+            Self::nav_create_custom()
+        )
     }
 
     fn move_selection_up(&mut self) {
@@ -339,10 +390,13 @@ impl ThemeSelectionView {
             {
                 Ok(rt) => rt,
                 Err(e) => {
-                    tx.send_background_before_next_output_with_ticket(
-                        &before_ticket,
-                        format!("Failed to start runtime: {}", e),
+                    let error = e.to_string();
+                    let message = code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.theme.spinner.runtime_error",
+                        &[("error", &error)],
                     );
+                    tx.send_background_before_next_output_with_ticket(&before_ticket, message);
                     return;
                 }
             };
@@ -351,9 +405,15 @@ impl ThemeSelectionView {
                 let cfg = match code_core::config::Config::load_with_cli_overrides(vec![], code_core::config::ConfigOverrides::default()) {
                     Ok(c) => c,
                     Err(e) => {
+                        let error = e.to_string();
+                        let message = code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.theme.spinner.config_error",
+                            &[("error", &error)],
+                        );
                         tx.send_background_before_next_output_with_ticket(
                             &before_ticket,
-                            format!("Config error: {}", e),
+                            message,
                         );
                         return;
                     }
@@ -416,13 +476,21 @@ impl ThemeSelectionView {
 
                 // Stream and collect final JSON
                 use futures::StreamExt;
-                let _ = progress_tx.send(ProgressMsg::ThinkingDelta("(connecting to model)".to_string()));
+                let _ = progress_tx.send(ProgressMsg::ThinkingDelta(
+                    code_i18n::tr_plain("tui.theme.spinner.connecting").to_string(),
+                ));
                 let mut stream = match client.stream(&prompt).await {
                     Ok(s) => s,
                     Err(e) => {
+                        let error = e.to_string();
+                        let message = code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.theme.spinner.request_error",
+                            &[("error", &error)],
+                        );
                         tx.send_background_before_next_output_with_ticket(
                             &before_ticket,
-                            format!("Request error: {}", e),
+                            message,
                         );
                         tracing::info!("spinner request error: {}", e);
                         return;
@@ -434,7 +502,7 @@ impl ThemeSelectionView {
                 let mut last_err: Option<String> = None;
                 while let Some(ev) = stream.next().await {
                     match ev {
-                        Ok(code_core::ResponseEvent::Created { .. }) => { tracing::info!("LLM: created"); let _ = progress_tx.send(ProgressMsg::SetStatus("(starting generation)".to_string())); }
+                        Ok(code_core::ResponseEvent::Created { .. }) => { tracing::info!("LLM: created"); let _ = progress_tx.send(ProgressMsg::SetStatus(code_i18n::tr_plain("tui.theme.spinner.starting").to_string())); }
                         Ok(code_core::ResponseEvent::ReasoningSummaryDelta { delta, .. }) => { tracing::info!(target: "spinner", "LLM[thinking]: {}", delta); let _ = progress_tx.send(ProgressMsg::ThinkingDelta(delta.clone())); think_sum.push_str(&delta); }
                         Ok(code_core::ResponseEvent::ReasoningContentDelta { delta, .. }) => { tracing::info!(target: "spinner", "LLM[reasoning]: {}", delta); }
                         Ok(code_core::ResponseEvent::OutputTextDelta { delta, .. }) => { tracing::info!(target: "spinner", "LLM[delta]: {}", delta); let _ = progress_tx.send(ProgressMsg::OutputDelta(delta.clone())); out.push_str(&delta); }
@@ -1077,7 +1145,9 @@ impl ThemeSelectionView {
                 }
             }
             KeyEvent { code: KeyCode::Left, modifiers: KeyModifiers::NONE, .. } => {
-                if let Mode::CreateSpinner(ref mut s) = self.mode {
+                if matches!(self.mode, Mode::Themes | Mode::Spinner) {
+                    self.cancel_detail();
+                } else if let Mode::CreateSpinner(ref mut s) = self.mode {
                     let new_step = match s.step.get() {
                         CreateStep::Prompt => CreateStep::Action,
                         CreateStep::Action => {
@@ -1272,7 +1342,9 @@ impl ThemeSelectionView {
                                             .borrow()
                                             .as_ref()
                                             .cloned()
-                                            .unwrap_or_else(|| "Custom".to_string());
+                                            .unwrap_or_else(|| {
+                            code_i18n::tr_plain("tui.theme.create.custom_label").to_string()
+                        });
                                         if let Ok(home) = code_core::config::find_code_home() {
                                             let _ = code_core::config::set_custom_spinner(
                                                 &home,
@@ -1479,6 +1551,10 @@ impl ThemeSelectionView {
                 }
             }
             KeyEvent { code: KeyCode::Backspace, .. } => {
+                if matches!(self.mode, Mode::Themes | Mode::Spinner) {
+                    self.cancel_detail();
+                    return;
+                }
                 if let Mode::CreateSpinner(ref mut s) = self.mode {
                     if s.is_loading.get() {
                         return;
@@ -1895,7 +1971,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                                             .borrow()
                                             .as_ref()
                                             .cloned()
-                                            .unwrap_or_else(|| "Custom".to_string());
+                                            .unwrap_or_else(|| {
+                                                code_i18n::tr_plain("tui.theme.create.custom_label")
+                                                    .to_string()
+                                            });
                                         if let Ok(home) = code_core::config::find_code_home() {
                                             let _ = code_core::config::set_custom_spinner(
                                                 &home,
@@ -2327,8 +2406,9 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
             }
         } else if matches!(self.mode, Mode::Themes) {
             // Header: Choose Theme
+            let ui_language = code_i18n::current_language();
             lines.push(Line::from(Span::styled(
-                "Choose Theme",
+                code_i18n::tr(ui_language, "tui.theme.choose"),
                 Style::default()
                     .fg(theme.text_bright)
                     .add_modifier(Modifier::BOLD),
@@ -2360,7 +2440,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     } else {
                         Style::default().fg(theme.text_dim)
                     };
-                    spans.push(Span::styled("Generate your own…", label_style));
+                    spans.push(Span::styled(
+                        code_i18n::tr(ui_language, "tui.theme.generate_your_own"),
+                        label_style,
+                    ));
                     lines.push(Line::from(spans));
                     continue;
                 }
@@ -2368,7 +2451,11 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 let is_original = *theme_enum == self.original_theme;
 
                 let prefix_selected = is_selected;
-                let suffix = if is_original { " (original)" } else { "" };
+                let suffix = if is_original {
+                    code_i18n::tr_plain("tui.theme.original_suffix")
+                } else {
+                    ""
+                };
 
                 let mut spans = vec![Span::raw(" ")];
                 if prefix_selected {
@@ -2488,9 +2575,11 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                                 if let Mode::CreateSpinner(ref sm) = self.mode {
                                     sm.is_loading.set(false);
                                     sm.step.set(CreateStep::Action);
+                                    let error_prefix =
+                                        code_i18n::tr_plain("tui.theme.create.error_prefix");
                                     sm.thinking_lines
                                         .borrow_mut()
-                                        .push(format!("Error: {}", error));
+                                        .push(format!("{} {}", error_prefix, error));
                                     sm.thinking_current.borrow_mut().clear();
                                 }
                                 self.app_event_tx.send(AppEvent::RequestRedraw);
@@ -2541,7 +2630,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             .rev()
                             .find(|l| !l.trim().is_empty())
                             .cloned()
-                            .unwrap_or_else(|| "Waiting for model…".to_string())
+                            .unwrap_or_else(|| {
+                                code_i18n::tr_plain("tui.theme.create.waiting_for_model")
+                                    .to_string()
+                            })
                     };
                     let mut latest_render = latest.to_string();
                     if !latest_render.ends_with('…') {
@@ -2566,7 +2658,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     // Theme review layout (header + toggle + buttons)
                     if let Mode::CreateTheme(ref st) = self.mode {
                         form_lines.push(Line::from(Span::styled(
-                            "Overview » Change Theme » Create Custom",
+                            Self::nav_overview_change_theme_create_custom(),
                             Style::default()
                                 .fg(theme.text_bright)
                                 .add_modifier(Modifier::BOLD),
@@ -2576,7 +2668,9 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             .proposed_name
                             .borrow()
                             .clone()
-                            .unwrap_or_else(|| "Custom".to_string());
+                            .unwrap_or_else(|| {
+                                code_i18n::tr_plain("tui.theme.custom.name_fallback").to_string()
+                            });
                         let onoff = if st.preview_on.get() { "on" } else { "off" };
                         let sel = st.review_focus_is_toggle.get();
                         let style = if sel {
@@ -2606,9 +2700,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                                 Style::default().fg(theme.text)
                             }
                         };
-                        spans.push(Span::styled("[ Save ]", selbtn(primary_selected)));
+                        spans.push(Span::styled(
+                            format!("[ {} ]", code_i18n::tr_plain("tui.common.save")),
+                            selbtn(primary_selected),
+                        ));
                         spans.push(Span::raw("  "));
-                        spans.push(Span::styled("[ Retry ]", selbtn(secondary_selected)));
+                        spans.push(Span::styled(
+                            format!("[ {} ]", code_i18n::tr_plain("tui.common.retry")),
+                            selbtn(secondary_selected),
+                        ));
                         form_lines.push(Line::from(spans));
                         Paragraph::new(form_lines)
                             .alignment(Alignment::Left)
@@ -2710,9 +2810,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             Style::default().fg(theme.text)
                         }
                     };
-                    spans.push(Span::styled("[ Save ]", sel(primary_selected)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.save")),
+                        sel(primary_selected),
+                    ));
                     spans.push(Span::raw("  "));
-                    spans.push(Span::styled("[ Retry ]", sel(secondary_selected)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.retry")),
+                        sel(secondary_selected),
+                    ));
                     form_lines.push(Line::from(spans));
                     Paragraph::new(form_lines)
                         .alignment(Alignment::Left)
@@ -2742,14 +2848,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 form_lines.push(Line::default());
                 // Show error above description if any
                 if let Some(last) = s.thinking_lines.borrow().last().cloned() {
-                    if last.starts_with("Error:") {
+                    let error_prefix = code_i18n::tr_plain("tui.theme.create.error_prefix");
+                    if last.starts_with(error_prefix) {
                         form_lines.push(Line::from(Span::styled(
                             last,
                             Style::default().fg(crate::colors::error()),
                         )));
                         if let Some(raw) = s.last_raw_output.borrow().as_ref() {
                             form_lines.push(Line::from(Span::styled(
-                                "Model output (raw):",
+                                code_i18n::tr_plain("tui.theme.create.raw_output_label"),
                                 Style::default().fg(theme.text_dim),
                             )));
                             for ln in raw.split('\n') {
@@ -2765,7 +2872,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 let caret = Span::styled("▏", Style::default().fg(theme.info));
                 let mut desc_spans: Vec<Span> = Vec::new();
                 desc_spans.push(Span::styled(
-                    "Description: ",
+                    code_i18n::tr_plain("tui.theme.create.description_label"),
                     Style::default().fg(theme.keyword),
                 ));
                 let active = matches!(s.step.get(), CreateStep::Prompt);
@@ -2795,9 +2902,18 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         Style::default().fg(theme.text)
                     }
                 };
-                spans.push(Span::styled("[ Generate... ]", sel(primary_selected)));
+                spans.push(Span::styled(
+                    format!(
+                        "[ {} ]",
+                        code_i18n::tr_plain("tui.theme.create.generate")
+                    ),
+                    sel(primary_selected),
+                ));
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("[ Cancel ]", sel(secondary_selected)));
+                spans.push(Span::styled(
+                    format!("[ {} ]", code_i18n::tr_plain("tui.common.cancel")),
+                    sel(secondary_selected),
+                ));
                 form_lines.push(Line::from(spans));
 
                 Paragraph::new(form_lines)
@@ -2870,9 +2986,11 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                                 if let Mode::CreateTheme(ref sm) = self.mode {
                                     sm.is_loading.set(false);
                                     sm.step.set(CreateStep::Action);
+                                    let error_prefix =
+                                        code_i18n::tr_plain("tui.theme.create.error_prefix");
                                     sm.thinking_lines
                                         .borrow_mut()
-                                        .push(format!("Error: {}", error));
+                                        .push(format!("{} {}", error_prefix, error));
                                     sm.thinking_current.borrow_mut().clear();
                                 }
                                 self.app_event_tx.send(AppEvent::RequestRedraw);
@@ -2885,7 +3003,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 let mut form_lines = Vec::new();
                 if s.is_loading.get() {
                     form_lines.push(Line::from(Span::styled(
-                        "Overview » Change Theme » Create Custom",
+                        Self::nav_overview_change_theme_create_custom(),
                         Style::default()
                             .fg(theme.text_bright)
                             .add_modifier(Modifier::BOLD),
@@ -2902,7 +3020,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     form_lines.push(Line::from(vec![
                         Span::styled(frame, Style::default().fg(crate::colors::info())),
                         Span::styled(
-                            " Generating theme with AI…",
+                            format!(
+                                " {}",
+                                code_i18n::tr_plain("tui.theme.create.generating")
+                            ),
                             Style::default().fg(theme.text_bright),
                         ),
                     ]));
@@ -2916,7 +3037,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             .rev()
                             .find(|l| !l.trim().is_empty())
                             .cloned()
-                            .unwrap_or_else(|| "Waiting for model…".to_string())
+                            .unwrap_or_else(|| {
+                                code_i18n::tr_plain("tui.theme.create.waiting_for_model")
+                                    .to_string()
+                            })
                     };
                     let mut latest_render = latest.to_string();
                     if !latest_render.ends_with('…') {
@@ -2938,7 +3062,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 if matches!(s.step.get(), CreateStep::Review) {
                     // Header
                     form_lines.push(Line::from(Span::styled(
-                        "Overview » Change Theme » Create Custom",
+                        Self::nav_overview_change_theme_create_custom(),
                         Style::default()
                             .fg(theme.text_bright)
                             .add_modifier(Modifier::BOLD),
@@ -2950,7 +3074,11 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         .borrow()
                         .clone()
                         .unwrap_or_else(|| "Custom".to_string());
-                    let onoff = if s.preview_on.get() { "on" } else { "off" };
+                    let onoff = if s.preview_on.get() {
+                        code_i18n::tr_plain("tui.common.on")
+                    } else {
+                        code_i18n::tr_plain("tui.common.off")
+                    };
                     let toggle_style = if s.review_focus_is_toggle.get() {
                         Style::default()
                             .fg(theme.primary)
@@ -2958,8 +3086,13 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     } else {
                         Style::default().fg(theme.text)
                     };
+                    let now_showing = code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.theme.create.now_showing",
+                        &[("name", &name), ("state", onoff)],
+                    );
                     form_lines.push(Line::from(Span::styled(
-                        format!("Now showing {} [{}]", name, onoff),
+                        now_showing,
                         toggle_style,
                     )));
                     form_lines.push(Line::default());
@@ -2976,9 +3109,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             Style::default().fg(theme.text)
                         }
                     };
-                    spans.push(Span::styled("[ Save ]", sel(save_sel)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.save")),
+                        sel(save_sel),
+                    ));
                     spans.push(Span::raw("  "));
-                    spans.push(Span::styled("[ Retry ]", sel(retry_sel)));
+                    spans.push(Span::styled(
+                        format!("[ {} ]", code_i18n::tr_plain("tui.common.retry")),
+                        sel(retry_sel),
+                    ));
                     form_lines.push(Line::from(spans));
                     Paragraph::new(form_lines)
                         .alignment(Alignment::Left)
@@ -2988,7 +3127,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 }
                 // Idle form
                 form_lines.push(Line::from(Span::styled(
-                    "Overview » Change Theme » Create Custom",
+                    Self::nav_overview_change_theme_create_custom(),
                     Style::default()
                         .fg(theme.text_bright)
                         .add_modifier(Modifier::BOLD),
@@ -2996,14 +3135,15 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 form_lines.push(Line::default());
                 // If there was a recent error, show it once above description (with full raw output)
                 if let Some(last) = s.thinking_lines.borrow().last().cloned() {
-                    if last.starts_with("Error:") {
+                    let error_prefix = code_i18n::tr_plain("tui.theme.create.error_prefix");
+                    if last.starts_with(error_prefix) {
                         form_lines.push(Line::from(Span::styled(
                             last,
                             Style::default().fg(crate::colors::error()),
                         )));
                         if let Some(raw) = s.last_raw_output.borrow().as_ref() {
                             form_lines.push(Line::from(Span::styled(
-                                "Model output (raw):",
+                                code_i18n::tr_plain("tui.theme.create.raw_output_label"),
                                 Style::default().fg(theme.text_dim),
                             )));
                             for ln in raw.split('\n') {
@@ -3017,17 +3157,17 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     }
                 }
                 form_lines.push(Line::from(Span::styled(
-                    "Code can generate a custom theme just for you!",
+                    code_i18n::tr_plain("tui.theme.create.prompt_title"),
                     Style::default().fg(theme.text),
                 )));
                 form_lines.push(Line::from(Span::styled(
-                    "What should it look like? (e.g. Light Sunrise with Palm Trees, Dark River with Fireflies)",
+                    code_i18n::tr_plain("tui.theme.create.prompt_hint"),
                     Style::default().fg(theme.text_dim),
                 )));
                 form_lines.push(Line::default());
                 let mut desc_spans: Vec<Span> = Vec::new();
                 desc_spans.push(Span::styled(
-                    "Description: ",
+                    code_i18n::tr_plain("tui.theme.create.description_label"),
                     Style::default().fg(theme.keyword),
                 ));
                 let active = matches!(s.step.get(), CreateStep::Prompt);
@@ -3056,9 +3196,18 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         Style::default().fg(theme.text)
                     }
                 };
-                spans.push(Span::styled("[ Generate... ]", sel(primary_selected)));
+                spans.push(Span::styled(
+                    format!(
+                        "[ {} ]",
+                        code_i18n::tr_plain("tui.theme.create.generate")
+                    ),
+                    sel(primary_selected),
+                ));
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("[ Cancel ]", sel(secondary_selected)));
+                spans.push(Span::styled(
+                    format!("[ {} ]", code_i18n::tr_plain("tui.common.cancel")),
+                    sel(secondary_selected),
+                ));
                 form_lines.push(Line::from(spans));
                 Paragraph::new(form_lines)
                     .alignment(Alignment::Left)
@@ -3102,7 +3251,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 height: 1,
             };
             let header = Line::from(Span::styled(
-                "Overview » Change Spinner",
+                Self::nav_overview_change_spinner(),
                 Style::default()
                     .fg(theme.text_bright)
                     .add_modifier(Modifier::BOLD),
@@ -3154,7 +3303,10 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                     } else {
                         Style::default().fg(theme.text_dim)
                     };
-                    spans.push(Span::styled("Generate your own…", label_style));
+                    spans.push(Span::styled(
+                        code_i18n::tr(code_i18n::current_language(), "tui.theme.generate_your_own"),
+                        label_style,
+                    ));
                     Paragraph::new(Line::from(spans)).render(row_rect, buf);
                     continue;
                 }

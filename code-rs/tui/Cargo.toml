@@ -39,6 +39,7 @@ code-common = { path = "../common", features = [
 code-core = { path = "../core" }
 code-file-search = { path = "../file-search" }
 code-git-tooling = { path = "../git-tooling" }
+code-i18n = { workspace = true }
 code-login = { path = "../login" }
 code-ollama = { path = "../ollama" }
 code-protocol = { path = "../protocol" }

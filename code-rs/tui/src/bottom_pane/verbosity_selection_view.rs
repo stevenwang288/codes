@@ -134,11 +134,12 @@ impl<'a> BottomPaneView<'a> for VerbositySelectionView {
         Clear.render(area, buf);
 
         // Create a centered box with theme-aware styling
+        let ui_language = code_i18n::current_language();
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" Select Text Verbosity ")
+            .title(format!(" {} ", code_i18n::tr(ui_language, "tui.verbosity.title")))
             .title_alignment(Alignment::Center);
 
         let inner_area = block.inner(area);
@@ -147,7 +148,7 @@ impl<'a> BottomPaneView<'a> for VerbositySelectionView {
         // Build the content
         let mut lines = vec![
             Line::from(vec![
-                Span::raw("Value: "),
+                Span::raw(code_i18n::tr(ui_language, "tui.verbosity.value_label")),
                 Span::styled(
                     format!("{}", self.current_verbosity),
                     Style::default()
@@ -183,11 +184,11 @@ impl<'a> BottomPaneView<'a> for VerbositySelectionView {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("↑↓", Style::default().fg(crate::colors::light_blue())),
-            Span::raw(" Navigate  "),
+            Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate"))),
             Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::raw(" Select  "),
+            Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.select_label"))),
             Span::styled("Esc", Style::default().fg(crate::colors::error())),
-            Span::raw(" Cancel"),
+            Span::raw(format!(" {}", code_i18n::tr_plain("tui.common.cancel"))),
         ]));
 
         let padded = Rect {

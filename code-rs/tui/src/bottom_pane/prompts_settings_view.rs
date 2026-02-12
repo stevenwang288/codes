@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use code_core::config::find_code_home;
 use code_core::protocol::Op;
+use code_i18n;
 use code_protocol::custom_prompts::CustomPrompt;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
@@ -179,7 +180,7 @@ impl PromptsSettingsView {
             lines.push(line);
         }
         if lines.is_empty() {
-            lines.push(Line::from("No prompts yet. Press Ctrl+N to create."));
+            lines.push(Line::from(code_i18n::tr_plain("tui.prompts_settings.empty")));
         }
 
         // Add new row
@@ -189,11 +190,14 @@ impl PromptsSettingsView {
         } else {
             Style::default().fg(colors::success()).add_modifier(Modifier::BOLD)
         };
-        let add_line = Line::from(vec![Span::styled(format!("{add_arrow} Add new…"), add_style)]);
+        let add_line = Line::from(vec![Span::styled(
+            format!("{add_arrow} {}", code_i18n::tr_plain("tui.prompts_settings.add_new")),
+            add_style,
+        )]);
         lines.push(add_line);
 
         let title = Paragraph::new(vec![Line::from(Span::styled(
-            "Custom prompts allow you to save reusable prompts initiated with a simple slash command. They are invoked with /name. Create and update your custom prompts below.",
+            code_i18n::tr_plain("tui.prompts_settings.description"),
             Style::default().fg(colors::text_dim()),
         ))])
         .alignment(Alignment::Left)
@@ -232,7 +236,11 @@ impl PromptsSettingsView {
             .split(area);
 
         // Name field with border
-        let name_title = if matches!(self.focus, Focus::Name) { "Name (slug) • Enter to save" } else { "Name (slug)" };
+        let name_title = if matches!(self.focus, Focus::Name) {
+            code_i18n::tr_plain("tui.prompts_settings.name_title_active")
+        } else {
+            code_i18n::tr_plain("tui.prompts_settings.name_title")
+        };
         let mut name_block = Block::default().borders(Borders::ALL).title(name_title);
         if matches!(self.focus, Focus::Name) {
             name_block = name_block.border_style(Style::default().fg(colors::primary()));
@@ -242,7 +250,11 @@ impl PromptsSettingsView {
         self.name_field.render(name_inner, buf, matches!(self.focus, Focus::Name));
 
         // Body field with border
-        let body_title = if matches!(self.focus, Focus::Body) { "Content (multiline)" } else { "Content" };
+        let body_title = if matches!(self.focus, Focus::Body) {
+            code_i18n::tr_plain("tui.prompts_settings.body_title_active")
+        } else {
+            code_i18n::tr_plain("tui.prompts_settings.body_title")
+        };
         let mut body_block = Block::default().borders(Borders::ALL).title(body_title);
         if matches!(self.focus, Focus::Body) {
             body_block = body_block.border_style(Style::default().fg(colors::primary()));
@@ -253,9 +265,24 @@ impl PromptsSettingsView {
 
         // Buttons
         let buttons_area = vertical[2];
-        let save_label = if matches!(self.focus, Focus::Save) { "[Save]" } else { "Save" };
-        let delete_label = if matches!(self.focus, Focus::Delete) { "[Delete]" } else { "Delete" };
-        let cancel_label = if matches!(self.focus, Focus::Cancel) { "[Cancel]" } else { "Cancel" };
+        let save_base = code_i18n::tr_plain("tui.prompts_settings.button.save");
+        let delete_base = code_i18n::tr_plain("tui.prompts_settings.button.delete");
+        let cancel_base = code_i18n::tr_plain("tui.prompts_settings.button.cancel");
+        let save_label = if matches!(self.focus, Focus::Save) {
+            format!("[{save_base}]")
+        } else {
+            save_base.to_string()
+        };
+        let delete_label = if matches!(self.focus, Focus::Delete) {
+            format!("[{delete_base}]")
+        } else {
+            delete_base.to_string()
+        };
+        let cancel_label = if matches!(self.focus, Focus::Cancel) {
+            format!("[{cancel_base}]")
+        } else {
+            cancel_base.to_string()
+        };
         let btn_span = |label: &str, focus: Focus, color: Style| {
             if self.focus == focus {
                 Span::styled(label.to_string(), color.bg(colors::primary()).fg(colors::background()))
@@ -264,12 +291,12 @@ impl PromptsSettingsView {
             }
         };
         let line = Line::from(vec![
-            btn_span(save_label, Focus::Save, Style::default().fg(colors::success()).add_modifier(Modifier::BOLD)),
+            btn_span(&save_label, Focus::Save, Style::default().fg(colors::success()).add_modifier(Modifier::BOLD)),
             Span::raw("   "),
-            btn_span(delete_label, Focus::Delete, Style::default().fg(colors::error()).add_modifier(Modifier::BOLD)),
+            btn_span(&delete_label, Focus::Delete, Style::default().fg(colors::error()).add_modifier(Modifier::BOLD)),
             Span::raw("   "),
-            btn_span(cancel_label, Focus::Cancel, Style::default().fg(colors::text_dim()).add_modifier(Modifier::BOLD)),
-            Span::raw("    Tab cycle • Enter activates"),
+            btn_span(&cancel_label, Focus::Cancel, Style::default().fg(colors::text_dim()).add_modifier(Modifier::BOLD)),
+            Span::raw(format!("    {}", code_i18n::tr_plain("tui.prompts_settings.hints.tab_cycle_enter_activate"))),
         ]);
         Paragraph::new(line).render(buttons_area, buf);
 
@@ -306,7 +333,10 @@ impl PromptsSettingsView {
         self.name_field.set_text("");
         self.body_field.set_text("");
         self.focus = Focus::Name;
-        self.status = Some(("New prompt".to_string(), Style::default().fg(colors::info())));
+        self.status = Some((
+            code_i18n::tr_plain("tui.prompts_settings.status.new_prompt").to_string(),
+            Style::default().fg(colors::info()),
+        ));
         self.mode = Mode::Edit;
     }
 
@@ -341,13 +371,15 @@ impl PromptsSettingsView {
     fn validate(&self, name: &str) -> Result<(), String> {
         let slug = name.trim();
         if slug.is_empty() {
-            return Err("Name is required".to_string());
+            return Err(code_i18n::tr_plain("tui.prompts_settings.error.name_required").to_string());
         }
         if !slug
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
         {
-            return Err("Name must use letters, numbers, '-', '_' or '.'".to_string());
+            return Err(
+                code_i18n::tr_plain("tui.prompts_settings.error.name_invalid_chars").to_string(),
+            );
         }
 
         let builtin: Vec<String> = built_in_slash_commands()
@@ -355,7 +387,7 @@ impl PromptsSettingsView {
             .map(|(n, _)| n.to_ascii_lowercase())
             .collect();
         if builtin.contains(&slug.to_ascii_lowercase()) {
-            return Err("Name conflicts with a built-in slash command".to_string());
+            return Err(code_i18n::tr_plain("tui.prompts_settings.error.name_conflicts_builtin").to_string());
         }
 
         let dup = self
@@ -364,7 +396,7 @@ impl PromptsSettingsView {
             .enumerate()
             .any(|(idx, p)| idx != self.selected && p.name.eq_ignore_ascii_case(slug));
         if dup {
-            return Err("A prompt with this name already exists".to_string());
+            return Err(code_i18n::tr_plain("tui.prompts_settings.error.name_exists").to_string());
         }
         Ok(())
     }
@@ -383,20 +415,30 @@ impl PromptsSettingsView {
         let code_home = match find_code_home() {
             Ok(path) => path,
             Err(e) => {
-                self.status = Some((format!("CODE_HOME unavailable: {e}"), Style::default().fg(colors::error())));
+                let msg = format!(
+                    "{}: {e}",
+                    code_i18n::tr_plain("tui.prompts_settings.error.code_home_unavailable")
+                );
+                self.status = Some((msg, Style::default().fg(colors::error())));
                 return;
             }
         };
         let mut dir = code_home;
         dir.push("prompts");
         if let Err(e) = fs::create_dir_all(&dir) {
-            self.status = Some((format!("Failed to create prompts dir: {e}"), Style::default().fg(colors::error())));
+            let msg = format!(
+                "{}: {e}",
+                code_i18n::tr_plain("tui.prompts_settings.error.create_dir_failed")
+            );
+            self.status = Some((msg, Style::default().fg(colors::error())));
             return;
         }
         let mut path = PathBuf::from(&dir);
         path.push(format!("{name}.md"));
         if let Err(e) = fs::write(&path, &body) {
-            self.status = Some((format!("Failed to save: {e}"), Style::default().fg(colors::error())));
+            let msg =
+                format!("{}: {e}", code_i18n::tr_plain("tui.prompts_settings.error.save_failed"));
+            self.status = Some((msg, Style::default().fg(colors::error())));
             return;
         }
 
@@ -410,7 +452,10 @@ impl PromptsSettingsView {
             self.selected = updated.len() - 1;
         }
         self.prompts = updated;
-        self.status = Some(("Saved.".to_string(), Style::default().fg(colors::success())));
+        self.status = Some((
+            code_i18n::tr_plain("tui.prompts_settings.status.saved").to_string(),
+            Style::default().fg(colors::success()),
+        ));
 
         // Trigger reload so composer autocomplete picks it up.
         self.app_event_tx.send(AppEvent::CodexOp(Op::ListCustomPrompts));
@@ -418,7 +463,10 @@ impl PromptsSettingsView {
 
     fn delete_current(&mut self) {
         if self.selected >= self.prompts.len() {
-            self.status = Some(("Nothing to delete".to_string(), Style::default().fg(colors::warning())));
+            self.status = Some((
+                code_i18n::tr_plain("tui.prompts_settings.status.nothing_to_delete").to_string(),
+                Style::default().fg(colors::warning()),
+            ));
             self.mode = Mode::List;
             self.focus = Focus::List;
             return;
@@ -427,7 +475,11 @@ impl PromptsSettingsView {
         if let Err(e) = fs::remove_file(&prompt.path) {
             // Ignore missing file but surface other errors
             if e.kind() != std::io::ErrorKind::NotFound {
-                self.status = Some((format!("Delete failed: {e}"), Style::default().fg(colors::error())));
+                let msg = format!(
+                    "{}: {e}",
+                    code_i18n::tr_plain("tui.prompts_settings.error.delete_failed")
+                );
+                self.status = Some((msg, Style::default().fg(colors::error())));
                 return;
             }
         }
@@ -437,7 +489,10 @@ impl PromptsSettingsView {
         }
         self.mode = Mode::List;
         self.focus = Focus::List;
-        self.status = Some(("Deleted.".to_string(), Style::default().fg(colors::success())));
+        self.status = Some((
+            code_i18n::tr_plain("tui.prompts_settings.status.deleted").to_string(),
+            Style::default().fg(colors::success()),
+        ));
         self.app_event_tx.send(AppEvent::CodexOp(Op::ListCustomPrompts));
     }
 }

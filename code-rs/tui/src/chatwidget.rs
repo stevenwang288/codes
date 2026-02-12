@@ -54,15 +54,16 @@ use code_core::account_usage::{
 use code_core::auth_accounts::{self, StoredAccount};
 use code_login::AuthManager;
 use code_login::AuthMode;
-use code_protocol::dynamic_tools::DynamicToolResponse;
+use code_protocol::protocol::ReviewTarget;
 use code_protocol::protocol::SessionSource;
 use code_protocol::num_format::format_with_separators_u64;
-use code_core::external_agent_command_exists;
 use code_core::split_command_and_args;
 use serde_json::Value as JsonValue;
 
 
 mod diff_handlers;
+mod lang_handlers;
+mod mode_handlers;
 mod agent_summary;
 mod esc;
 mod modals;
@@ -160,11 +161,9 @@ use code_core::protocol::BrowserScreenshotUpdateEvent;
 use code_core::protocol::BrowserSnapshotEvent;
 use code_core::protocol::CustomToolCallBeginEvent;
 use code_core::protocol::CustomToolCallEndEvent;
-use code_core::protocol::CustomToolCallUpdateEvent;
 use code_core::protocol::ErrorEvent;
 use code_core::protocol::Event;
 use code_core::protocol::EventMsg;
-use code_core::protocol::WarningEvent;
 use code_core::protocol::ExecApprovalRequestEvent;
 use code_core::protocol::ExecCommandBeginEvent;
 use code_core::protocol::ExecCommandEndEvent;
@@ -172,13 +171,11 @@ use code_core::protocol::ExecOutputStream;
 use code_core::protocol::EnvironmentContextDeltaEvent;
 use code_core::protocol::EnvironmentContextFullEvent;
 use code_core::protocol::InputItem;
-use code_core::protocol::McpServerFailure;
-use code_core::protocol::McpServerFailurePhase;
 use code_core::protocol::SessionConfiguredEvent;
 // MCP tool call handlers moved into chatwidget::tools
 use code_core::protocol::Op;
 use code_core::protocol::ReviewOutputEvent;
-use code_core::protocol::{ReviewContextMetadata, ReviewRequest};
+use code_core::protocol::{ReviewContextMetadata, ReviewRequest, ReviewSnapshotInfo};
 use code_core::protocol::PatchApplyBeginEvent;
 use code_core::protocol::PatchApplyEndEvent;
 use code_core::protocol::TaskCompleteEvent;
@@ -223,16 +220,26 @@ use crate::history::compat::{
     ContextRecord,
 };
 
-pub(crate) const DOUBLE_ESC_HINT: &str = "undo timeline";
-const AUTO_ESC_EXIT_HINT: &str = "Press Esc to exit Auto Drive";
-const AUTO_ESC_EXIT_HINT_DOUBLE: &str = "Press Esc again to exit Auto Drive";
 const AUTO_COMPLETION_CELEBRATION_DURATION: Duration = Duration::from_secs(5);
 const HISTORY_ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(120);
 const AUTO_BOOTSTRAP_GOAL_PLACEHOLDER: &str = "Deriving goal from recent conversation";
-const AUTO_DRIVE_SESSION_SUMMARY_NOTICE: &str = "Summarizing session";
 const AUTO_DRIVE_SESSION_SUMMARY_PROMPT: &str =
     include_str!("../prompt_for_auto_drive_session_summary.md");
 const CONTEXT_DELTA_HISTORY: usize = 10;
+
+fn is_auto_drive_exit_hint(hint: &str) -> bool {
+    hint == code_i18n::tr(code_i18n::Language::En, "tui.auto_drive.exit_hint")
+        || hint == code_i18n::tr(code_i18n::Language::En, "tui.auto_drive.exit_hint_double")
+        || hint == code_i18n::tr(code_i18n::Language::ZhCn, "tui.auto_drive.exit_hint")
+        || hint == code_i18n::tr(code_i18n::Language::ZhCn, "tui.auto_drive.exit_hint_double")
+}
+
+fn is_cancelled_by_user_message(text: &str) -> bool {
+    let trimmed = text.trim();
+    trimmed == "Cancelled by user."
+        || trimmed == code_i18n::tr(code_i18n::Language::En, "tui.common.cancelled_by_user")
+        || trimmed == code_i18n::tr(code_i18n::Language::ZhCn, "tui.common.cancelled_by_user")
+}
 
 struct MergeRepoState {
     git_root: PathBuf,
@@ -816,10 +823,12 @@ use uuid::Uuid;
 
 fn history_cell_logging_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    if let Ok(value) = std::env::var("CODEX_TRACE_HISTORY") {
-        let trimmed = value.trim();
-        if !matches!(trimmed, "" | "0") {
-            return true;
+    for var in ["CODEX_TRACE_HISTORY", "CODES_TRACE_HISTORY"] {
+        if let Ok(value) = std::env::var(var) {
+            let trimmed = value.trim();
+            if !matches!(trimmed, "" | "0") {
+                return true;
+            }
         }
     }
     *ENABLED.get_or_init(|| {
@@ -992,7 +1001,6 @@ use crate::history::state::{
     RateLimitsRecord,
     TextTone,
     TextEmphasis,
-    ToolArgument,
     ToolStatus,
 };
 use crate::cloud_tasks_service::CloudEnvironment;
@@ -1039,7 +1047,7 @@ use ratatui::text::Span;
 use ratatui::text::Text as RtText;
 use textwrap::wrap;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use ratatui::widgets::Block;
 use ratatui::widgets::Borders;
 use ratatui::widgets::Clear;
@@ -1485,6 +1493,12 @@ struct RenderRequestSeed {
     kind: RenderRequestKind,
 }
 
+#[derive(Clone, Debug)]
+struct OpenClickTarget {
+    rect: Rect,
+    target: String,
+}
+
 pub(crate) struct ChatWidget<'a> {
     app_event_tx: AppEventSender,
     code_op_tx: UnboundedSender<Op>,
@@ -1513,8 +1527,6 @@ pub(crate) struct ChatWidget<'a> {
     context_last_sequence: Option<u64>,
     context_browser_sequence: Option<u64>,
     config: Config,
-    mcp_tools_by_server: HashMap<String, Vec<String>>,
-    mcp_server_failures: HashMap<String, McpServerFailure>,
 
     /// Optional remote-merged presets list delivered asynchronously.
     /// When absent, the TUI falls back to built-in presets.
@@ -1532,8 +1544,6 @@ pub(crate) struct ChatWidget<'a> {
     initial_user_message: Option<UserMessage>,
     total_token_usage: TokenUsage,
     last_token_usage: TokenUsage,
-    session_requested_model: Option<String>,
-    session_latest_response_model: Option<String>,
     rate_limit_snapshot: Option<RateLimitSnapshotEvent>,
     rate_limit_warnings: RateLimitWarningState,
     rate_limit_fetch_inflight: bool,
@@ -1649,6 +1659,15 @@ pub(crate) struct ChatWidget<'a> {
 
     // Accumulated diff/session state
     diffs: DiffsState,
+
+    // Language picker state
+    lang: LangState,
+
+    // Mode picker state
+    mode: ModeState,
+
+    // Click targets for the current frame (e.g. [OPEN] buttons)
+    open_click_targets: RefCell<Vec<OpenClickTarget>>,
 
     // Help overlay state
     help: HelpState,
@@ -2577,11 +2596,11 @@ fn agent_status_from_str(status: &str) -> AgentStatus {
 
 fn agent_status_label(status: AgentStatus) -> &'static str {
     match status {
-        AgentStatus::Pending => "Pending",
-        AgentStatus::Running => "Running",
-        AgentStatus::Completed => "Completed",
-        AgentStatus::Failed => "Failed",
-        AgentStatus::Cancelled => "Cancelled",
+        AgentStatus::Pending => code_i18n::tr_plain("tui.state.pending"),
+        AgentStatus::Running => code_i18n::tr_plain("tui.state.running"),
+        AgentStatus::Completed => code_i18n::tr_plain("tui.state.completed"),
+        AgentStatus::Failed => code_i18n::tr_plain("tui.state.failed"),
+        AgentStatus::Cancelled => code_i18n::tr_plain("tui.state.cancelled"),
     }
 }
 
@@ -2617,10 +2636,10 @@ fn agent_status_color(status: AgentStatus) -> ratatui::style::Color {
 
 fn agent_log_label(kind: AgentLogKind) -> &'static str {
     match kind {
-        AgentLogKind::Status => "status",
-        AgentLogKind::Progress => "progress",
-        AgentLogKind::Result => "result",
-        AgentLogKind::Error => "error",
+        AgentLogKind::Status => code_i18n::tr_plain("tui.agent.log.status"),
+        AgentLogKind::Progress => code_i18n::tr_plain("tui.agent.log.progress"),
+        AgentLogKind::Result => code_i18n::tr_plain("tui.agent.log.result"),
+        AgentLogKind::Error => code_i18n::tr_plain("tui.agent.log.error"),
     }
 }
 
@@ -3150,7 +3169,7 @@ impl ChatWidget<'_> {
             return;
         }
 
-        self.push_background_tail(AUTO_DRIVE_SESSION_SUMMARY_NOTICE.to_string());
+        self.push_background_tail(code_i18n::tr_plain("tui.auto_drive.session_summary_notice").to_string());
         self.request_redraw();
         self.submit_hidden_text_message_with_preface(prompt.to_string(), String::new());
     }
@@ -3713,33 +3732,52 @@ impl ChatWidget<'_> {
             return false;
         }
 
+        let ui_language = code_i18n::current_language();
+        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
+
         let mut status_parts = Vec::new();
         if !batch_ids.is_empty() {
             let count = batch_ids.len();
-            status_parts.push(if count == 1 {
-                "1 batch".to_string()
-            } else {
-                format!("{count} batches")
-            });
+            let word = match ui_language {
+                code_i18n::Language::En => {
+                    if count == 1 { "batch" } else { "batches" }
+                }
+                code_i18n::Language::ZhCn => "批次",
+            };
+            status_parts.push(code_i18n::tr_args(
+                ui_language,
+                "tui.auto_drive.cancel.batch_count",
+                &[("count", &count.to_string()), ("word", word)],
+            ));
         }
         if !agent_ids.is_empty() {
             let count = agent_ids.len();
-            status_parts.push(if count == 1 {
-                "1 agent".to_string()
-            } else {
-                format!("{count} agents")
-            });
+            let word = match ui_language {
+                code_i18n::Language::En => {
+                    if count == 1 { "agent" } else { "agents" }
+                }
+                code_i18n::Language::ZhCn => "个代理",
+            };
+            status_parts.push(code_i18n::tr_args(
+                ui_language,
+                "tui.auto_drive.cancel.agent_count",
+                &[("count", &count.to_string()), ("word", word)],
+            ));
         }
 
         let descriptor = if status_parts.is_empty() {
-            "agents".to_string()
+            code_i18n::tr_plain("tui.auto_drive.cancel.descriptor_default").to_string()
         } else {
-            status_parts.join(", ")
+            status_parts.join(joiner)
         };
         let auto_active = self.auto_state.is_active();
-        self.push_background_tail(format!("Cancelling {descriptor}…"));
+        self.push_background_tail(code_i18n::tr_args(
+            ui_language,
+            "tui.auto_drive.cancel.cancelling",
+            &[("descriptor", &descriptor)],
+        ));
         self.bottom_pane
-            .update_status_text("Cancelling agents…".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.auto_drive.cancel.cancelling_agents_status").to_string());
         self.bottom_pane.set_task_running(true);
         self.submit_op(Op::CancelAgents { batch_ids, agent_ids });
 
@@ -3750,7 +3788,7 @@ impl ChatWidget<'_> {
         } else if self
             .bottom_pane
             .standard_terminal_hint()
-            .is_some_and(|hint| hint == AUTO_ESC_EXIT_HINT || hint == AUTO_ESC_EXIT_HINT_DOUBLE)
+            .is_some_and(|hint| is_auto_drive_exit_hint(hint))
         {
             self.bottom_pane.set_standard_terminal_hint(None);
         }
@@ -3834,8 +3872,8 @@ impl ChatWidget<'_> {
         }
 
         let sections = [
-            "Hello! How can I help you today?",
-            "I can help with various tasks including:\n\n- Writing code\n- Reading files\n- Running commands",
+            code_i18n::tr_plain("tui.chatwidget.hello"),
+            code_i18n::tr_plain("tui.chatwidget.test_mode_intro"),
         ];
 
         for markdown in sections {
@@ -3905,7 +3943,11 @@ impl ChatWidget<'_> {
                 entry.status = AgentStatus::Completed;
                 entry.push_log(
                     AgentLogKind::Status,
-                    format!("Status → {}", agent_status_label(AgentStatus::Completed)),
+                    format!(
+                        "{}{}",
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        agent_status_label(AgentStatus::Completed)
+                    ),
                 );
             }
         }
@@ -4168,22 +4210,9 @@ impl ChatWidget<'_> {
             .map(|c| {
                 let modified = human_ago(&c.modified_ts.unwrap_or_default());
                 let created = human_ago(&c.created_ts.unwrap_or_default());
-                let user_message_count = c.user_message_count;
-                let user_msgs = format!("{user_message_count}");
+                let user_msgs = format!("{}", c.user_message_count);
                 let branch = c.branch.unwrap_or_else(|| "-".to_string());
-                let nickname = c
-                    .nickname
-                    .and_then(|name| {
-                        let trimmed = name.trim();
-                        (!trimmed.is_empty()).then(|| trimmed.to_string())
-                    });
-                let snippet = c.snippet.or(c.subtitle);
-                let mut summary = match (nickname, snippet) {
-                    (Some(name), Some(snippet)) => format!("{name} - {snippet}"),
-                    (Some(name), None) => name,
-                    (None, Some(snippet)) => snippet,
-                    (None, None) => String::new(),
-                };
+                let mut summary = c.snippet.unwrap_or_else(|| c.subtitle.unwrap_or_default());
                 const SNIPPET_MAX: usize = 64;
                 if summary.chars().count() > SNIPPET_MAX {
                     summary = summary.chars().take(SNIPPET_MAX).collect::<String>() + "…";
@@ -4504,7 +4533,8 @@ impl ChatWidget<'_> {
         }
         self.request_redraw();
     }
-    /// If the user is at the bottom, keep following new messages.
+    /// If the user is at or near the bottom, keep following new messages.
+    /// We treat "near" as within 3 rows, matching our scroll step.
     fn autoscroll_if_near_bottom(&mut self) {
         layout_scroll::autoscroll_if_near_bottom(self);
     }
@@ -4550,6 +4580,7 @@ impl ChatWidget<'_> {
         }
     }
 
+    #[cfg(debug_assertions)]
     fn reasoning_preview(lines: &[Line<'static>]) -> String {
         const MAX_LINES: usize = 3;
         const MAX_CHARS: usize = 120;
@@ -5200,7 +5231,7 @@ impl ChatWidget<'_> {
         }
         let total_height = self.history_render.last_total_height();
         let max_scroll = total_height.saturating_sub(viewport_rows);
-        let clamped_offset = self.layout.scroll_offset.get().min(max_scroll);
+        let clamped_offset = self.layout.scroll_offset.min(max_scroll);
         let scroll_pos = max_scroll.saturating_sub(clamped_offset);
         let history_len = self.history_cells.len();
         let history_total = {
@@ -5628,13 +5659,13 @@ impl ChatWidget<'_> {
     pub(crate) fn toggle_context_expansion(&mut self) {
         if !self.context_ui_enabled() {
             self.bottom_pane
-                .update_status_text("Context UI disabled".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.context_ui_disabled").to_string());
             return;
         }
 
         let Some(mut summary) = self.context_summary.clone() else {
             self.bottom_pane
-                .update_status_text("No context available yet".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.no_context_available_yet").to_string());
             return;
         };
 
@@ -5646,9 +5677,9 @@ impl ChatWidget<'_> {
         self.request_redraw();
 
         let status = if expanded {
-            "Context expanded"
+            code_i18n::tr_plain("tui.status.context_expanded")
         } else {
-            "Context collapsed"
+            code_i18n::tr_plain("tui.status.context_collapsed")
         };
         self.bottom_pane.update_status_text(status.to_string());
 
@@ -5952,6 +5983,8 @@ impl ChatWidget<'_> {
         self.bottom_pane.insert_str(s);
     }
 
+    // Removed: pending insert sequencing is not used under strict ordering.
+
     pub(crate) fn set_composer_text(&mut self, text: String) {
         if self.auto_state.should_show_goal_entry()
             && matches!(self.auto_goal_escape_state, AutoGoalEscState::Inactive)
@@ -5961,8 +5994,6 @@ impl ChatWidget<'_> {
         }
         self.bottom_pane.set_composer_text(text);
     }
-
-    // Removed: pending insert sequencing is not used under strict ordering.
 
     pub(crate) fn register_pasted_image(&mut self, placeholder: String, path: std::path::PathBuf) {
         let persisted = self
@@ -6255,11 +6286,17 @@ impl ChatWidget<'_> {
     fn mark_reconnecting(&mut self, message: String) {
         // Keep task running and surface a concise status in the input header.
         self.bottom_pane.set_task_running(true);
-        self.bottom_pane.update_status_text("Retrying...".to_string());
+        self.bottom_pane
+            .update_status_text(code_i18n::tr_plain("tui.status.retrying").to_string());
 
         if !self.reconnect_notice_active {
             self.reconnect_notice_active = true;
-            self.push_background_tail(format!("Auto-retrying… ({message})"));
+            let ui_language = code_i18n::current_language();
+            self.push_background_tail(code_i18n::tr_args(
+                ui_language,
+                "tui.status.auto_retrying",
+                &[("message", message.as_str())],
+            ));
         }
 
         // Do NOT clear running state or streams; the retry will resume them.
@@ -6273,7 +6310,10 @@ impl ChatWidget<'_> {
         self.reconnect_notice_active = false;
         self.bottom_pane.update_status_text(String::new());
         self.bottom_pane
-            .flash_footer_notice_for("Resuming".to_string(), Duration::from_secs(2));
+            .flash_footer_notice_for(
+                code_i18n::tr_plain("tui.status.resuming").to_string(),
+                Duration::from_secs(2),
+            );
         self.request_redraw();
     }
 
@@ -6327,7 +6367,7 @@ impl ChatWidget<'_> {
         self.stream_state.drop_streaming = true;
         // Surface an explicit notice in history so users see confirmation.
         if !has_wait_running {
-            self.push_background_tail("Cancelled by user.".to_string());
+            self.push_background_tail(code_i18n::tr_plain("tui.common.cancelled_by_user").to_string());
         }
         self.submit_op(Op::Interrupt);
         // Immediately drop the running status so the next message can be typed/run,
@@ -6446,8 +6486,6 @@ impl ChatWidget<'_> {
             active_exec_cell: None,
             history_cells,
             config: config.clone(),
-            mcp_tools_by_server: HashMap::new(),
-            mcp_server_failures: HashMap::new(),
             remote_model_presets: None,
             allow_remote_default_at_startup: !config.model_explicit,
             chat_model_selected_explicitly: false,
@@ -6465,8 +6503,6 @@ impl ChatWidget<'_> {
             ),
             total_token_usage: TokenUsage::default(),
             last_token_usage: TokenUsage::default(),
-            session_requested_model: None,
-            session_latest_response_model: None,
             rate_limit_snapshot: None,
             rate_limit_warnings: RateLimitWarningState::default(),
             rate_limit_fetch_inflight: false,
@@ -6571,6 +6607,9 @@ impl ChatWidget<'_> {
                 confirm: None,
                 body_visible_rows: std::cell::Cell::new(0),
             },
+            lang: LangState::default(),
+            mode: ModeState::default(),
+            open_click_targets: RefCell::new(Vec::new()),
             help: HelpState {
                 overlay: None,
                 body_visible_rows: std::cell::Cell::new(0),
@@ -6604,7 +6643,7 @@ impl ChatWidget<'_> {
                 crate::height_manager::HeightManagerConfig::default(),
             )),
             layout: LayoutState {
-                scroll_offset: Cell::new(0),
+                scroll_offset: 0,
                 last_max_scroll: std::cell::Cell::new(0),
                 last_history_viewport_height: std::cell::Cell::new(0),
                 vertical_scrollbar_state: std::cell::RefCell::new(ScrollbarState::default()),
@@ -6680,6 +6719,10 @@ impl ChatWidget<'_> {
             resume_placeholder_visible: false,
             resume_picker_loading: false,
         };
+
+        new_widget
+            .bottom_pane
+            .set_validation_harness_enabled(new_widget.validation_harness_enabled());
         new_widget.load_auto_review_baseline_marker();
         new_widget.spawn_conversation_runtime(config.clone(), auth_manager.clone(), code_op_rx);
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.code_home) {
@@ -6809,8 +6852,6 @@ impl ChatWidget<'_> {
             active_exec_cell: None,
             history_cells,
             config: config.clone(),
-            mcp_tools_by_server: HashMap::new(),
-            mcp_server_failures: HashMap::new(),
             remote_model_presets: None,
             allow_remote_default_at_startup: !config.model_explicit,
             chat_model_selected_explicitly: false,
@@ -6825,8 +6866,6 @@ impl ChatWidget<'_> {
             initial_user_message: None,
             total_token_usage: TokenUsage::default(),
             last_token_usage: TokenUsage::default(),
-            session_requested_model: None,
-            session_latest_response_model: None,
             rate_limit_snapshot: None,
             rate_limit_warnings: RateLimitWarningState::default(),
             rate_limit_fetch_inflight: false,
@@ -6948,6 +6987,9 @@ impl ChatWidget<'_> {
                 confirm: None,
                 body_visible_rows: std::cell::Cell::new(0),
             },
+            lang: LangState::default(),
+            mode: ModeState::default(),
+            open_click_targets: RefCell::new(Vec::new()),
             help: HelpState {
                 overlay: None,
                 body_visible_rows: std::cell::Cell::new(0),
@@ -6981,7 +7023,7 @@ impl ChatWidget<'_> {
                 crate::height_manager::HeightManagerConfig::default(),
             )),
             layout: LayoutState {
-                scroll_offset: Cell::new(0),
+                scroll_offset: 0,
                 last_max_scroll: std::cell::Cell::new(0),
                 last_history_viewport_height: std::cell::Cell::new(0),
                 vertical_scrollbar_state: std::cell::RefCell::new(ScrollbarState::default()),
@@ -7057,6 +7099,8 @@ impl ChatWidget<'_> {
             resume_placeholder_visible: false,
             resume_picker_loading: false,
         };
+        w.bottom_pane
+            .set_validation_harness_enabled(w.validation_harness_enabled());
         w.load_auto_review_baseline_marker();
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.code_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.code_home) {
@@ -7810,6 +7854,20 @@ impl ChatWidget<'_> {
             // Block background input while the terminal overlay is visible.
             return;
         }
+        // Intercept keys for the language quick-pick overlay.
+        if lang_handlers::handle_lang_key(self, key_event) {
+            return;
+        }
+        if self.lang.overlay.is_some() {
+            return;
+        }
+        // Intercept keys for the mode quick-pick overlay.
+        if mode_handlers::handle_mode_key(self, key_event) {
+            return;
+        }
+        if self.mode.overlay.is_some() {
+            return;
+        }
         // Intercept keys for overlays when active (help first, then diff)
         if help_handlers::handle_help_key(self, key_event) {
             return;
@@ -7880,13 +7938,24 @@ impl ChatWidget<'_> {
             self.toggle_browser_overlay();
             return;
         }
-        if let KeyEvent {
-            code: crossterm::event::KeyCode::Char('a'),
-            modifiers: crossterm::event::KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press | KeyEventKind::Repeat,
-            ..
-        } = key_event
-        {
+        let is_ctrl_a = matches!(
+            key_event,
+            KeyEvent {
+                code: crossterm::event::KeyCode::Char('a'),
+                modifiers: crossterm::event::KeyModifiers::CONTROL,
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            }
+        ) || matches!(
+            key_event,
+            KeyEvent {
+                code: crossterm::event::KeyCode::Char('\u{1}'),
+                modifiers,
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            } if modifiers.is_empty()
+        );
+        if is_ctrl_a {
             self.toggle_agents_hud();
             return;
         }
@@ -8072,21 +8141,6 @@ impl ChatWidget<'_> {
             }
         }
 
-        if let KeyEvent {
-            code: crossterm::event::KeyCode::Char('g'),
-            modifiers: crossterm::event::KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press | KeyEventKind::Repeat,
-            ..
-        } = key_event
-        {
-            if !self.bottom_pane.has_active_modal_view() {
-                let initial = self.bottom_pane.composer_text();
-                self.app_event_tx
-                    .send(AppEvent::OpenExternalEditor { initial });
-            }
-            return;
-        }
-
         // Fast-path PageUp/PageDown to scroll the transcript by a viewport at a time.
         if let crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::PageUp,
@@ -8158,7 +8212,7 @@ impl ChatWidget<'_> {
                     if trimmed.is_empty() {
                         self.bottom_pane.set_task_running(true);
                         self.bottom_pane
-                            .update_status_text("Auto Drive Goal".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.status.auto_drive_goal").to_string());
                         self.clear_composer();
                         self.request_redraw();
                         return;
@@ -8180,12 +8234,12 @@ impl ChatWidget<'_> {
                 self.app_event_tx.send(AppEvent::RequestRedraw);
             }
             InputResult::ScrollUp => {
-                let before = self.layout.scroll_offset.get();
+                let before = self.layout.scroll_offset;
                 // Only allow Up to navigate command history when the top view
                 // cannot be scrolled at all (no scrollback available).
                 if self.layout.last_max_scroll.get() == 0 {
                     if self.bottom_pane.try_history_up() {
-                        self.perf_track_scroll_delta(before, self.layout.scroll_offset.get());
+                        self.perf_track_scroll_delta(before, self.layout.scroll_offset);
                         return;
                     }
                 }
@@ -8194,14 +8248,13 @@ impl ChatWidget<'_> {
                 let new_offset = self
                     .layout
                     .scroll_offset
-                    .get()
                     .saturating_add(3)
                     .min(self.layout.last_max_scroll.get());
-                self.layout.scroll_offset.set(new_offset);
+                self.layout.scroll_offset = new_offset;
                 self.flash_scrollbar();
                 self.sync_history_virtualization();
                 // Enable compact mode so history can use the spacer line
-                if self.layout.scroll_offset.get() > 0 {
+                if self.layout.scroll_offset > 0 {
                     self.bottom_pane.set_compact_compose(true);
                     self.height_manager
                         .borrow_mut()
@@ -8214,21 +8267,21 @@ impl ChatWidget<'_> {
                     .borrow_mut()
                     .record_event(HeightEvent::UserScroll);
                 self.maybe_show_history_nav_hint_on_first_scroll();
-                self.perf_track_scroll_delta(before, self.layout.scroll_offset.get());
+                self.perf_track_scroll_delta(before, self.layout.scroll_offset);
             }
             InputResult::ScrollDown => {
-                let before = self.layout.scroll_offset.get();
+                let before = self.layout.scroll_offset;
                 // Only allow Down to navigate command history when the top view
                 // cannot be scrolled at all (no scrollback available).
                 if self.layout.last_max_scroll.get() == 0 && self.bottom_pane.history_is_browsing()
                 {
                     if self.bottom_pane.try_history_down() {
-                        self.perf_track_scroll_delta(before, self.layout.scroll_offset.get());
+                        self.perf_track_scroll_delta(before, self.layout.scroll_offset);
                         return;
                     }
                 }
                 // Scroll down in chat history (decrease offset, towards bottom)
-                if self.layout.scroll_offset.get() == 0 {
+                if self.layout.scroll_offset == 0 {
                     // Already at bottom: ensure spacer above input is enabled.
                     self.bottom_pane.set_compact_compose(false);
                     self.sync_history_virtualization();
@@ -8240,32 +8293,30 @@ impl ChatWidget<'_> {
                     self.height_manager
                         .borrow_mut()
                         .record_event(HeightEvent::ComposerModeChange);
-                    self.perf_track_scroll_delta(before, self.layout.scroll_offset.get());
-                } else if self.layout.scroll_offset.get() >= 3 {
+                    self.perf_track_scroll_delta(before, self.layout.scroll_offset);
+                } else if self.layout.scroll_offset >= 3 {
                     // Move towards bottom but do NOT toggle spacer yet; wait until
                     // the user confirms by pressing Down again at bottom.
-                    self.layout
-                        .scroll_offset
-                        .set(self.layout.scroll_offset.get().saturating_sub(3));
+                    self.layout.scroll_offset = self.layout.scroll_offset.saturating_sub(3);
                     self.sync_history_virtualization();
                     self.app_event_tx.send(AppEvent::RequestRedraw);
                     self.height_manager
                         .borrow_mut()
                         .record_event(HeightEvent::UserScroll);
                     self.maybe_show_history_nav_hint_on_first_scroll();
-                    self.perf_track_scroll_delta(before, self.layout.scroll_offset.get());
-                } else if self.layout.scroll_offset.get() > 0 {
+                    self.perf_track_scroll_delta(before, self.layout.scroll_offset);
+                } else if self.layout.scroll_offset > 0 {
                     // Land exactly at bottom without toggling spacer yet; require
                     // a subsequent Down to re-enable the spacer so the input
                     // doesn't move when scrolling into the line above it.
-                    self.layout.scroll_offset.set(0);
+                    self.layout.scroll_offset = 0;
                     self.sync_history_virtualization();
                     self.app_event_tx.send(AppEvent::RequestRedraw);
                     self.height_manager
                         .borrow_mut()
                         .record_event(HeightEvent::UserScroll);
                     self.maybe_show_history_nav_hint_on_first_scroll();
-                    self.perf_track_scroll_delta(before, self.layout.scroll_offset.get());
+                    self.perf_track_scroll_delta(before, self.layout.scroll_offset);
                 }
                 self.flash_scrollbar();
             }
@@ -8589,8 +8640,10 @@ impl ChatWidget<'_> {
                 .or_else(|| active_id.clone())
                 .unwrap_or_else(|| "Current session".to_string());
             let header = Self::account_header_lines(account_ref, snapshot_ref, summary_ref);
-            let is_api_key_account =
-                matches!(account_ref.map(|acc| acc.mode), Some(AuthMode::ApiKey));
+            let is_api_key_account = matches!(
+                account_ref.map(|acc| acc.mode),
+                Some(AuthMode::ApiKey)
+            );
             let extra = Self::usage_history_lines(summary_ref, is_api_key_account);
             let display = Self::rate_limit_display_config_for_account(account_ref);
             let view = build_limits_view(
@@ -8667,16 +8720,20 @@ impl ChatWidget<'_> {
                             Some(&record),
                             usage_summary.as_ref(),
                         );
-                        let is_api_key_account =
-                            matches!(account.map(|acc| acc.mode), Some(AuthMode::ApiKey));
+                        let is_api_key_account = matches!(
+                            account.map(|acc| acc.mode),
+                            Some(AuthMode::ApiKey)
+                        );
                         let extra = Self::usage_history_lines(
                             usage_summary.as_ref(),
                             is_api_key_account,
                         );
                         tabs.push(LimitsTab::view(title, header, view, extra));
                     } else {
-                        let is_api_key_account =
-                            matches!(account.map(|acc| acc.mode), Some(AuthMode::ApiKey));
+                        let is_api_key_account = matches!(
+                            account.map(|acc| acc.mode),
+                            Some(AuthMode::ApiKey)
+                        );
                         let mut lines = Self::usage_history_lines(
                             usage_summary.as_ref(),
                             is_api_key_account,
@@ -8693,8 +8750,10 @@ impl ChatWidget<'_> {
                     }
                 }
                 None => {
-                    let is_api_key_account =
-                        matches!(account.map(|acc| acc.mode), Some(AuthMode::ApiKey));
+                    let is_api_key_account = matches!(
+                        account.map(|acc| acc.mode),
+                        Some(AuthMode::ApiKey)
+                    );
                     let mut lines = Self::usage_history_lines(
                         usage_summary.as_ref(),
                         is_api_key_account,
@@ -10033,63 +10092,6 @@ impl ChatWidget<'_> {
         }
     }
 
-    fn merge_tool_arguments(existing: &mut Vec<ToolArgument>, updates: Vec<ToolArgument>) {
-        for update in updates {
-            if let Some(existing_arg) = existing.iter_mut().find(|arg| arg.name == update.name) {
-                *existing_arg = update;
-            } else {
-                existing.push(update);
-            }
-        }
-    }
-
-    fn apply_custom_tool_update(
-        &mut self,
-        call_id: &str,
-        parameters: Option<serde_json::Value>,
-    ) {
-        let Some(params) = parameters else {
-            return;
-        };
-        let updates = history_cell::arguments_from_json(&params);
-        if updates.is_empty() {
-            return;
-        }
-
-        let running_entry = self
-            .tools_state
-            .running_custom_tools
-            .get(&ToolCallId(call_id.to_string()))
-            .copied();
-        let resolved_idx = running_entry
-            .as_ref()
-            .and_then(|entry| running_tools::resolve_entry_index(self, entry, call_id))
-            .or_else(|| running_tools::find_by_call_id(self, call_id));
-
-        let Some(idx) = resolved_idx else {
-            return;
-        };
-        if idx >= self.history_cells.len() {
-            return;
-        }
-        let Some(running_cell) = self.history_cells[idx]
-            .as_any()
-            .downcast_ref::<history_cell::RunningToolCallCell>()
-        else {
-            return;
-        };
-
-        let mut state = running_cell.state().clone();
-        Self::merge_tool_arguments(&mut state.arguments, updates);
-        let mut updated_cell = history_cell::RunningToolCallCell::from_state(state.clone());
-        updated_cell.state_mut().call_id = Some(call_id.to_string());
-        self.history_replace_with_record(
-            idx,
-            Box::new(updated_cell),
-            HistoryDomainRecord::from(state),
-        );
-    }
-
     fn hydrate_cell_from_record(
         &self,
         cell: &mut Box<dyn HistoryCell>,
@@ -10625,7 +10627,13 @@ impl ChatWidget<'_> {
     /// Push a cell using a synthetic key at the TOP of the NEXT request.
     fn history_push_top_next_req(&mut self, cell: impl HistoryCell + 'static) {
         let key = self.next_req_key_top();
-        let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "prelude", None);
+        let cell: Box<dyn HistoryCell> = Box::new(cell);
+        let tag = if cell.kind() == HistoryCellType::BackgroundEvent {
+            "background"
+        } else {
+            "prelude"
+        };
+        let _ = self.history_insert_with_key_global_tagged(cell, key, tag, None);
     }
     fn history_replace_with_record(
         &mut self,
@@ -11026,6 +11034,15 @@ impl ChatWidget<'_> {
             pending.call_id
         );
 
+        let display_text = raw.trim();
+        if !display_text.is_empty() {
+            let key = Self::order_key_successor(pending.anchor_key);
+            let state = history_cell::new_user_prompt(display_text.to_string());
+            let _ =
+                self.history_insert_plain_state_with_key(state, key, "request_user_input_answer");
+            self.restore_reasoning_in_progress_if_streaming();
+        }
+
         let response = serde_json::from_str::<RequestUserInputResponse>(&raw).unwrap_or_else(|_| {
             let question_count = pending.questions.len();
             let mut lines: Vec<String> = raw
@@ -11057,16 +11074,6 @@ impl ChatWidget<'_> {
             RequestUserInputResponse { answers }
         });
 
-        let display_text =
-            Self::format_request_user_input_display(&pending.questions, &response);
-        if !display_text.trim().is_empty() {
-            let key = Self::order_key_successor(pending.anchor_key);
-            let state = history_cell::new_user_prompt(display_text);
-            let _ =
-                self.history_insert_plain_state_with_key(state, key, "request_user_input_answer");
-            self.restore_reasoning_in_progress_if_streaming();
-        }
-
         if let Err(e) = self.code_op_tx.send(Op::UserInputAnswer {
             id: pending.turn_id,
             response,
@@ -11076,42 +11083,8 @@ impl ChatWidget<'_> {
 
         self.clear_composer();
         self.bottom_pane
-            .update_status_text("waiting for model".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_model").to_string());
         self.request_redraw();
-    }
-
-    fn format_request_user_input_display(
-        questions: &[code_protocol::request_user_input::RequestUserInputQuestion],
-        response: &code_protocol::request_user_input::RequestUserInputResponse,
-    ) -> String {
-        let mut lines = Vec::new();
-        for question in questions {
-            let answer: &[String] = response
-                .answers
-                .get(&question.id)
-                .map(|a| a.answers.as_slice())
-                .unwrap_or(&[]);
-            let value = answer.first().map(String::as_str).unwrap_or("");
-            let value = if value.trim().is_empty() {
-                "(skipped)"
-            } else if question.is_secret {
-                "[hidden]"
-            } else {
-                value
-            };
-
-            if questions.len() == 1 {
-                lines.push(value.to_string());
-            } else {
-                let header = question.header.trim();
-                if header.is_empty() {
-                    lines.push(value.to_string());
-                } else {
-                    lines.push(format!("{header}: {value}"));
-                }
-            }
-        }
-        lines.join("\n")
     }
 
     pub(crate) fn on_request_user_input_answer(
@@ -11135,8 +11108,30 @@ impl ChatWidget<'_> {
 
         self.bottom_pane.close_request_user_input_view();
 
-        let display_text =
-            Self::format_request_user_input_display(&pending.questions, &response);
+        let display_text = {
+            let mut lines = Vec::new();
+            for question in &pending.questions {
+                let answer: &[String] = response
+                    .answers
+                    .get(&question.id)
+                    .map(|a| a.answers.as_slice())
+                    .unwrap_or(&[]);
+                let value = answer.first().map(String::as_str).unwrap_or("");
+                let value = if value.trim().is_empty() { "(skipped)" } else { value };
+
+                if pending.questions.len() == 1 {
+                    lines.push(value.to_string());
+                } else {
+                    let header = question.header.trim();
+                    if header.is_empty() {
+                        lines.push(value.to_string());
+                    } else {
+                        lines.push(format!("{header}: {value}"));
+                    }
+                }
+            }
+            lines.join("\n")
+        };
 
         if !display_text.trim().is_empty() {
             let key = Self::order_key_successor(pending.anchor_key);
@@ -11155,12 +11150,27 @@ impl ChatWidget<'_> {
 
         self.clear_composer();
         self.bottom_pane
-            .update_status_text("waiting for model".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_model").to_string());
         self.request_redraw();
     }
 
     fn submit_user_message(&mut self, user_message: UserMessage) {
-        if self.layout.scroll_offset.get() > 0 {
+        // If the user submits new input while a turn is actively running
+        // (streaming/tool/exec/agent), prioritize responsiveness by interrupting the
+        // current run immediately.
+        //
+        // The submit path supports mid-turn queueing via Op::QueueUserInput, but for
+        // interactive use the expected semantics are: "stop what you're doing and
+        // respond to this".
+        //
+        // Exception: treat long-running wait/kill tools as background work.
+        let wait_only_active = self.wait_only_activity();
+        let should_preempt = !wait_only_active && self.is_task_running();
+        if should_preempt {
+            self.interrupt_running_task();
+        }
+
+        if self.layout.scroll_offset > 0 {
             layout_scroll::to_bottom(self);
         }
         // Surface a local diagnostic note and anchor it to the NEXT turn,
@@ -11671,7 +11681,8 @@ impl ChatWidget<'_> {
         }
 
         let wait_only_active = self.wait_only_activity();
-        let turn_active = (self.is_task_running()
+        let turn_active = !should_preempt
+            && (self.is_task_running()
             || !self.active_task_ids.is_empty()
             || self.stream.is_write_cycle_active()
             || !self.queued_user_messages.is_empty())
@@ -11708,7 +11719,7 @@ impl ChatWidget<'_> {
             // Keep long waits running but do not block user input.
             self.bottom_pane.set_task_running(false);
             self.bottom_pane
-                .update_status_text("Waiting in background".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.waiting_in_background").to_string());
         }
 
         tracing::info!(
@@ -12005,16 +12016,18 @@ impl ChatWidget<'_> {
                         return;
                     }
                     _ = &mut notice_sleep, if !notice_sent => {
-                        notice_sent = true;
-                        let elapsed = started_at.elapsed();
-                        let message = format!(
-                            "Git snapshot still running… {} elapsed.",
-                            format_duration(elapsed)
+                         notice_sent = true;
+                         let elapsed = started_at.elapsed();
+                        let ui_language = code_i18n::current_language();
+                        let message = code_i18n::tr_args(
+                            ui_language,
+                            "tui.git_snapshot.still_running",
+                            &[("elapsed", &format_duration(elapsed))],
                         );
                         app_event_tx.send_background_event_with_ticket(&notice_ticket, message);
-                    }
-                }
-            };
+                     }
+                 }
+             };
 
             let elapsed = started_at.elapsed();
             let event = match join_result {
@@ -12070,20 +12083,24 @@ impl ChatWidget<'_> {
                 if self.ghost_snapshots.len() > MAX_TRACKED_GHOST_COMMITS {
                     self.ghost_snapshots.remove(0);
                 }
-                if elapsed >= GHOST_SNAPSHOT_NOTICE_THRESHOLD {
-                    self.push_background_tail(format!(
-                        "Git snapshot captured in {}.",
-                        format_duration(elapsed)
+                 if elapsed >= GHOST_SNAPSHOT_NOTICE_THRESHOLD {
+                    let ui_language = code_i18n::current_language();
+                    self.push_background_tail(code_i18n::tr_args(
+                        ui_language,
+                        "tui.git_snapshot.captured_in",
+                        &[("elapsed", &format_duration(elapsed))],
                     ));
-                }
-                Some(snapshot)
-            }
-            Err(err) => {
-                if let GitToolingError::Io(io_err) = &err {
-                    if io_err.kind() == io::ErrorKind::TimedOut {
-                        self.push_background_tail(format!(
-                            "Git snapshot timed out after {}. Try again once the repository is less busy.",
-                            format_duration(elapsed)
+                 }
+                 Some(snapshot)
+             }
+             Err(err) => {
+                 if let GitToolingError::Io(io_err) = &err {
+                     if io_err.kind() == io::ErrorKind::TimedOut {
+                        let ui_language = code_i18n::current_language();
+                        self.push_background_tail(code_i18n::tr_args(
+                            ui_language,
+                            "tui.git_snapshot.timed_out",
+                            &[("elapsed", &format_duration(elapsed))],
                         ));
                         tracing::warn!(
                             elapsed = %format_duration(elapsed),
@@ -12093,16 +12110,19 @@ impl ChatWidget<'_> {
                     }
                 }
                 self.ghost_snapshots_disabled = true;
+                let ui_language = code_i18n::current_language();
                 let (message, hint) = match &err {
                     GitToolingError::NotAGitRepository { .. } => (
-                        "Snapshots disabled: this workspace is not inside a Git repository.".to_string(),
+                        code_i18n::tr_plain("tui.git_snapshot.disabled_not_git").to_string(),
                         None,
                     ),
                     _ => (
-                        format!("Snapshots disabled after Git error: {err}"),
-                        Some(
-                            "Restart Code after resolving the issue to re-enable snapshots.".to_string(),
+                        code_i18n::tr_args(
+                            ui_language,
+                            "tui.git_snapshot.disabled_after_error",
+                            &[("error", &err.to_string())],
                         ),
+                        Some(code_i18n::tr_plain("tui.git_snapshot.restart_hint").to_string()),
                     ),
                 };
                 self.ghost_snapshots_disabled_reason = Some(GhostSnapshotsDisabledReason {
@@ -12259,21 +12279,27 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn handle_undo_command(&mut self) {
+        let ui_language = code_i18n::current_language();
         if self.ghost_snapshots_disabled {
             let reason = self
                 .ghost_snapshots_disabled_reason
                 .as_ref()
                 .map(|reason| reason.message.clone())
-                .unwrap_or_else(|| "Snapshots are currently disabled.".to_string());
-            self.push_background_tail(format!("/undo unavailable: {reason}"));
+                .unwrap_or_else(|| {
+                    code_i18n::tr_plain("tui.undo.disabled.default_reason").to_string()
+                });
+            let message = code_i18n::tr_args(
+                ui_language,
+                "tui.undo.unavailable.with_reason",
+                &[("reason", &reason)],
+            );
+            self.push_background_tail(message);
             self.show_undo_snapshots_disabled();
             return;
         }
 
         if self.ghost_snapshots.is_empty() {
-            self.push_background_tail(
-                "/undo unavailable: no snapshots captured yet. Run a file-modifying command to create one.".to_string(),
-            );
+            self.push_background_tail(code_i18n::tr_plain("tui.undo.unavailable.no_snapshots").to_string());
             self.show_undo_empty_state();
             return;
         }
@@ -12290,30 +12316,30 @@ impl ChatWidget<'_> {
             }
         } else {
             lines.push(
-                "Snapshots are currently disabled. Resolve the Git issue and restart Code to re-enable them.".to_string(),
+                code_i18n::tr_plain("tui.undo.disabled.fallback_details").to_string(),
             );
         }
 
         self.show_undo_status_popup(
-            "Snapshots unavailable",
+            code_i18n::tr_plain("tui.undo.disabled.title"),
             Some(
-                "Restores workspace files only. Conversation history remains unchanged.".to_string(),
+                code_i18n::tr_plain("tui.undo.scope_hint").to_string(),
             ),
-            Some("Automatic snapshotting failed, so /undo cannot restore the workspace.".to_string()),
+            Some(code_i18n::tr_plain("tui.undo.disabled.subtitle").to_string()),
             lines,
         );
     }
 
     fn show_undo_empty_state(&mut self) {
         self.show_undo_status_popup(
-            "No snapshots yet",
+            code_i18n::tr_plain("tui.undo.empty.title"),
             Some(
-                "Restores workspace files only. Conversation history remains unchanged.".to_string(),
+                code_i18n::tr_plain("tui.undo.scope_hint").to_string(),
             ),
-            Some("Snapshots appear once Code captures a Git checkpoint.".to_string()),
+            Some(code_i18n::tr_plain("tui.undo.empty.subtitle").to_string()),
             vec![
-                "No snapshot is available to restore.".to_string(),
-                "Run a command that modifies files to create the first snapshot.".to_string(),
+                code_i18n::tr_plain("tui.undo.empty.line1").to_string(),
+                code_i18n::tr_plain("tui.undo.empty.line2").to_string(),
             ],
         );
     }
@@ -12326,7 +12352,7 @@ impl ChatWidget<'_> {
         mut lines: Vec<String>,
     ) {
         if lines.is_empty() {
-            lines.push("No snapshot information available.".to_string());
+            lines.push(code_i18n::tr_plain("tui.undo.common.no_snapshot_info").to_string());
         }
 
         let headline = lines.remove(0);
@@ -12359,7 +12385,7 @@ impl ChatWidget<'_> {
         let view = ListSelectionView::new(
             format!(" {title} "),
             subtitle_for_view,
-            Some("Esc close".to_string()),
+            Some(code_i18n::tr_plain("tui.common.esc_close").to_string()),
             items,
             self.app_event_tx.clone(),
             1,
@@ -12368,7 +12394,7 @@ impl ChatWidget<'_> {
         self.bottom_pane.show_list_selection(
             title.to_string(),
             None,
-            Some("Esc close".to_string()),
+            Some(code_i18n::tr_plain("tui.common.esc_close").to_string()),
             view,
         );
     }
@@ -12376,9 +12402,7 @@ impl ChatWidget<'_> {
     fn show_undo_snapshot_picker(&mut self) {
         let entries = self.build_undo_timeline_entries();
         if entries.len() <= 1 {
-            self.push_background_tail(
-                "/undo unavailable: no snapshots captured yet. Run a file-modifying command to create one.".to_string(),
-            );
+            self.push_background_tail(code_i18n::tr_plain("tui.undo.unavailable.no_snapshots").to_string());
             self.show_undo_empty_state();
             return;
         }
@@ -12398,29 +12422,50 @@ impl ChatWidget<'_> {
     }
 
     fn timeline_entry_for_snapshot(&self, snapshot: &GhostSnapshot) -> UndoTimelineEntry {
+        let ui_language = code_i18n::current_language();
         let short_id = snapshot.short_id();
-        let label = format!("Snapshot {short_id}");
+        let label = code_i18n::tr_args(
+            ui_language,
+            "tui.undo.timeline.snapshot_label",
+            &[("id", &short_id)],
+        );
         let summary = snapshot.summary.clone();
         let timestamp_line = Some(snapshot.captured_at.format("%Y-%m-%d %H:%M:%S").to_string());
         let relative_time = snapshot
             .age_from(Local::now())
-            .map(|age| format!("captured {} ago", format_duration(age)));
+            .map(|age| {
+                let elapsed = format_duration(age);
+                code_i18n::tr_args(
+                    ui_language,
+                    "tui.undo.timeline.captured_ago",
+                    &[("elapsed", &elapsed)],
+                )
+            });
         let (user_delta, assistant_delta) = self.conversation_delta_since(&snapshot.conversation);
         let stats_line = if user_delta == 0 && assistant_delta == 0 {
-            Some("conversation already matches current state".to_string())
+            Some(code_i18n::tr_plain("tui.undo.timeline.stats.same_conversation").to_string())
         } else if assistant_delta == 0 {
-            Some(format!(
-                "rewind {} user turn{}",
-                user_delta,
-                if user_delta == 1 { "" } else { "s" }
+            let user_word = if user_delta == 1 { "turn" } else { "turns" };
+            Some(code_i18n::tr_args(
+                ui_language,
+                "tui.undo.timeline.stats.rewind_user",
+                &[
+                    ("user_delta", &user_delta.to_string()),
+                    ("user_word", user_word),
+                ],
             ))
         } else {
-            Some(format!(
-                "rewind {} user turn{} and {} assistant repl{}",
-                user_delta,
-                if user_delta == 1 { "" } else { "s" },
-                assistant_delta,
-                if assistant_delta == 1 { "y" } else { "ies" }
+            let user_word = if user_delta == 1 { "turn" } else { "turns" };
+            let assistant_word = if assistant_delta == 1 { "reply" } else { "replies" };
+            Some(code_i18n::tr_args(
+                ui_language,
+                "tui.undo.timeline.stats.rewind_both",
+                &[
+                    ("user_delta", &user_delta.to_string()),
+                    ("user_word", user_word),
+                    ("assistant_delta", &assistant_delta.to_string()),
+                    ("assistant_word", assistant_word),
+                ],
             ))
         };
 
@@ -12433,7 +12478,11 @@ impl ChatWidget<'_> {
             timestamp_line,
             relative_time,
             stats_line,
-            commit_line: Some(format!("commit {short_id}")),
+            commit_line: Some(code_i18n::tr_args(
+                ui_language,
+                "tui.undo.timeline.commit_line",
+                &[("id", &short_id)],
+            )),
             conversation_lines,
             file_lines,
             conversation_available: user_delta > 0,
@@ -12449,11 +12498,11 @@ impl ChatWidget<'_> {
         let conversation_lines = Self::conversation_preview_lines_from_snapshot(&history_snapshot);
         let file_lines = self.timeline_file_lines_for_current();
         UndoTimelineEntry {
-            label: "Current workspace".to_string(),
+            label: code_i18n::tr_plain("tui.undo.timeline.current_workspace").to_string(),
             summary: None,
             timestamp_line: Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()),
-            relative_time: Some("current point".to_string()),
-            stats_line: Some("Already at this point in time".to_string()),
+            relative_time: Some(code_i18n::tr_plain("tui.undo.timeline.current_point").to_string()),
+            stats_line: Some(code_i18n::tr_plain("tui.undo.timeline.current_already_here").to_string()),
             commit_line: None,
             conversation_lines,
             file_lines,
@@ -12496,7 +12545,7 @@ impl ChatWidget<'_> {
 
         if messages.is_empty() {
             return vec![Line::from(Span::styled(
-                "No conversation captured in this snapshot.",
+                code_i18n::tr_plain("tui.undo.preview.no_conversation"),
                 Style::default().fg(crate::colors::text_dim()),
             ))];
         }
@@ -12511,7 +12560,10 @@ impl ChatWidget<'_> {
 
     fn conversation_line(role: UndoPreviewRole, text: &str) -> Line<'static> {
         let (label, color) = match role {
-            UndoPreviewRole::User => ("You", crate::colors::text_bright()),
+            UndoPreviewRole::User => (
+                code_i18n::tr_plain("tui.undo.preview.role_you"),
+                crate::colors::text_bright(),
+            ),
             UndoPreviewRole::Assistant => ("Code", crate::colors::primary()),
         };
         let label_span = Span::styled(
@@ -12593,7 +12645,7 @@ impl ChatWidget<'_> {
             Ok(entries) => {
                 if entries.is_empty() {
                     vec![Line::from(Span::styled(
-                        "Working tree clean",
+                        code_i18n::tr_plain("tui.undo.files.working_tree_clean"),
                         Style::default().fg(crate::colors::text_dim()),
                     ))]
                 } else {
@@ -13162,6 +13214,7 @@ impl ChatWidget<'_> {
 
     pub(crate) fn handle_mouse_event(&mut self, mouse_event: crossterm::event::MouseEvent) {
         use crossterm::event::KeyModifiers;
+        use crossterm::event::MouseButton;
         use crossterm::event::MouseEventKind;
 
         // Check if Shift is held - if so, let the terminal handle selection
@@ -13174,9 +13227,56 @@ impl ChatWidget<'_> {
         match mouse_event.kind {
             MouseEventKind::ScrollUp => layout_scroll::mouse_scroll(self, true),
             MouseEventKind::ScrollDown => layout_scroll::mouse_scroll(self, false),
+            MouseEventKind::Down(MouseButton::Left) => {
+                let x = mouse_event.column;
+                let y = mouse_event.row;
+                let target = {
+                    let targets = self.open_click_targets.borrow();
+                    targets
+                        .iter()
+                        .find(|t| {
+                            x >= t.rect.x
+                                && x < t.rect.x.saturating_add(t.rect.width)
+                                && y >= t.rect.y
+                                && y < t.rect.y.saturating_add(t.rect.height)
+                        })
+                        .map(|t| t.target.clone())
+                };
+                if let Some(target) = target {
+                    self.open_external_target(&target);
+                }
+            }
             _ => {
                 // Ignore other mouse events for now
             }
+        }
+    }
+
+    fn open_external_target(&mut self, target: &str) {
+        use std::process::Command;
+
+        let result = (|| {
+            #[cfg(target_os = "windows")]
+            {
+                let mut cmd = Command::new("cmd");
+                cmd.args(["/C", "start", "", target]);
+                cmd.spawn().map(|_| ())
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                Command::new("open").arg(target).spawn().map(|_| ())
+            }
+
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                Command::new("xdg-open").arg(target).spawn().map(|_| ())
+            }
+        })();
+
+        if let Err(err) = result {
+            self.bottom_pane
+                .flash_footer_notice(format!("打开失败：{err}"));
         }
     }
 
@@ -13254,11 +13354,6 @@ impl ChatWidget<'_> {
                 // Ask core for custom prompts so the slash menu can show them.
                 self.submit_op(Op::ListCustomPrompts);
                 self.submit_op(Op::ListSkills);
-                self.mcp_tools_by_server.clear();
-                self.mcp_server_failures.clear();
-                if !self.config.mcp_servers.is_empty() {
-                    self.submit_op(Op::ListMcpTools);
-                }
 
                 if self.resume_placeholder_visible && event.history_entry_count == 0 {
                     self.replace_resume_placeholder_with_notice(RESUME_NO_HISTORY_NOTICE);
@@ -13444,7 +13539,7 @@ impl ChatWidget<'_> {
                 self.ensure_spinner_for_activity("assistant-delta");
                 // Show responding state while assistant streams
                 self.bottom_pane
-                    .update_status_text("responding".to_string());
+                    .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
             }
             EventMsg::AgentReasoning(AgentReasoningEvent { text }) => {
                 // Ignore late reasoning if we've dropped streaming due to interrupt.
@@ -13548,7 +13643,8 @@ impl ChatWidget<'_> {
                 );
                 self.ensure_spinner_for_activity("reasoning-delta");
                 // Show thinking state while reasoning streams
-                self.bottom_pane.update_status_text("thinking".to_string());
+                self.bottom_pane
+                    .update_status_text(code_i18n::tr_plain("tui.status.thinking").to_string());
             }
             EventMsg::AgentReasoningSectionBreak(AgentReasoningSectionBreakEvent {}) => {
                 // Insert section break in reasoning stream
@@ -13613,7 +13709,7 @@ impl ChatWidget<'_> {
                 self.reasoning_index.clear();
                 self.bottom_pane.set_task_running(true);
                 self.bottom_pane
-                    .update_status_text("waiting for model".to_string());
+                    .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_model").to_string());
                 self.ensure_spinner_for_activity("task-started");
                 tracing::info!("[order] EventMsg::TaskStarted id={}", id);
 
@@ -13792,12 +13888,6 @@ impl ChatWidget<'_> {
                 if let Some(info) = &event.info {
                     self.total_token_usage = info.total_token_usage.clone();
                     self.last_token_usage = info.last_token_usage.clone();
-                    if let Some(requested_model) = &info.requested_model {
-                        self.session_requested_model = Some(requested_model.clone());
-                    }
-                    if let Some(response_model) = &info.latest_response_model {
-                        self.session_latest_response_model = Some(response_model.clone());
-                    }
                 }
                 if let Some(snapshot) = event.rate_limits {
                     self.update_rate_limit_resets(&snapshot);
@@ -13863,12 +13953,12 @@ impl ChatWidget<'_> {
                 );
                 self.update_stream_token_usage_metadata();
             }
-            EventMsg::Warning(WarningEvent { message }) => {
-                self.history_push_plain_state(history_cell::new_warning_event(message));
-                self.request_redraw();
-            }
             EventMsg::Error(ErrorEvent { message }) => {
                 self.on_error(message);
+            }
+            EventMsg::Warning(code_core::protocol::WarningEvent { message }) => {
+                self.history_push_plain_state(history_cell::new_warning_event(message));
+                self.request_redraw();
             }
             EventMsg::PlanUpdate(update) => {
                 let (plan_title, plan_active) = {
@@ -14047,8 +14137,9 @@ impl ChatWidget<'_> {
                         tracing::error!("failed to send Op::UserInputAnswer: {e}");
                     }
 
-                    self.bottom_pane
-                        .update_status_text("waiting for model".to_string());
+                    self.bottom_pane.update_status_text(
+                        code_i18n::tr_plain("tui.status.waiting_for_model").to_string(),
+                    );
                     self.bottom_pane.set_task_running(true);
                 } else {
                     self.pending_request_user_input = Some(PendingRequestUserInput {
@@ -14057,8 +14148,9 @@ impl ChatWidget<'_> {
                         anchor_key: key,
                         questions: ev.questions.clone(),
                     });
-                    self.bottom_pane
-                        .update_status_text("waiting for user input".to_string());
+                    self.bottom_pane.update_status_text(
+                        code_i18n::tr_plain("tui.status.waiting_for_user_input").to_string(),
+                    );
                     self.bottom_pane.set_task_running(true);
                     self.bottom_pane.ensure_input_focus();
                     self.bottom_pane
@@ -14070,43 +14162,27 @@ impl ChatWidget<'_> {
                 }
                 self.request_redraw();
             }
-            EventMsg::DynamicToolCallRequest(ev) => {
-                let key = self.near_time_key_current_req(event.order.as_ref());
-                let tool = &ev.tool;
-                let call_id = &ev.call_id;
-                let lines = vec![
-                    format!("Dynamic tool call requested: {tool}"),
-                    format!("call_id: {call_id}"),
-                    "Dynamic tools are not supported in this UI; returning a failure response."
-                        .to_string(),
-                ];
-                let role = history_cell::plain_role_for_kind(PlainMessageKind::Notice);
-                let state = history_cell::plain_message_state_from_paragraphs(
-                    PlainMessageKind::Notice,
-                    role,
-                    lines,
+            EventMsg::DynamicToolCallRequest(req) => {
+                let tool = req.tool.clone();
+                let args = req.arguments.to_string();
+                let ui_language = code_i18n::current_language();
+                let message = code_i18n::tr_args(
+                    ui_language,
+                    "tui.tool.dynamic.unsupported",
+                    &[("tool", tool.as_str()), ("args", args.as_str())],
                 );
-                let _ = self.history_insert_plain_state_with_key(state, key, "dynamic_tool_call");
-                self.restore_reasoning_in_progress_if_streaming();
-
-                let response = DynamicToolResponse {
-                    content_items: vec![
-                        code_protocol::dynamic_tools::DynamicToolCallOutputContentItem::InputText {
-                            text: "dynamic tools are not supported in this UI".to_string(),
-                        },
-                    ],
-                    success: false,
-                };
-                if let Err(e) = self.code_op_tx.send(Op::DynamicToolResponse {
-                    id: ev.call_id.clone(),
-                    response,
-                }) {
-                    tracing::error!("failed to send Op::DynamicToolResponse: {e}");
-                }
-
-                self.bottom_pane
-                    .update_status_text("waiting for model".to_string());
-                self.bottom_pane.set_task_running(true);
+                self.history_push_plain_state(history_cell::new_warning_event(message.clone()));
+                self.submit_op(Op::DynamicToolResponse {
+                    id: req.call_id,
+                    response: code_protocol::dynamic_tools::DynamicToolResponse {
+                        content_items: vec![
+                            code_protocol::dynamic_tools::DynamicToolCallOutputContentItem::InputText {
+                                text: message,
+                            },
+                        ],
+                        success: false,
+                    },
+                });
                 self.request_redraw();
             }
             EventMsg::ApplyPatchApprovalRequest(ev) => {
@@ -14361,7 +14437,7 @@ impl ChatWidget<'_> {
                         params_json.clone(),
                     ) {
                         self.bottom_pane
-                            .update_status_text("agents coordinating".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.status.agents_coordinating").to_string());
                         return;
                     }
                 }
@@ -14374,7 +14450,7 @@ impl ChatWidget<'_> {
                         params_json.clone(),
                     ) {
                         self.bottom_pane
-                            .update_status_text("using browser".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
                         return;
                     }
                 }
@@ -14414,7 +14490,7 @@ impl ChatWidget<'_> {
                                 let _ = self.update_exec_wait_state_with_pairs(history_id, total, true, &notes);
                             }
                             self.bottom_pane
-                                .update_status_text("waiting for command".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_command").to_string());
                             self.invalidate_height_cache();
                             self.request_redraw();
                             return;
@@ -14430,7 +14506,7 @@ impl ChatWidget<'_> {
                                 .running_kill_tools
                                 .insert(ToolCallId(call_id.clone()), exec_call_id);
                             self.bottom_pane
-                                .update_status_text("cancelling command".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.status.cancelling_command").to_string());
                             self.invalidate_height_cache();
                             self.request_redraw();
                             return;
@@ -14483,21 +14559,54 @@ impl ChatWidget<'_> {
                 // Update border status based on tool
                 if tool_name.starts_with("browser_") {
                     self.bottom_pane
-                        .update_status_text("using browser".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
                 } else if agent_runs::is_agent_tool(&tool_name) {
                     self.bottom_pane
-                        .update_status_text("agents coordinating".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.status.agents_coordinating").to_string());
                 } else {
                     self.bottom_pane
-                        .update_status_text(format!("using tool: {}", tool_name));
+                        .update_status_text(code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.tool.status.using_tool",
+                            &[("tool_name", tool_name.as_str())],
+                        ));
                 }
             }
-            EventMsg::CustomToolCallUpdate(CustomToolCallUpdateEvent {
+            EventMsg::CustomToolCallUpdate(code_core::protocol::CustomToolCallUpdateEvent {
                 call_id,
-                tool_name: _,
+                tool_name,
                 parameters,
             }) => {
-                self.apply_custom_tool_update(&call_id, parameters);
+                // Update the active running-tool cell's arguments when new params arrive.
+                let tool_key = ToolCallId(call_id.clone());
+                let Some(entry) = self.tools_state.running_custom_tools.get(&tool_key).copied()
+                else {
+                    return;
+                };
+                let Some(idx) = running_tools::resolve_entry_index(self, &entry, &call_id) else {
+                    return;
+                };
+                let Some(cell) = self.history_cells.get_mut(idx) else {
+                    return;
+                };
+                let Some(running_tool) = cell
+                    .as_any_mut()
+                    .downcast_mut::<history_cell::RunningToolCallCell>()
+                else {
+                    return;
+                };
+
+                let args = parameters.as_ref().map(|p| p.to_string());
+                let updated = history_cell::new_running_custom_tool_call(tool_name, args);
+                let updated_state = updated.state().clone();
+                let state = running_tool.state_mut();
+                state.title = updated_state.title;
+                state.arguments = updated_state.arguments;
+                state.wait_cap_ms = updated_state.wait_cap_ms;
+                state.wait_has_target = updated_state.wait_has_target;
+                state.wait_has_call_id = updated_state.wait_has_call_id;
+                self.invalidate_height_cache();
+                self.request_redraw();
             }
             EventMsg::CustomToolCallEnd(CustomToolCallEndEvent {
                 call_id,
@@ -14518,7 +14627,7 @@ impl ChatWidget<'_> {
                         &result,
                     ) {
                         self.bottom_pane
-                            .update_status_text("responding".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                         return;
                     }
                 }
@@ -14534,10 +14643,10 @@ impl ChatWidget<'_> {
                     ) {
                         if tool_name == "browser_close" {
                             self.bottom_pane
-                                .update_status_text("responding".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                         } else {
                             self.bottom_pane
-                                .update_status_text("using browser".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
                         }
                         return;
                     }
@@ -14588,7 +14697,7 @@ impl ChatWidget<'_> {
                         let wait_missing_job = wait_result_missing_background_job(trimmed);
                         let wait_interrupted = wait_result_interrupted(trimmed);
                         let mut wait_still_pending =
-                            !success && trimmed != "Cancelled by user." && !wait_missing_job;
+                            !success && !is_cancelled_by_user_message(trimmed) && !wait_missing_job;
                         let mut exec_running = false;
                         let mut exec_completed = false;
                         let mut note_lines: Vec<(String, bool)> = Vec::new();
@@ -14608,7 +14717,7 @@ impl ChatWidget<'_> {
                                 if note_text.is_empty() {
                                     continue;
                                 }
-                                let is_error_note = note_text == "Cancelled by user.";
+                                let is_error_note = is_cancelled_by_user_message(note_text);
                                 note_lines.push((note_text.to_string(), is_error_note));
                             }
                         }
@@ -14696,7 +14805,7 @@ impl ChatWidget<'_> {
 
                         if exec_completed {
                             self.bottom_pane
-                                .update_status_text("responding".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                             self.maybe_hide_spinner();
                             self.invalidate_height_cache();
                             self.request_redraw();
@@ -14706,11 +14815,11 @@ impl ChatWidget<'_> {
                         if success {
                             self.remove_background_completion_message(&call_id);
                             self.bottom_pane
-                                .update_status_text("responding".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                             self.maybe_hide_spinner();
-                        } else if trimmed == "Cancelled by user." {
+                        } else if is_cancelled_by_user_message(trimmed) {
                             self.bottom_pane
-                                .update_status_text("wait cancelled".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.wait.cancelled").to_string());
                         } else if wait_missing_job || (wait_interrupted && !exec_running) {
                             let finalized = exec_tools::finalize_wait_missing_exec(
                                 self,
@@ -14719,16 +14828,16 @@ impl ChatWidget<'_> {
                             );
                             if finalized {
                                 self.bottom_pane.update_status_text(
-                                    "command finished (output unavailable)".to_string(),
+                                    code_i18n::tr_plain("tui.status.command_finished_output_unavailable").to_string(),
                                 );
                             } else {
                                 self.bottom_pane.update_status_text(
-                                    "command status unavailable".to_string(),
+                                    code_i18n::tr_plain("tui.status.command_status_unavailable").to_string(),
                                 );
                             }
                         } else {
                             self.bottom_pane
-                                .update_status_text("waiting for command".to_string());
+                                .update_status_text(code_i18n::tr_plain("tui.status.waiting_for_command").to_string());
                         }
                         self.invalidate_height_cache();
                         self.request_redraw();
@@ -14757,7 +14866,7 @@ impl ChatWidget<'_> {
                         }
                     }
                     self.bottom_pane
-                        .update_status_text("responding".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                     self.maybe_hide_spinner();
                     return;
                 }
@@ -14782,11 +14891,11 @@ impl ChatWidget<'_> {
                     }
                     self.remove_background_completion_message(&call_id);
                     self.bottom_pane
-                        .update_status_text("responding".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                     self.maybe_hide_spinner();
                     return;
                 }
-                if tool_name == "wait" && !success && content.trim() == "Cancelled by user." {
+                if tool_name == "wait" && !success && is_cancelled_by_user_message(&content) {
                     let mut emphasis = TextEmphasis::default();
                     emphasis.bold = true;
                     let wait_state = PlainMessageState {
@@ -14797,7 +14906,7 @@ impl ChatWidget<'_> {
                         lines: vec![MessageLine {
                             kind: MessageLineKind::Paragraph,
                             spans: vec![InlineSpan {
-                                text: "Wait cancelled".into(),
+                                text: code_i18n::tr_plain("tui.wait.cancelled").into(),
                                 tone: TextTone::Error,
                                 emphasis,
                                 entity: None,
@@ -14817,7 +14926,7 @@ impl ChatWidget<'_> {
                     }
 
                     self.bottom_pane
-                        .update_status_text("responding".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                     self.maybe_hide_spinner();
                     return;
                 }
@@ -14829,14 +14938,14 @@ impl ChatWidget<'_> {
                     if success {
                         self.remove_background_completion_message(&call_id);
                         self.bottom_pane
-                            .update_status_text("responding".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                     } else {
                         let trimmed = content.trim();
                         if !trimmed.is_empty() {
                             self.push_background_tail(trimmed.to_string());
                         }
                         self.bottom_pane
-                            .update_status_text("kill failed".to_string());
+                            .update_status_text(code_i18n::tr_plain("tui.status.kill_failed").to_string());
                     }
                     self.maybe_hide_spinner();
                     self.invalidate_height_cache();
@@ -14861,7 +14970,7 @@ impl ChatWidget<'_> {
 
                     // After tool completes, likely transitioning to response
                     self.bottom_pane
-                        .update_status_text("responding".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                     self.maybe_hide_spinner();
                     return;
                 }
@@ -14904,7 +15013,7 @@ impl ChatWidget<'_> {
 
                 // After tool completes, likely transitioning to response
                 self.bottom_pane
-                    .update_status_text("responding".to_string());
+                    .update_status_text(code_i18n::tr_plain("tui.status.responding").to_string());
                 self.maybe_hide_spinner();
             }
             EventMsg::ViewImageToolCall(ViewImageToolCallEvent { call_id, path }) => {
@@ -14934,22 +15043,21 @@ impl ChatWidget<'_> {
                 self.bottom_pane
                     .on_history_entry_response(log_id, offset, entry.map(|e| e.text));
             }
+            EventMsg::McpListToolsResponse(_ev) => {
+                // TODO: Surface this in MCP settings; keep as a no-op for now.
+            }
             EventMsg::ListCustomPromptsResponse(ev) => {
                 let len = ev.custom_prompts.len();
                 debug!("received {len} custom prompts");
                 self.bottom_pane.set_custom_prompts(ev.custom_prompts);
             }
-            EventMsg::McpListToolsResponse(ev) => {
-                self.mcp_tools_by_server = ev.server_tools.unwrap_or_default();
-                self.mcp_server_failures = ev.server_failures.unwrap_or_default();
-                self.refresh_mcp_settings_overlay();
-            }
             EventMsg::ListSkillsResponse(ev) => {
                 let len = ev.skills.len();
                 debug!("received {len} skills");
-                let mut skills: Vec<code_core::protocol::Skill> = Vec::new();
+                let mut skills: Vec<code_protocol::skills::Skill> = Vec::new();
                 for entry in ev.skills {
                     for meta in entry.skills {
+                        let content = fs::read_to_string(&meta.path).unwrap_or_default();
                         let scope = match meta.scope {
                             code_protocol::protocol::SkillScope::User => {
                                 code_protocol::skills::SkillScope::User
@@ -14962,8 +15070,7 @@ impl ChatWidget<'_> {
                                 code_protocol::skills::SkillScope::System
                             }
                         };
-                        let content = std::fs::read_to_string(&meta.path).unwrap_or_default();
-                        skills.push(code_core::protocol::Skill {
+                        skills.push(code_protocol::skills::Skill {
                             name: meta.name,
                             description: meta.description,
                             path: meta.path,
@@ -15026,7 +15133,7 @@ impl ChatWidget<'_> {
                 // Also reflect CDP connect success in the status line.
                 if message.starts_with("✅ Connected to Chrome via CDP") {
                     self.bottom_pane
-                        .update_status_text("using browser (CDP)".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser_cdp").to_string());
                 }
 
                 if is_agent_hint
@@ -15135,7 +15242,8 @@ impl ChatWidget<'_> {
                     && !self.bottom_pane.is_task_running()
                 {
                     self.bottom_pane.set_task_running(true);
-                    self.bottom_pane.update_status_text("Running...".to_string());
+                    self.bottom_pane
+                        .update_status_text(code_i18n::tr_plain("tui.status.running").to_string());
                     self.refresh_auto_drive_visuals();
                     self.request_redraw();
                 }
@@ -15244,7 +15352,7 @@ impl ChatWidget<'_> {
 
                 if update.grouped {
                     self.bottom_pane
-                        .update_status_text("using browser".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
                 }
             }
             // Newer protocol variants we currently ignore in the TUI
@@ -15438,6 +15546,7 @@ impl ChatWidget<'_> {
                 }),
                 UpdatePlanArgs {
                     name: Some("Demo Scroll Plan".to_string()),
+                    explanation: None,
                     plan: vec![
                         PlanItemArg {
                             step: "Create reproducible builds".to_string(),
@@ -15452,7 +15561,6 @@ impl ChatWidget<'_> {
                             status: StepStatus::Completed,
                         },
                     ],
-                    explanation: None,
                 },
                 ("browser_open", "https://example.com", "navigated to example.com"),
                 ReasoningEffort::High,
@@ -15486,6 +15594,7 @@ impl ChatWidget<'_> {
                 }),
                 UpdatePlanArgs {
                     name: Some("Release Gate Plan".to_string()),
+                    explanation: None,
                     plan: vec![
                         PlanItemArg {
                             step: "Finalize changelog".to_string(),
@@ -15504,7 +15613,6 @@ impl ChatWidget<'_> {
                             status: StepStatus::Pending,
                         },
                     ],
-                    explanation: None,
                 },
                 ("browser_open", "https://example.com/releases", "reviewed release dashboard"),
                 ReasoningEffort::Medium,
@@ -15668,8 +15776,6 @@ impl ChatWidget<'_> {
                 &self.config,
                 &self.total_token_usage,
                 &self.last_token_usage,
-                self.session_requested_model.as_deref(),
-                self.session_latest_response_model.as_deref(),
             ));
 
             self.history_push_plain_state(history_cell::new_prompts_output());
@@ -15749,7 +15855,8 @@ impl ChatWidget<'_> {
         let mut running_read = history_cell::AgentStatusPreview::default();
         running_read.id = "demo-read-running".to_string();
         running_read.name = "Spec Parser".to_string();
-        running_read.status = "Running".to_string();
+        running_read.status =
+            code_i18n::tr(code_i18n::current_language(), "tui.state.running").to_string();
         running_read.model = Some("code-gpt-3.5".to_string());
         running_read.details = vec![history_cell::AgentDetail::Progress(
             "Scanning RFC summaries".to_string(),
@@ -15761,7 +15868,7 @@ impl ChatWidget<'_> {
         agent_read_card.record_action("Fetching documentation excerpts");
         agent_read_card.set_duration(Some(Duration::from_secs(54)));
         agent_read_card.set_write_mode(Some(false));
-        agent_read_card.set_status_label("Running");
+        agent_read_card.set_status_label(code_i18n::tr_plain("tui.state.running"));
         self.history_push(agent_read_card);
 
         let mut browser_card = history_cell::BrowserSessionCell::new();
@@ -15949,8 +16056,6 @@ impl ChatWidget<'_> {
             &self.config,
             &self.total_token_usage,
             &self.last_token_usage,
-            self.session_requested_model.as_deref(),
-            self.session_latest_response_model.as_deref(),
         ));
     }
 
@@ -16065,7 +16170,11 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn on_auto_upgrade_completed(&mut self, version: String) {
-        let notice = format!("Auto-upgraded to version {version}");
+        let notice = code_i18n::tr_args(
+            code_i18n::current_language(),
+            "tui.updates.notice.auto_upgraded",
+            &[("version", &version)],
+        );
         self.latest_upgrade_version = None;
         self.push_background_tail(notice.clone());
         self.bottom_pane.flash_footer_notice(notice);
@@ -16258,7 +16367,7 @@ impl ChatWidget<'_> {
             crate::updates::UpgradeResolution::Command { command, display } => {
                 if command.is_empty() {
                     self.history_push_plain_state(history_cell::new_error_event(
-                        "`/update` — no upgrade command available for this install.".to_string(),
+                        code_i18n::tr_plain("tui.updates.error.no_upgrade_command").to_string(),
                     ));
                     self.request_redraw();
                     return;
@@ -16266,7 +16375,7 @@ impl ChatWidget<'_> {
 
                 let latest = self.latest_upgrade_version.clone();
                 self.push_background_tail(
-                    "Opening a guided upgrade terminal to finish installing updates.".to_string(),
+                    code_i18n::tr_plain("tui.updates.notice.open_guided_terminal").to_string(),
                 );
                 if let Some(launch) = self.launch_update_command(command, display, latest) {
                     self.app_event_tx.send(AppEvent::OpenTerminal(launch));
@@ -16277,6 +16386,69 @@ impl ChatWidget<'_> {
                 self.request_redraw();
             }
         }
+    }
+
+    pub(crate) fn handle_lang_command(&mut self, args: String) {
+        let raw = args.trim();
+        if raw.is_empty() {
+            self.show_lang_popup();
+            return;
+        }
+
+        let language = match raw {
+            "1" => Some(code_i18n::Language::ZhCn),
+            "2" => Some(code_i18n::Language::En),
+            _ => code_i18n::parse_language(raw),
+        };
+        let Some(language) = language else {
+            let ui_language = code_i18n::current_language();
+            let message =
+                code_i18n::tr_args(ui_language, "tui.lang.invalid", &[("value", raw)]);
+            self.history_push_plain_state(history_cell::new_error_event(message));
+            self.request_redraw();
+            return;
+        };
+
+        self.apply_language_selection(language);
+        self.request_redraw();
+    }
+
+    fn show_lang_popup(&mut self) {
+        self.lang.overlay = Some(LangOverlay::new());
+        self.request_redraw();
+    }
+
+    fn show_mode_popup(&mut self) {
+        self.mode.overlay = Some(ModeOverlay::new(self.validation_harness_enabled()));
+        self.request_redraw();
+    }
+
+    fn apply_mode_selection(&mut self, selection: ModeOption) {
+        match selection {
+            ModeOption::DevFast => self.apply_validation_harness_toggle(false),
+            ModeOption::Strict => self.apply_validation_harness_toggle(true),
+        }
+
+        let ui_language = code_i18n::current_language();
+        let label_key = match selection {
+            ModeOption::DevFast => "tui.mode.option.fast",
+            ModeOption::Strict => "tui.mode.option.strict",
+        };
+        let label = code_i18n::tr(ui_language, label_key);
+        let message = code_i18n::tr_args(ui_language, "tui.mode.changed", &[("label", label)]);
+        self.history_push_plain_state(history_cell::new_text_line(ratatui::text::Line::from(
+            message,
+        )));
+    }
+
+    fn apply_language_selection(&mut self, language: code_i18n::Language) {
+        code_i18n::set_language(language);
+        let ui_language = language;
+        let label = code_i18n::language_name(ui_language, language);
+        let message = code_i18n::tr_args(ui_language, "tui.lang.changed", &[("label", label)]);
+        self.history_push_plain_state(history_cell::new_text_line(ratatui::text::Line::from(
+            message,
+        )));
     }
 
     pub(crate) fn handle_notifications_command(&mut self, args: String) {
@@ -16291,20 +16463,26 @@ impl ChatWidget<'_> {
             "status" => {
                 match &self.config.tui.notifications {
                     Notifications::Enabled(true) => {
-                        self.push_background_tail("🔔 TUI notifications are enabled.".to_string());
+                        self.push_background_tail(
+                            code_i18n::tr_plain("tui.notifications.status.enabled").to_string(),
+                        );
                     }
                     Notifications::Enabled(false) => {
-                        self.push_background_tail("🔕 TUI notifications are disabled.".to_string());
+                        self.push_background_tail(
+                            code_i18n::tr_plain("tui.notifications.status.disabled").to_string(),
+                        );
                     }
                     Notifications::Custom(entries) => {
+                        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
                         let filters = if entries.is_empty() {
-                            "<none>".to_string()
+                            code_i18n::tr_plain("tui.common.none").to_string()
                         } else {
-                            entries.join(", ")
+                            entries.join(joiner)
                         };
-                        self.push_background_tail(format!(
-                            "🔔 TUI notifications use custom filters: [{}]",
-                            filters
+                        self.push_background_tail(code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.notifications.custom_filters",
+                            &[("filters", &filters)],
                         ));
                     }
                 }
@@ -16314,32 +16492,34 @@ impl ChatWidget<'_> {
                 match &self.config.tui.notifications {
                     Notifications::Enabled(current) => {
                         if *current == enable {
-                            self.push_background_tail(format!(
-                                "TUI notifications already {}.",
-                                if enable { "enabled" } else { "disabled" }
-                            ));
+                            let key = if enable {
+                                "tui.notifications.already_enabled"
+                            } else {
+                                "tui.notifications.already_disabled"
+                            };
+                            self.push_background_tail(code_i18n::tr_plain(key).to_string());
                         } else {
                             self.app_event_tx
                                 .send(AppEvent::UpdateTuiNotifications(enable));
                         }
                     }
                     Notifications::Custom(entries) => {
+                        let joiner = code_i18n::tr_plain("tui.common.list_joiner");
                         let filters = if entries.is_empty() {
-                            "<none>".to_string()
+                            code_i18n::tr_plain("tui.common.none").to_string()
                         } else {
-                            entries.join(", ")
+                            entries.join(joiner)
                         };
-                        self.push_background_tail(format!(
-                            "TUI notifications use custom filters ([{}]); edit ~/.code/config.toml to change them.",
-                            filters
+                        self.push_background_tail(code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.notifications.custom_filters",
+                            &[("filters", &filters)],
                         ));
                     }
                 }
             }
             _ => {
-                self.push_background_tail(
-                    "Usage: /notifications [status|on|off]".to_string(),
-                );
+                self.push_background_tail(code_i18n::tr_plain("tui.notifications.usage").to_string());
             }
         }
     }
@@ -16347,7 +16527,7 @@ impl ChatWidget<'_> {
     pub(crate) fn handle_prompts_command(&mut self, args: &str) {
         if !args.trim().is_empty() {
             self.history_push_plain_state(history_cell::new_error_event(
-                "Usage: /prompts".to_string(),
+                code_i18n::tr_plain("tui.prompts_settings.usage").to_string(),
             ));
             return;
         }
@@ -16359,7 +16539,7 @@ impl ChatWidget<'_> {
     pub(crate) fn handle_skills_command(&mut self, args: &str) {
         if !args.trim().is_empty() {
             self.history_push_plain_state(history_cell::new_error_event(
-                "Usage: /skills".to_string(),
+                code_i18n::tr_plain("tui.skills_settings.usage").to_string(),
             ));
             return;
         }
@@ -16544,7 +16724,7 @@ impl ChatWidget<'_> {
     pub(crate) fn handle_agents_command(&mut self, args: String) {
         if !args.trim().is_empty() {
             self.history_push_plain_state(history_cell::new_error_event(
-                "Usage: /agents".to_string(),
+                code_i18n::tr_plain("tui.agents.usage").to_string(),
             ));
         }
         self.show_settings_overlay(Some(SettingsSection::Agents));
@@ -16553,7 +16733,7 @@ impl ChatWidget<'_> {
     pub(crate) fn handle_limits_command(&mut self, args: String) {
         if !args.trim().is_empty() {
             self.history_push_plain_state(history_cell::new_error_event(
-                "Usage: /limits".to_string(),
+                code_i18n::tr_plain("tui.limits.usage").to_string(),
             ));
         }
         self.show_settings_overlay(Some(SettingsSection::Limits));
@@ -16743,14 +16923,14 @@ impl ChatWidget<'_> {
             (
                 GroupStatus {
                     group: ValidationGroup::Functional,
-                    name: "Functional checks",
+                    name: code_i18n::tr_plain("tui.validation.group.functional"),
                 },
                 self.config.validation.groups.functional,
             ),
             (
                 GroupStatus {
                     group: ValidationGroup::Stylistic,
-                    name: "Stylistic checks",
+                    name: code_i18n::tr_plain("tui.validation.group.stylistic"),
                 },
                 self.config.validation.groups.stylistic,
             ),
@@ -17496,7 +17676,11 @@ impl ChatWidget<'_> {
                 new_entry.source_kind = info.source_kind.clone();
                 new_entry.push_log(
                     AgentLogKind::Status,
-                    format!("Status → {}", agent_status_label(status.clone())),
+                    format!(
+                        "{}{}",
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        agent_status_label(status.clone())
+                    ),
                 );
                 new_entry
             });
@@ -17508,7 +17692,10 @@ impl ChatWidget<'_> {
 
             let AgentBatchMetadata { label, prompt: meta_prompt, context: meta_context } = batch_metadata;
             let auto_review_label = matches!(entry.source_kind, Some(AgentSourceKind::AutoReview))
-                .then(|| "Auto Review".to_string());
+                .then(|| {
+                    code_i18n::tr(code_i18n::current_language(), "tui.agent.source.auto_review")
+                        .to_string()
+                });
             let previous_label = entry.batch_label.clone();
             entry.batch_label = label
                 .or(auto_review_label)
@@ -17539,7 +17726,11 @@ impl ChatWidget<'_> {
                 entry.status = status.clone();
                 entry.push_log(
                     AgentLogKind::Status,
-                    format!("Status → {}", agent_status_label(status.clone())),
+                    format!(
+                        "{}{}",
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        agent_status_label(status.clone())
+                    ),
                 );
             }
 
@@ -17580,7 +17771,7 @@ impl ChatWidget<'_> {
         self.agents_terminal.clamp_selected_index();
 
         if saw_new_agent && self.agents_terminal.active {
-            self.layout.scroll_offset.set(0);
+            self.layout.scroll_offset = 0;
         }
     }
 
@@ -17593,7 +17784,7 @@ impl ChatWidget<'_> {
         self.agents_terminal.focus_sidebar();
         self.agents_terminal.clear_stop_prompt();
         self.bottom_pane.set_input_focus(false);
-        self.agents_terminal.saved_scroll_offset = self.layout.scroll_offset.get();
+        self.agents_terminal.saved_scroll_offset = self.layout.scroll_offset;
         if self.agents_terminal.order.is_empty() {
             for agent in &self.active_agents {
                 if !self
@@ -17664,19 +17855,14 @@ impl ChatWidget<'_> {
         self.agents_terminal.active = false;
         self.agents_terminal.clear_stop_prompt();
         self.agents_terminal.focus_sidebar();
-        self.layout.scroll_offset
-            .set(self.agents_terminal.saved_scroll_offset);
+        self.layout.scroll_offset = self.agents_terminal.saved_scroll_offset;
         self.bottom_pane.set_input_focus(true);
         self.request_redraw();
     }
 
     fn record_current_agent_scroll(&mut self) {
         if let Some(entry) = self.agents_terminal.current_sidebar_entry() {
-            let capped = self
-                .layout
-                .scroll_offset
-                .get()
-                .min(self.layout.last_max_scroll.get());
+            let capped = self.layout.scroll_offset.min(self.layout.last_max_scroll.get());
             self
                 .agents_terminal
                 .scroll_offsets
@@ -17693,9 +17879,9 @@ impl ChatWidget<'_> {
                 .agents_terminal
                 .scroll_offsets
                 .insert(key, u16::MAX);
-            self.layout.scroll_offset.set(u16::MAX);
+            self.layout.scroll_offset = u16::MAX;
         } else {
-            self.layout.scroll_offset.set(0);
+            self.layout.scroll_offset = 0;
         }
     }
 
@@ -17708,7 +17894,7 @@ impl ChatWidget<'_> {
             .last_render_scroll
             .get()
             .min(self.layout.last_max_scroll.get());
-        self.layout.scroll_offset.set(applied);
+        self.layout.scroll_offset = applied;
         if let Some(entry) = self.agents_terminal.current_sidebar_entry() {
             self
                 .agents_terminal
@@ -17808,7 +17994,9 @@ impl ChatWidget<'_> {
                 && matches!(agent.status, AgentStatus::Pending | AgentStatus::Running)
             {
                 agent.status = AgentStatus::Cancelled;
-                agent.error.get_or_insert_with(|| "Cancelled by user".to_string());
+                agent
+                    .error
+                    .get_or_insert_with(|| code_i18n::tr_plain("tui.common.cancelled_by_user").to_string());
             }
         }
 
@@ -18285,7 +18473,8 @@ fi\n\
         self.bottom_pane.show_auto_coordinator_view(model);
         self.bottom_pane.set_task_running(false);
         self.bottom_pane.clear_live_ring();
-        self.bottom_pane.update_status_text("Auto Drive".to_string());
+        self.bottom_pane
+            .update_status_text(code_i18n::tr_plain("tui.settings.section.auto_drive").to_string());
         self.auto_update_terminal_hint();
         self.bottom_pane.ensure_input_focus();
         self.clear_composer();
@@ -19128,7 +19317,8 @@ Have we met every part of this goal and is there no further work to do?"#
                 }
                 AutoControllerEffect::LaunchStarted { goal } => {
                     self.bottom_pane.set_task_running(false);
-                    self.bottom_pane.update_status_text("Auto Drive".to_string());
+                    self.bottom_pane
+                        .update_status_text(code_i18n::tr_plain("tui.settings.section.auto_drive").to_string());
                     self.auto_card_start(Some(goal.clone()));
                     self.auto_card_add_action(
                         format!("Auto Drive started: {goal}"),
@@ -19182,14 +19372,21 @@ Have we met every part of this goal and is there no further work to do?"#
                     reason,
                 } => {
                     let human_delay = format_duration(delay);
+                    let ui_language = code_i18n::current_language();
                     self.bottom_pane.set_task_running(false);
                     self.bottom_pane
-                        .update_status_text("Auto Drive paused".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.auto_drive.paused").to_string());
                     self.bottom_pane.set_standard_terminal_hint(Some(
-                        AUTO_ESC_EXIT_HINT.to_string(),
+                        code_i18n::tr_plain("tui.auto_drive.exit_hint").to_string(),
                     ));
-                    let message = format!(
-                        "Auto Drive will retry automatically in {human_delay} (attempt {attempt}). Last error: {reason}"
+                    let message = code_i18n::tr_args(
+                        ui_language,
+                        "tui.auto_drive.retry_message",
+                        &[
+                            ("human_delay", &human_delay),
+                            ("attempt", &attempt.to_string()),
+                            ("reason", reason.as_str()),
+                        ],
                     );
                     self.auto_card_add_action(message, AutoDriveActionKind::Warning);
                     self.auto_card_set_status(AutoDriveStatus::Paused);
@@ -19466,24 +19663,6 @@ Have we met every part of this goal and is there no further work to do?"#
         false
     }
 
-    #[cfg(any(test, feature = "test-helpers"))]
-    #[allow(dead_code)]
-    fn worktree_has_uncommitted_changes(&self) -> Result<bool, String> {
-        self.run_git_command(["status", "--porcelain"], |stdout| {
-            Ok(stdout.lines().any(|line| !line.trim().is_empty()))
-        })
-    }
-
-    #[cfg(any(test, feature = "test-helpers"))]
-    #[allow(dead_code)]
-    fn current_head_commit_sha(&self) -> Option<String> {
-        self.run_git_command(["rev-parse", "HEAD"], |stdout| {
-            Ok(stdout.trim().to_string())
-        })
-        .ok()
-        .filter(|sha| !sha.is_empty())
-    }
-
     fn prepare_auto_turn_review_state(&mut self) {
         if !self.auto_state.is_active() || !self.auto_state.review_enabled {
             self.auto_turn_review_state = None;
@@ -19512,7 +19691,11 @@ Have we met every part of this goal and is there no further work to do?"#
 
         #[cfg(test)]
         {
-            if CAPTURE_AUTO_TURN_COMMIT_STUB.lock().unwrap().is_some() {
+            if CAPTURE_AUTO_TURN_COMMIT_STUB
+                .lock()
+                .unwrap_or_else(|err| err.into_inner())
+                .is_some()
+            {
                 return;
             }
         }
@@ -19536,7 +19719,11 @@ Have we met every part of this goal and is there no further work to do?"#
         parent: Option<&GhostCommit>,
     ) -> Result<GhostCommit, GitToolingError> {
         #[cfg(test)]
-        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB.lock().unwrap().as_ref() {
+        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_ref()
+        {
             let parent_id = parent.map(|commit| commit.id().to_string());
             return stub(message, parent_id);
         }
@@ -19557,7 +19744,11 @@ Have we met every part of this goal and is there no further work to do?"#
         repo_path: PathBuf,
     ) -> Result<GhostCommit, GitToolingError> {
         #[cfg(test)]
-        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB.lock().unwrap().as_ref() {
+        if let Some(stub) = CAPTURE_AUTO_TURN_COMMIT_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_ref()
+        {
             return stub("auto review baseline snapshot", None);
         }
         let hook_repo = repo_path.clone();
@@ -19637,7 +19828,11 @@ Have we met every part of this goal and is there no further work to do?"#
         head_commit: &str,
     ) -> Result<Vec<String>, String> {
         #[cfg(test)]
-        if let Some(stub) = GIT_DIFF_NAME_ONLY_BETWEEN_STUB.lock().unwrap().as_ref() {
+        if let Some(stub) = GIT_DIFF_NAME_ONLY_BETWEEN_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_ref()
+        {
             return stub(base_commit.to_string(), head_commit.to_string());
         }
         self.run_git_command(
@@ -19810,7 +20005,7 @@ Have we met every part of this goal and is there no further work to do?"#
         self.bottom_pane.ensure_input_focus();
         self.bottom_pane.set_task_running(true);
         self.bottom_pane
-            .update_status_text("Auto Drive paused".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.auto_drive.paused").to_string());
         self.show_auto_drive_exit_hint();
         self.auto_rebuild_live_ring();
         self.request_redraw();
@@ -20012,10 +20207,10 @@ Have we met every part of this goal and is there no further work to do?"#
             return;
         }
         let strategy = descriptor.and_then(|d| d.review_strategy.as_ref());
-        let (mut prompt, mut hint, preparation) = match scope {
+        let (target, mut prompt, mut hint, metadata, preparation) = match scope {
             Some(scope) => {
-                let commit_for_prompt = scope.commit;
-                let short_sha: String = commit_for_prompt.chars().take(8).collect();
+                let commit_id = scope.commit;
+                let short_sha: String = commit_id.chars().take(8).collect();
                 let file_label = if scope.file_count == 1 {
                     "1 file".to_string()
                 } else {
@@ -20023,18 +20218,41 @@ Have we met every part of this goal and is there no further work to do?"#
                 };
                 let prompt = format!(
                     "Review commit {} generated during the latest Auto Drive turn. Highlight bugs, regressions, risky patterns, and missing tests before merge.",
-                    commit_for_prompt
+                    commit_id
                 );
-                let hint = format!("auto turn changes — {} ({})", short_sha, file_label);
-                let preparation = format!("Preparing code review for commit {}", short_sha);
-                (prompt, hint, preparation)
+                let ui_language = code_i18n::current_language();
+                let hint = code_i18n::tr_args(
+                    ui_language,
+                    "tui.auto_review.auto_turn_changes_hint",
+                    &[("short_sha", short_sha.as_str()), ("file_label", file_label.as_str())],
+                );
+                let preparation = format!("Preparing code review for commit {short_sha}");
+                let metadata = Some(ReviewContextMetadata {
+                    snapshot: Some(ReviewSnapshotInfo {
+                        snapshot_commit: Some(commit_id.clone()),
+                        branch: None,
+                        worktree_path: None,
+                        repo_root: None,
+                    }),
+                });
+                (
+                    ReviewTarget::Commit {
+                        sha: commit_id,
+                        title: None,
+                    },
+                    prompt,
+                    hint,
+                    metadata,
+                    preparation,
+                )
             }
-            None => {
-                let prompt = "Review the current workspace changes and highlight bugs, regressions, risky patterns, and missing tests before merge.".to_string();
-                let hint = "current workspace changes".to_string();
-                let preparation = "Preparing code review request...".to_string();
-                (prompt, hint, preparation)
-            }
+            None => (
+                ReviewTarget::UncommittedChanges,
+                "Review the current workspace changes and highlight bugs, regressions, risky patterns, and missing tests before merge.".to_string(),
+                "current workspace changes".to_string(),
+                None,
+                "Preparing code review request...".to_string(),
+            ),
         };
 
         if let Some(strategy) = strategy {
@@ -20066,13 +20284,13 @@ Have we met every part of this goal and is there no further work to do?"#
             self.auto_resolve_state = Some(AutoResolveState::new_with_limit(
                 prompt.clone(),
                 hint.clone(),
-                None,
+                metadata.clone(),
                 max_re_reviews,
             ));
         } else {
             self.auto_resolve_state = None;
         }
-        self.begin_review(prompt, hint, Some(preparation));
+        self.begin_review(target, prompt, hint, Some(preparation));
     }
 
     fn auto_rebuild_live_ring(&mut self) {
@@ -20620,6 +20838,32 @@ Have we met every part of this goal and is there no further work to do?"#
         out
     }
 
+    fn truncate_to_width_with_leading_ellipsis(text: &str, max_width: usize) -> String {
+        if max_width == 0 {
+            return String::new();
+        }
+        if UnicodeWidthStr::width(text) <= max_width {
+            return text.to_string();
+        }
+        if max_width == 1 {
+            return "…".to_string();
+        }
+
+        let mut tail: Vec<char> = Vec::new();
+        let mut current_width = 0usize;
+        for ch in text.chars().rev() {
+            let char_width = UnicodeWidthChar::width(ch).unwrap_or(1);
+            if current_width.saturating_add(char_width) > max_width.saturating_sub(1) {
+                break;
+            }
+            tail.push(ch);
+            current_width = current_width.saturating_add(char_width);
+        }
+        tail.reverse();
+        let tail: String = tail.into_iter().collect();
+        format!("…{tail}")
+    }
+
     fn normalize_status_field(field: Option<String>) -> Option<String> {
         field.and_then(|value| {
             let trimmed = value.trim();
@@ -20698,7 +20942,7 @@ Have we met every part of this goal and is there no further work to do?"#
         self.pending_upgrade_notice = None;
         if command.is_empty() {
             self.history_push_plain_state(history_cell::new_error_event(
-                "`/update` — no upgrade command available for this install.".to_string(),
+                code_i18n::tr_plain("tui.updates.error.no_upgrade_command").to_string(),
             ));
             self.request_redraw();
             return None;
@@ -20712,7 +20956,7 @@ Have we met every part of this goal and is there no further work to do?"#
 
         if command_text.trim().is_empty() {
             self.history_push_plain_state(history_cell::new_error_event(
-                "`/update` — unable to resolve upgrade command text.".to_string(),
+                code_i18n::tr_plain("tui.updates.error.unable_to_resolve_command").to_string(),
             ));
             self.request_redraw();
             return None;
@@ -20725,11 +20969,18 @@ Have we met every part of this goal and is there no further work to do?"#
 
         let (controller_tx, controller_rx) = mpsc::channel();
         let controller = TerminalRunController { tx: controller_tx };
-        let display_label = Self::truncate_with_ellipsis(&format!("Guided: {command_text}"), 128);
+        let display_label = Self::truncate_with_ellipsis(
+            &code_i18n::tr_args(
+                code_i18n::current_language(),
+                "tui.updates.terminal.guided",
+                &[("command", &command_text)],
+            ),
+            128,
+        );
 
         let launch = TerminalLaunch {
             id,
-            title: "Upgrade Code".to_string(),
+            title: code_i18n::tr_plain("tui.updates.terminal.title").to_string(),
             command: Vec::new(),
             command_display: display_label,
             controller: Some(controller.clone()),
@@ -21998,10 +22249,11 @@ Have we met every part of this goal and is there no further work to do?"#
     pub(crate) fn show_help_popup(&mut self) {
         let t_dim = Style::default().fg(crate::colors::text_dim());
         let t_fg = Style::default().fg(crate::colors::text());
+        let ui_language = code_i18n::current_language();
 
         let mut lines: Vec<RtLine<'static>> = Vec::new();
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Keyboard shortcuts",
+            code_i18n::tr(ui_language, "tui.help.title"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
 
@@ -22016,71 +22268,105 @@ Have we met every part of this goal and is there no further work to do?"#
         // Top quick action
         lines.push(kv(
             "Shift+Tab",
-            "Rotate agent between Read Only / Write with Approval / Full Access",
+            code_i18n::tr(ui_language, "tui.help.desc.shift_tab"),
         ));
 
         // Global
-        lines.push(kv("F1", "Help overlay"));
-        lines.push(kv("Ctrl+G", "Open external editor"));
-        lines.push(kv("Ctrl+R", "Toggle reasoning"));
-        lines.push(kv("Ctrl+T", "Toggle screen"));
-        lines.push(kv("Ctrl+D", "Diff viewer"));
-        lines.push(kv("Esc", &format!("{} / close popups", Self::double_esc_hint_label())));
+        lines.push(kv("Ctrl+G", code_i18n::tr(ui_language, "tui.help.desc.ctrl_g")));
+        lines.push(kv("Ctrl+S", code_i18n::tr(ui_language, "tui.help.desc.ctrl_s")));
+        lines.push(kv("Ctrl+L", code_i18n::tr(ui_language, "tui.help.desc.ctrl_l")));
+        lines.push(kv("Tab", code_i18n::tr(ui_language, "tui.help.desc.tab_mode")));
+        lines.push(kv("Ctrl+R", code_i18n::tr(ui_language, "tui.help.desc.ctrl_r")));
+        lines.push(kv("Ctrl+T", code_i18n::tr(ui_language, "tui.help.desc.ctrl_t")));
+        lines.push(kv("Ctrl+D", code_i18n::tr(ui_language, "tui.help.desc.ctrl_d")));
+        let double_esc = Self::double_esc_hint_label();
+        let esc_hint = code_i18n::tr_args(ui_language, "tui.help.desc.esc", &[("hint", &double_esc)]);
+        lines.push(kv("Esc", &esc_hint));
         // Task control shortcuts
-        lines.push(kv("Esc", "End current task"));
-        lines.push(kv("Ctrl+C", "End current task"));
-        lines.push(kv("Ctrl+C twice", "Quit"));
+        lines.push(kv("Esc", code_i18n::tr(ui_language, "tui.help.desc.end_task")));
+        lines.push(kv("Ctrl+C", code_i18n::tr(ui_language, "tui.help.desc.end_task")));
+        lines.push(kv(
+            code_i18n::tr(ui_language, "tui.help.key.ctrl_c_twice"),
+            code_i18n::tr(ui_language, "tui.help.desc.quit"),
+        ));
         lines.push(RtLine::from(""));
 
         // Composer
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Compose field",
+            code_i18n::tr(ui_language, "tui.help.section.compose"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
-        lines.push(kv("Enter", "Send message"));
-        lines.push(kv("Ctrl+J", "Insert newline"));
-        lines.push(kv("Shift+Enter", "Insert newline"));
+        lines.push(kv("Enter", code_i18n::tr(ui_language, "tui.help.desc.enter")));
+        lines.push(kv("Ctrl+J", code_i18n::tr(ui_language, "tui.help.desc.newline")));
+        lines.push(kv("Shift+Enter", code_i18n::tr(ui_language, "tui.help.desc.newline")));
         // Split combined shortcuts into separate rows for readability
-        lines.push(kv("Shift+Up", "Browse input history"));
-        lines.push(kv("Shift+Down", "Browse input history"));
-        lines.push(kv("Ctrl+B", "Move left"));
-        lines.push(kv("Ctrl+F", "Move right"));
-        lines.push(kv("Alt+Left", "Move by word"));
-        lines.push(kv("Alt+Right", "Move by word"));
+        lines.push(kv(
+            "Shift+Up",
+            code_i18n::tr(ui_language, "tui.help.desc.input_history"),
+        ));
+        lines.push(kv(
+            "Shift+Down",
+            code_i18n::tr(ui_language, "tui.help.desc.input_history"),
+        ));
+        lines.push(kv("Ctrl+B", code_i18n::tr(ui_language, "tui.help.desc.move_left")));
+        lines.push(kv("Ctrl+F", code_i18n::tr(ui_language, "tui.help.desc.move_right")));
+        lines.push(kv("Alt+Left", code_i18n::tr(ui_language, "tui.help.desc.move_word")));
+        lines.push(kv("Alt+Right", code_i18n::tr(ui_language, "tui.help.desc.move_word")));
         // Simplify delete shortcuts; remove Alt+Backspace/Backspace/Delete variants
-        lines.push(kv("Ctrl+W", "Delete previous word"));
-        lines.push(kv("Ctrl+H", "Delete previous char"));
-        lines.push(kv("Ctrl+D", "Delete next char"));
-        lines.push(kv("Ctrl+Backspace", "Delete current line"));
-        lines.push(kv("Ctrl+U", "Delete to line start"));
-        lines.push(kv("Ctrl+K", "Delete to line end"));
+        lines.push(kv("Ctrl+W", code_i18n::tr(ui_language, "tui.help.desc.del_prev_word")));
+        lines.push(kv("Ctrl+H", code_i18n::tr(ui_language, "tui.help.desc.del_prev_char")));
+        lines.push(kv("Ctrl+D", code_i18n::tr(ui_language, "tui.help.desc.del_next_char")));
+        lines.push(kv(
+            "Ctrl+Backspace",
+            code_i18n::tr(ui_language, "tui.help.desc.del_line"),
+        ));
+        lines.push(kv(
+            "Ctrl+U",
+            code_i18n::tr(ui_language, "tui.help.desc.del_to_line_start"),
+        ));
+        lines.push(kv(
+            "Ctrl+K",
+            code_i18n::tr(ui_language, "tui.help.desc.del_to_line_end"),
+        ));
         lines.push(kv(
             "Home/End",
-            "Jump to line start/end (jump to history start/end when input is empty)",
+            code_i18n::tr(ui_language, "tui.help.desc.home_end"),
         ));
         lines.push(RtLine::from(""));
 
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Terminal",
+            code_i18n::tr(ui_language, "tui.help.section.terminal"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
-        lines.push(kv("$", "Open shell terminal without a preset command"));
-        lines.push(kv("$ <command>", "Run shell command immediately"));
-        lines.push(kv("$$ <prompt>", "Request guided shell command help"));
+        lines.push(kv("$", code_i18n::tr(ui_language, "tui.help.desc.dollar")));
+        lines.push(kv(
+            "$ <command>",
+            code_i18n::tr(ui_language, "tui.help.desc.dollar_command"),
+        ));
+        lines.push(kv(
+            "$$ <prompt>",
+            code_i18n::tr(ui_language, "tui.help.desc.dollar_dollar"),
+        ));
         lines.push(RtLine::from(""));
 
         // Panels
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Panels",
+            code_i18n::tr(ui_language, "tui.help.section.panels"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
-        lines.push(kv("Ctrl+B", "Toggle Browser overlay"));
-        lines.push(kv("Ctrl+A", "Open Agents terminal"));
+        lines.push(kv(
+            "Ctrl+B",
+            code_i18n::tr(ui_language, "tui.help.desc.ctrl_b"),
+        ));
+        lines.push(kv(
+            "Ctrl+A",
+            code_i18n::tr(ui_language, "tui.help.desc.ctrl_a"),
+        ));
 
         // Slash command reference
         lines.push(RtLine::from(""));
         lines.push(RtLine::from(vec![RtSpan::styled(
-            "Slash commands",
+            code_i18n::tr(ui_language, "tui.help.section.slash"),
             t_fg.add_modifier(Modifier::BOLD),
         )]));
         for (cmd_str, cmd) in crate::slash_command::built_in_slash_commands() {
@@ -22550,7 +22836,7 @@ Have we met every part of this goal and is there no further work to do?"#
                 cwd: self.config.cwd.clone(),
                 resume_path: None,
                 demo_developer_message: self.config.demo_developer_message.clone(),
-                dynamic_tools: Vec::new(),
+                dynamic_tools: self.config.dynamic_tools.clone(),
             };
             self.submit_op(op);
 
@@ -23181,7 +23467,7 @@ Have we met every part of this goal and is there no further work to do?"#
             cwd: self.config.cwd.clone(),
             resume_path: None,
             demo_developer_message: self.config.demo_developer_message.clone(),
-            dynamic_tools: Vec::new(),
+            dynamic_tools: self.config.dynamic_tools.clone(),
         };
         self.submit_op(op);
     }
@@ -23208,7 +23494,7 @@ Have we met every part of this goal and is there no further work to do?"#
                 cwd: self.config.cwd.clone(),
                 resume_path: None,
                 demo_developer_message: self.config.demo_developer_message.clone(),
-                dynamic_tools: Vec::new(),
+                dynamic_tools: self.config.dynamic_tools.clone(),
             };
             self.submit_op(op);
         }
@@ -23415,7 +23701,7 @@ Have we met every part of this goal and is there no further work to do?"#
                 cwd: self.config.cwd.clone(),
                 resume_path: None,
                 demo_developer_message: self.config.demo_developer_message.clone(),
-                dynamic_tools: Vec::new(),
+                dynamic_tools: self.config.dynamic_tools.clone(),
             };
             let _ = self.code_op_tx.send(op);
         } else {
@@ -23432,7 +23718,7 @@ Have we met every part of this goal and is there no further work to do?"#
         self.agents_terminal.reset();
         if self.agents_terminal.active {
             // Reset scroll offset when a new batch starts to avoid stale positions
-            self.layout.scroll_offset.set(0);
+            self.layout.scroll_offset = 0;
         }
 
         // Initialize sparkline with some data so it shows immediately
@@ -23560,7 +23846,7 @@ Have we met every part of this goal and is there no further work to do?"#
             cwd: self.config.cwd.clone(),
             resume_path: None,
             demo_developer_message: self.config.demo_developer_message.clone(),
-            dynamic_tools: Vec::new(),
+            dynamic_tools: self.config.dynamic_tools.clone(),
         };
 
         self.submit_op(op);
@@ -23602,7 +23888,7 @@ Have we met every part of this goal and is there no further work to do?"#
             cwd: self.config.cwd.clone(),
             resume_path: None,
             demo_developer_message: self.config.demo_developer_message.clone(),
-            dynamic_tools: Vec::new(),
+            dynamic_tools: self.config.dynamic_tools.clone(),
         };
 
         self.submit_op(op);
@@ -23633,9 +23919,9 @@ Have we met every part of this goal and is there no further work to do?"#
         });
 
         let notice = if enabled {
-            "Automatic upgrades enabled"
+            code_i18n::tr_plain("tui.updates.notice.auto_upgrade_enabled")
         } else {
-            "Automatic upgrades disabled"
+            code_i18n::tr_plain("tui.updates.notice.auto_upgrade_disabled")
         };
         self.bottom_pane.flash_footer_notice(notice.to_string());
 
@@ -23882,7 +24168,12 @@ Have we met every part of this goal and is there no further work to do?"#
         let home = match code_core::config::find_code_home() {
             Ok(home) => home,
             Err(e) => {
-                let msg = format!("Failed to locate CODE_HOME: {}", e);
+                let ui_language = code_i18n::current_language();
+                let msg = code_i18n::tr_args(
+                    ui_language,
+                    "tui.config.find_code_home_failed",
+                    &[("error", &e.to_string())],
+                );
                 self.history_push_plain_state(history_cell::new_error_event(msg));
                 return None;
             }
@@ -23891,7 +24182,12 @@ Have we met every part of this goal and is there no further work to do?"#
         let (enabled, disabled) = match code_core::config::list_mcp_servers(&home) {
             Ok(result) => result,
             Err(e) => {
-                let msg = format!("Failed to read MCP config: {}", e);
+                let ui_language = code_i18n::current_language();
+                let msg = code_i18n::tr_args(
+                    ui_language,
+                    "tui.mcp.read_config_failed",
+                    &[("error", &e.to_string())],
+                );
                 self.history_push_plain_state(history_cell::new_error_event(msg));
                 return None;
             }
@@ -23899,19 +24195,17 @@ Have we met every part of this goal and is there no further work to do?"#
 
         let mut rows: McpServerRows = Vec::new();
         for (name, cfg) in enabled.into_iter() {
-            let summary = self.format_mcp_server_summary(&name, &cfg, true);
             rows.push(McpServerRow {
                 name,
                 enabled: true,
-                summary,
+                summary: Self::format_mcp_summary(&cfg),
             });
         }
         for (name, cfg) in disabled.into_iter() {
-            let summary = self.format_mcp_server_summary(&name, &cfg, false);
             rows.push(McpServerRow {
                 name,
                 enabled: false,
-                summary,
+                summary: Self::format_mcp_summary(&cfg),
             });
         }
         rows.sort_by(|a, b| a.name.cmp(&b.name));
@@ -23930,16 +24224,47 @@ Have we met every part of this goal and is there no further work to do?"#
         }
 
         name.eq_ignore_ascii_case("code")
+            || name.eq_ignore_ascii_case("codes")
             || name.eq_ignore_ascii_case("codex")
             || name.eq_ignore_ascii_case("cloud")
             || name.eq_ignore_ascii_case("coder")
             || command.eq_ignore_ascii_case("code")
+            || command.eq_ignore_ascii_case("codes")
             || command.eq_ignore_ascii_case("codex")
             || command.eq_ignore_ascii_case("cloud")
             || command.eq_ignore_ascii_case("coder")
     }
 
     fn collect_agents_overview_rows(&self) -> (Vec<AgentOverviewRow>, Vec<String>) {
+        fn command_exists(cmd: &str) -> bool {
+            if cmd.contains(std::path::MAIN_SEPARATOR) || cmd.contains('/') || cmd.contains('\\') {
+                return std::fs::metadata(cmd).map(|m| m.is_file()).unwrap_or(false);
+            }
+            #[cfg(target_os = "windows")]
+            {
+                which::which(cmd).map(|p| p.is_file()).unwrap_or(false)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let Some(path_os) = std::env::var_os("PATH") else {
+                    return false;
+                };
+                for dir in std::env::split_paths(&path_os) {
+                    if dir.as_os_str().is_empty() {
+                        continue;
+                    }
+                    let candidate = dir.join(cmd);
+                    if let Ok(meta) = std::fs::metadata(&candidate) {
+                        if meta.is_file() && (meta.permissions().mode() & 0o111 != 0) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+        }
+
         fn command_for_check(command: &str) -> String {
             let (base, _) = split_command_and_args(command);
             if base.trim().is_empty() {
@@ -23956,6 +24281,11 @@ Have we met every part of this goal and is there no further work to do?"#
             .collect();
         let mut extras: Vec<String> = Vec::new();
         for agent in &self.config.agents {
+            if let Some(spec) = agent_model_spec(&agent.name) {
+                if !spec.is_enabled() {
+                    continue;
+                }
+            }
             if !ordered.iter().any(|name| agent.name.eq_ignore_ascii_case(name)) {
                 extras.push(agent.name.to_ascii_lowercase());
             }
@@ -23963,6 +24293,11 @@ Have we met every part of this goal and is there no further work to do?"#
         let mut pending_agents: HashMap<String, AgentConfig> = HashMap::new();
         for pending in self.pending_agent_updates.values() {
             let lower = pending.cfg.name.to_ascii_lowercase();
+            if let Some(spec) = agent_model_spec(&pending.cfg.name) {
+                if !spec.is_enabled() {
+                    continue;
+                }
+            }
             pending_agents.insert(lower.clone(), pending.cfg.clone());
             if !ordered.iter().any(|name| name.eq_ignore_ascii_case(&lower)) {
                 extras.push(lower);
@@ -23990,10 +24325,10 @@ Have we met every part of this goal and is there no further work to do?"#
                 let command_to_check = command_for_check(&cfg.command);
                 let installed = if builtin {
                     true
-                } else if external_agent_command_exists(&command_to_check) {
+                } else if command_exists(&command_to_check) {
                     true
                 } else if let Some(cli) = spec_cli {
-                    external_agent_command_exists(cli)
+                    command_exists(cli)
                 } else {
                     false
                 };
@@ -24015,10 +24350,10 @@ Have we met every part of this goal and is there no further work to do?"#
                 let command_to_check = command_for_check(&cfg.command);
                 let installed = if builtin {
                     true
-                } else if external_agent_command_exists(&command_to_check) {
+                } else if command_exists(&command_to_check) {
                     true
                 } else if let Some(cli) = spec_cli {
-                    external_agent_command_exists(cli)
+                    command_exists(cli)
                 } else {
                     false
                 };
@@ -24039,9 +24374,9 @@ Have we met every part of this goal and is there no further work to do?"#
                 let installed = if builtin {
                     true
                 } else if let Some(cli) = spec_cli {
-                    external_agent_command_exists(cli)
+                    command_exists(cli)
                 } else {
-                    external_agent_command_exists(&cmd)
+                    command_exists(&cmd)
                 };
                 agent_rows.push(AgentOverviewRow {
                     name: name.clone(),
@@ -24073,12 +24408,56 @@ Have we met every part of this goal and is there no further work to do?"#
         if let Some(desc) = config_description {
             let trimmed = desc.trim();
             if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
+                if let Some(spec) = agent_model_spec(name).or_else(|| command.and_then(agent_model_spec))
+                {
+                    if trimmed != spec.description.trim() {
+                        return Some(trimmed.to_string());
+                    }
+                } else {
+                    return Some(trimmed.to_string());
+                }
             }
         }
         agent_model_spec(name)
             .or_else(|| command.and_then(|cmd| agent_model_spec(cmd)))
-            .map(|spec| spec.description.trim().to_string())
+            .map(|spec| match spec.slug {
+                "code-gpt-5.2" => code_i18n::tr_plain("tui.settings.agents.desc.code_gpt_5_2")
+                    .trim()
+                    .to_string(),
+                "code-gpt-5.2-codex" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.code_gpt_5_2_codex",
+                )
+                .trim()
+                .to_string(),
+                "code-gpt-5.1-codex-mini" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.code_gpt_5_1_codex_mini",
+                )
+                .trim()
+                .to_string(),
+                "claude-opus-4.5" => code_i18n::tr_plain("tui.settings.agents.desc.claude_opus_4_5")
+                    .trim()
+                    .to_string(),
+                "claude-sonnet-4.5" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.claude_sonnet_4_5",
+                )
+                .trim()
+                .to_string(),
+                "claude-haiku-4.5" => code_i18n::tr_plain(
+                    "tui.settings.agents.desc.claude_haiku_4_5",
+                )
+                .trim()
+                .to_string(),
+                "gemini-3-pro" => code_i18n::tr_plain("tui.settings.agents.desc.gemini_3_pro")
+                    .trim()
+                    .to_string(),
+                "gemini-3-flash" => code_i18n::tr_plain("tui.settings.agents.desc.gemini_3_flash")
+                    .trim()
+                    .to_string(),
+                "qwen-3-coder" => code_i18n::tr_plain("tui.settings.agents.desc.qwen_3_coder")
+                    .trim()
+                    .to_string(),
+                _ => spec.description.trim().to_string(),
+            })
             .filter(|desc| !desc.is_empty())
     }
 
@@ -24157,7 +24536,12 @@ Have we met every part of this goal and is there no further work to do?"#
             &model_display_storage
         };
         let effort = Self::format_reasoning_effort(self.config.model_reasoning_effort);
-        let mut parts: Vec<String> = vec![format!("Model: {} ({})", model_display, effort)];
+        let mut parts: Vec<String> = vec![format!(
+            "{}: {} ({})",
+            code_i18n::tr_plain("tui.settings.summary.field.model"),
+            model_display,
+            effort
+        )];
         if let Some(profile) = self
             .config
             .active_profile
@@ -24165,77 +24549,111 @@ Have we met every part of this goal and is there no further work to do?"#
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            parts.push(format!("Profile: {}", profile));
+            parts.push(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.profile"),
+                profile
+            ));
         }
         Some(parts.join(" · "))
     }
 
     fn settings_summary_planning(&self) -> Option<String> {
         if self.config.planning_use_chat_model {
-            return Some("Model: Follow Chat Mode".to_string());
+            return Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.model"),
+                code_i18n::tr_plain("tui.settings.summary.value.follow_chat_mode")
+            ));
         }
         let model = self.config.planning_model.trim();
         let model_display_storage;
         let model_display = if model.is_empty() {
-            "(default)"
+            code_i18n::tr_plain("tui.settings.summary.value.default")
         } else {
             model_display_storage = Self::format_model_label(model);
             &model_display_storage
         };
         let effort = Self::format_reasoning_effort(self.config.planning_model_reasoning_effort);
-        Some(format!("Model: {} ({})", model_display, effort))
+        Some(format!(
+            "{}: {} ({})",
+            code_i18n::tr_plain("tui.settings.summary.field.model"),
+            model_display,
+            effort
+        ))
     }
 
     fn settings_summary_theme(&self) -> Option<String> {
         let theme_label = Self::theme_display_name(self.config.tui.theme.name);
         let spinner_name = &self.config.tui.spinner.name;
         let spinner_label = spinner::spinner_label_for(spinner_name);
-        Some(format!("Theme: {} · Spinner: {}", theme_label, spinner_label))
+        Some(format!(
+            "{}: {} · {}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.theme"),
+            theme_label,
+            code_i18n::tr_plain("tui.settings.summary.field.spinner"),
+            spinner_label
+        ))
     }
 
     fn settings_summary_updates(&self) -> Option<String> {
         if !crate::updates::upgrade_ui_enabled() {
-            return Some("Auto update: Disabled".to_string());
+            return Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.auto_update"),
+                code_i18n::tr_plain("tui.common.disabled")
+            ));
         }
         let status = if self.config.auto_upgrade_enabled {
-            "Enabled"
+            code_i18n::tr_plain("tui.common.enabled")
         } else {
-            "Disabled"
+            code_i18n::tr_plain("tui.common.disabled")
         };
-        let mut parts = vec![format!("Auto update: {}", status)];
+        let mut parts = vec![format!(
+            "{}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.auto_update"),
+            status
+        )];
         if let Some(latest) = self
             .latest_upgrade_version
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            parts.push(format!("Latest available: {}", latest));
+            parts.push(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.latest_available"),
+                latest
+            ));
         }
         Some(parts.join(" · "))
     }
 
     fn settings_summary_accounts(&self) -> Option<String> {
-        let auto_switch = if self.config.auto_switch_accounts_on_rate_limit {
-            "Auto-switch: On"
-        } else {
-            "Auto-switch: Off"
-        };
-
-        let api_key_fallback = if self.config.api_key_fallback_on_all_accounts_limited {
-            "API key fallback: On"
-        } else {
-            "API key fallback: Off"
-        };
-
-        Some(format!("{auto_switch} · {api_key_fallback}"))
+        Some(format!(
+            "{}: {} · {}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.auto_switch"),
+            Self::on_off_label(self.config.auto_switch_accounts_on_rate_limit),
+            code_i18n::tr_plain("tui.settings.summary.field.api_key_fallback"),
+            Self::on_off_label(self.config.api_key_fallback_on_all_accounts_limited)
+        ))
     }
 
     fn settings_summary_agents(&self) -> Option<String> {
         let (enabled, total) = agent_summary_counts(&self.config.agents);
         let commands = self.config.subagent_commands.len();
-        let mut parts = vec![format!("Enabled: {}/{}", enabled, total)];
+        let mut parts = vec![format!(
+            "{}: {}/{}",
+            code_i18n::tr_plain("tui.settings.summary.field.enabled"),
+            enabled,
+            total
+        )];
         if commands > 0 {
-            parts.push(format!("Custom commands: {}", commands));
+            parts.push(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.custom_commands"),
+                commands
+            ));
         }
         Some(parts.join(" · "))
     }
@@ -24244,10 +24662,13 @@ Have we met every part of this goal and is there no further work to do?"#
         let diagnostics_enabled = self.auto_state.qa_automation_enabled
             && (self.auto_state.review_enabled || self.auto_state.cross_check_enabled);
         let (model_text, effort_text) = if self.config.auto_drive_use_chat_model {
-            ("Follow Chat Mode".to_string(), None)
+            (
+                code_i18n::tr_plain("tui.settings.summary.value.follow_chat_mode").to_string(),
+                None,
+            )
         } else {
             let model_label = if self.config.auto_drive.model.trim().is_empty() {
-                "(default)".to_string()
+                code_i18n::tr_plain("tui.settings.summary.value.default").to_string()
             } else {
                 Self::format_model_label(&self.config.auto_drive.model)
             };
@@ -24255,24 +24676,38 @@ Have we met every part of this goal and is there no further work to do?"#
             (model_label, Some(effort))
         };
         let model_segment = if let Some(effort) = effort_text {
-            format!("Model: {} ({})", model_text, effort)
+            format!(
+                "{}: {} ({})",
+                code_i18n::tr_plain("tui.settings.summary.field.model"),
+                model_text,
+                effort
+            )
         } else {
-            format!("Model: {}", model_text)
+            format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.model"),
+                model_text
+            )
         };
         Some(format!(
-            "{} · Agents: {} · Diagnostics: {} · Continue: {}",
+            "{} · {}: {} · {}: {} · {}: {}",
             model_segment,
+            code_i18n::tr_plain("tui.settings.summary.field.agents"),
             Self::on_off_label(self.auto_state.subagents_enabled),
+            code_i18n::tr_plain("tui.settings.summary.field.diagnostics"),
             Self::on_off_label(diagnostics_enabled),
-            self.auto_state.continue_mode.label()
+            code_i18n::tr_plain("tui.settings.summary.field.continue"),
+            Self::format_auto_continue_mode(self.auto_state.continue_mode)
         ))
     }
 
     fn settings_summary_validation(&self) -> Option<String> {
         let groups = &self.config.validation.groups;
         Some(format!(
-            "Functional: {} · Stylistic: {}",
+            "{}: {} · {}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.functional"),
             Self::on_off_label(groups.functional),
+            code_i18n::tr_plain("tui.settings.summary.field.stylistic"),
             Self::on_off_label(groups.stylistic)
         ))
     }
@@ -24282,7 +24717,7 @@ Have we met every part of this goal and is there no further work to do?"#
         let auto_followups = self.config.auto_drive.auto_review_followup_attempts.get();
 
         let review_model_label = if self.config.review_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24292,7 +24727,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         let review_resolve_label = if self.config.review_resolve_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24302,7 +24737,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         let auto_review_model_label = if self.config.auto_review_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24312,7 +24747,7 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         let auto_review_resolve_label = if self.config.auto_review_resolve_use_chat_model {
-            "Chat".to_string()
+            code_i18n::tr_plain("tui.settings.summary.value.chat").to_string()
         } else {
             format!(
                 "{} ({})",
@@ -24322,13 +24757,18 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         Some(format!(
-            "/review: {} · Resolve: {} · Follow-ups: {} · Auto Review: {} ({} · resolve {} · follow-ups {})",
+            "/review: {} · {}: {} · {}: {} · {}: {} ({} · {}: {} · {}: {})",
             review_model_label,
+            code_i18n::tr_plain("tui.settings.summary.field.resolve"),
             review_resolve_label,
+            code_i18n::tr_plain("tui.settings.summary.field.followups"),
             attempts,
+            code_i18n::tr_plain("tui.settings.summary.field.auto_review"),
             Self::on_off_label(self.config.tui.auto_review_enabled),
             auto_review_model_label,
+            code_i18n::tr_plain("tui.settings.summary.field.resolve"),
             auto_review_resolve_label,
+            code_i18n::tr_plain("tui.settings.summary.field.followups"),
             auto_followups
         ))
     }
@@ -24337,25 +24777,40 @@ Have we met every part of this goal and is there no further work to do?"#
         if let Some(snapshot) = &self.rate_limit_snapshot {
             let primary = snapshot.primary_used_percent.clamp(0.0, 100.0).round() as i64;
             let secondary = snapshot.secondary_used_percent.clamp(0.0, 100.0).round() as i64;
-            Some(format!("Primary: {}% · Secondary: {}%", primary, secondary))
+            Some(format!(
+                "{}: {}% · {}: {}%",
+                code_i18n::tr_plain("tui.settings.summary.field.primary"),
+                primary,
+                code_i18n::tr_plain("tui.settings.summary.field.secondary"),
+                secondary
+            ))
         } else if self.rate_limit_fetch_inflight {
-            Some("Refreshing usage...".to_string())
+            Some(code_i18n::tr_plain("tui.settings.summary.value.refreshing_usage").to_string())
         } else {
-            Some("Usage data not loaded".to_string())
+            Some(code_i18n::tr_plain("tui.settings.summary.value.usage_not_loaded").to_string())
         }
     }
 
     fn settings_summary_chrome(&self) -> Option<String> {
         if self.browser_is_external {
-            Some("Browser: external".to_string())
+            Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.browser"),
+                code_i18n::tr_plain("tui.settings.summary.value.external")
+            ))
         } else {
-            Some("Browser: available".to_string())
+            Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.browser"),
+                code_i18n::tr_plain("tui.settings.summary.value.available")
+            ))
         }
     }
 
     fn settings_summary_mcp(&self) -> Option<String> {
         Some(format!(
-            "Servers configured: {}",
+            "{}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.servers_configured"),
             self.config.mcp_servers.len()
         ))
     }
@@ -24363,32 +24818,35 @@ Have we met every part of this goal and is there no further work to do?"#
     fn settings_summary_notifications(&self) -> Option<String> {
         match &self.config.tui.notifications {
             Notifications::Enabled(enabled) => {
-                Some(format!("Desktop alerts: {}", Self::on_off_label(*enabled)))
+                Some(format!(
+                    "{}: {}",
+                    code_i18n::tr_plain("tui.settings.summary.field.desktop_alerts"),
+                    Self::on_off_label(*enabled)
+                ))
             }
-            Notifications::Custom(entries) => Some(format!("Custom rules: {}", entries.len())),
+            Notifications::Custom(entries) => Some(format!(
+                "{}: {}",
+                code_i18n::tr_plain("tui.settings.summary.field.custom_rules"),
+                entries.len()
+            )),
         }
     }
 
     fn settings_summary_prompts(&self) -> Option<String> {
         let count = self.bottom_pane.custom_prompts().len();
-        Some(format!("Prompts enabled: {}", count))
+        Some(format!(
+            "{}: {}",
+            code_i18n::tr_plain("tui.settings.summary.field.prompts_enabled"),
+            count
+        ))
     }
 
     fn settings_summary_skills(&self) -> Option<String> {
         let count = self.bottom_pane.skills().len();
-        Some(format!("Skills loaded: {count}"))
-    }
-
-    fn refresh_mcp_settings_overlay(&mut self) {
-        let content = self.build_mcp_settings_content();
-        let Some(content) = content else {
-            return;
-        };
-        let Some(overlay) = self.settings.overlay.as_mut() else {
-            return;
-        };
-        overlay.set_mcp_content(content);
-        self.request_redraw();
+        Some(format!(
+            "{}: {count}",
+            code_i18n::tr_plain("tui.settings.summary.field.skills_loaded")
+        ))
     }
 
     fn refresh_settings_overview_rows(&mut self) {
@@ -24404,11 +24862,12 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn format_reasoning_effort(effort: ReasoningEffort) -> &'static str {
         match effort {
-            ReasoningEffort::Minimal | ReasoningEffort::None => "Minimal",
-            ReasoningEffort::Low => "Low",
-            ReasoningEffort::Medium => "Medium",
-            ReasoningEffort::High => "High",
-            ReasoningEffort::XHigh => "XHigh",
+            ReasoningEffort::Minimal => code_i18n::tr_plain("tui.reasoning_effort.minimal"),
+            ReasoningEffort::None => code_i18n::tr_plain("tui.reasoning_effort.none"),
+            ReasoningEffort::Low => code_i18n::tr_plain("tui.reasoning_effort.low"),
+            ReasoningEffort::Medium => code_i18n::tr_plain("tui.reasoning_effort.medium"),
+            ReasoningEffort::High => code_i18n::tr_plain("tui.reasoning_effort.high"),
+            ReasoningEffort::XHigh => code_i18n::tr_plain("tui.reasoning_effort.xhigh"),
         }
     }
 
@@ -24449,50 +24908,75 @@ Have we met every part of this goal and is there no further work to do?"#
     }
 
     fn on_off_label(value: bool) -> &'static str {
-        if value { "On" } else { "Off" }
+        if value {
+            code_i18n::tr_plain("tui.common.on")
+        } else {
+            code_i18n::tr_plain("tui.common.off")
+        }
+    }
+
+    fn format_auto_continue_mode(mode: AutoContinueMode) -> &'static str {
+        match mode {
+            AutoContinueMode::Immediate => code_i18n::tr_plain("tui.auto_continue.immediate"),
+            AutoContinueMode::TenSeconds => code_i18n::tr_plain("tui.auto_continue.ten_seconds"),
+            AutoContinueMode::SixtySeconds => code_i18n::tr_plain("tui.auto_continue.sixty_seconds"),
+            AutoContinueMode::Manual => code_i18n::tr_plain("tui.auto_continue.manual"),
+        }
     }
 
     fn theme_display_name(theme: code_core::config_types::ThemeName) -> String {
         match theme {
-            code_core::config_types::ThemeName::LightPhoton => "Light - Photon".to_string(),
+            code_core::config_types::ThemeName::LightPhoton => {
+                code_i18n::tr_plain("tui.theme.light_photon").to_string()
+            }
             code_core::config_types::ThemeName::LightPhotonAnsi16 => {
-                "Light - Photon (16-color)".to_string()
+                code_i18n::tr_plain("tui.theme.light_photon_ansi16").to_string()
             }
             code_core::config_types::ThemeName::LightPrismRainbow => {
-                "Light - Prism Rainbow".to_string()
+                code_i18n::tr_plain("tui.theme.light_prism_rainbow").to_string()
             }
             code_core::config_types::ThemeName::LightVividTriad => {
-                "Light - Vivid Triad".to_string()
+                code_i18n::tr_plain("tui.theme.light_vivid_triad").to_string()
             }
-            code_core::config_types::ThemeName::LightPorcelain => "Light - Porcelain".to_string(),
-            code_core::config_types::ThemeName::LightSandbar => "Light - Sandbar".to_string(),
-            code_core::config_types::ThemeName::LightGlacier => "Light - Glacier".to_string(),
+            code_core::config_types::ThemeName::LightPorcelain => {
+                code_i18n::tr_plain("tui.theme.light_porcelain").to_string()
+            }
+            code_core::config_types::ThemeName::LightSandbar => {
+                code_i18n::tr_plain("tui.theme.light_sandbar").to_string()
+            }
+            code_core::config_types::ThemeName::LightGlacier => {
+                code_i18n::tr_plain("tui.theme.light_glacier").to_string()
+            }
             code_core::config_types::ThemeName::DarkCarbonNight => {
-                "Dark - Carbon Night".to_string()
+                code_i18n::tr_plain("tui.theme.dark_carbon_night").to_string()
             }
             code_core::config_types::ThemeName::DarkCarbonAnsi16 => {
-                "Dark - Carbon (16-color)".to_string()
+                code_i18n::tr_plain("tui.theme.dark_carbon_ansi16").to_string()
             }
             code_core::config_types::ThemeName::DarkShinobiDusk => {
-                "Dark - Shinobi Dusk".to_string()
+                code_i18n::tr_plain("tui.theme.dark_shinobi_dusk").to_string()
             }
             code_core::config_types::ThemeName::DarkOledBlackPro => {
-                "Dark - OLED Black Pro".to_string()
+                code_i18n::tr_plain("tui.theme.dark_oled_black_pro").to_string()
             }
             code_core::config_types::ThemeName::DarkAmberTerminal => {
-                "Dark - Amber Terminal".to_string()
+                code_i18n::tr_plain("tui.theme.dark_amber_terminal").to_string()
             }
-            code_core::config_types::ThemeName::DarkAuroraFlux => "Dark - Aurora Flux".to_string(),
+            code_core::config_types::ThemeName::DarkAuroraFlux => {
+                code_i18n::tr_plain("tui.theme.dark_aurora_flux").to_string()
+            }
             code_core::config_types::ThemeName::DarkCharcoalRainbow => {
-                "Dark - Charcoal Rainbow".to_string()
+                code_i18n::tr_plain("tui.theme.dark_charcoal_rainbow").to_string()
             }
-            code_core::config_types::ThemeName::DarkZenGarden => "Dark - Zen Garden".to_string(),
+            code_core::config_types::ThemeName::DarkZenGarden => {
+                code_i18n::tr_plain("tui.theme.dark_zen_garden").to_string()
+            }
             code_core::config_types::ThemeName::DarkPaperLightPro => {
-                "Dark - Paper Light Pro".to_string()
+                code_i18n::tr_plain("tui.theme.dark_paper_light_pro").to_string()
             }
             code_core::config_types::ThemeName::Custom => {
                 let mut label =
-                    crate::theme::custom_theme_label().unwrap_or_else(|| "Custom".to_string());
+                    crate::theme::custom_theme_label().unwrap_or_else(|| code_i18n::tr_plain("tui.theme.custom").to_string());
                 for pref in ["Light - ", "Dark - ", "Light ", "Dark "] {
                     if label.starts_with(pref) {
                         label = label[pref.len()..].trim().to_string();
@@ -24500,9 +24984,17 @@ Have we met every part of this goal and is there no further work to do?"#
                     }
                 }
                 if crate::theme::custom_theme_is_dark().unwrap_or(false) {
-                    format!("Dark - {}", label)
+                    format!(
+                        "{} {}",
+                        code_i18n::tr_plain("tui.theme.prefix.dark"),
+                        label
+                    )
                 } else {
-                    format!("Light - {}", label)
+                    format!(
+                        "{} {}",
+                        code_i18n::tr_plain("tui.theme.prefix.light"),
+                        label
+                    )
                 }
             }
         }
@@ -24763,11 +25255,11 @@ Have we met every part of this goal and is there no further work to do?"#
             cwd: self.config.cwd.clone(),
             resume_path: None,
             demo_developer_message: self.config.demo_developer_message.clone(),
-            dynamic_tools: Vec::new(),
+            dynamic_tools: self.config.dynamic_tools.clone(),
         };
         self.submit_op(op);
 
-        // Persist selection into CODEX_HOME/config.toml for this project directory so it sticks.
+        // Persist selection into ~/.code/config.toml for this project directory so it sticks.
         let _ = set_project_access_mode(
             &self.config.code_home,
             &self.config.cwd,
@@ -24922,7 +25414,7 @@ Have we met every part of this goal and is there no further work to do?"#
     }
 
     fn save_theme_to_config(&self, new_theme: code_core::config_types::ThemeName) {
-        // Persist the theme selection to CODE_HOME/CODEX_HOME config.toml
+        // Persist the theme selection to ~/.code/config.toml
         match code_core::config::find_code_home() {
             Ok(home) => {
                 if let Err(e) = code_core::config::set_tui_theme_name(&home, new_theme) {
@@ -25188,15 +25680,19 @@ Have we met every part of this goal and is there no further work to do?"#
 
         self.bottom_pane.set_task_running(false);
         self.bottom_pane
-            .update_status_text("Waiting in background".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.status.waiting_in_background").to_string());
 
         if !wait_ids.is_empty() {
-            self.push_background_tail(format!(
-                "Input unblocked after 10s; wait still running ({}).",
-                wait_ids.join(", ")
+            let ids = wait_ids.join(", ");
+            self.push_background_tail(code_i18n::tr_args(
+                code_i18n::current_language(),
+                "tui.status.input_unblocked_wait_running_list",
+                &[("ids", ids.as_str())],
             ));
         } else {
-            self.push_background_tail("Input unblocked after 10s; wait still running.".to_string());
+            self.push_background_tail(
+                code_i18n::tr_plain("tui.status.input_unblocked_wait_running").to_string(),
+            );
         }
 
         if let Some(front) = self.queued_user_messages.front().cloned() {
@@ -26283,9 +26779,9 @@ Have we met every part of this goal and is there no further work to do?"#
             self.config.tui.show_reasoning = !new_collapsed_state;
             // Brief status to confirm the toggle to the user
             let status = if self.config.tui.show_reasoning {
-                "Reasoning shown"
+                code_i18n::tr_plain("tui.status.reasoning_shown")
             } else {
-                "Reasoning hidden"
+                code_i18n::tr_plain("tui.status.reasoning_hidden")
             };
             self.bottom_pane.update_status_text(status.to_string());
             // Update footer label to reflect current state
@@ -26294,7 +26790,7 @@ Have we met every part of this goal and is there no further work to do?"#
         } else {
             // No reasoning cells exist; inform the user
             self.bottom_pane
-                .update_status_text("No reasoning to toggle".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.status.reasoning_none_to_toggle").to_string());
         }
         self.refresh_reasoning_collapsed_visibility();
         // Collapsed state changes affect heights; clear cache
@@ -26314,7 +26810,7 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn refresh_standard_terminal_hint(&mut self) {
         if self.standard_terminal_mode {
-            let message = "Standard terminal mode active. Press Ctrl+T to return to full UI.";
+            let message = code_i18n::tr_plain("tui.standard_terminal.hint");
             self.bottom_pane
                 .set_standard_terminal_hint(Some(message.to_string()));
         } else {
@@ -26496,7 +26992,7 @@ Have we met every part of this goal and is there no further work to do?"#
         self.push_background_tail("✅ Chrome launched with user profile".to_string());
         // Show browsing state in input border after launch
         self.bottom_pane
-            .update_status_text("using browser".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
     }
 
     fn chrome_log_path(&self) -> Option<String> {
@@ -27220,7 +27716,7 @@ Have we met every part of this goal and is there no further work to do?"#
             // Optimistically reflect browsing activity in the input border if we end up enabling
             // (safe even if we later disable; UI will update on event messages)
             self.bottom_pane
-                .update_status_text("using browser".to_string());
+                .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
 
             // Toggle asynchronously: if internal browser is active, disable it; otherwise enable and open about:blank
             let app_event_tx = self.app_event_tx.clone();
@@ -27242,7 +27738,10 @@ Have we met every part of this goal and is there no further work to do?"#
                         tracing::warn!("[/browser] failed to disable internal browser: {}", e);
                     }
                     app_event_tx
-                        .send_background_event_with_ticket(&ticket, "🔌 Browser disabled".to_string());
+                        .send_background_event_with_ticket(
+                            &ticket,
+                            code_i18n::tr_plain("tui.browser.disabled").to_string(),
+                        );
                 } else {
                     // Not in internal mode → enable internal and open about:blank
                     // Reuse existing helper (ensures config + start + global manager + screenshot)
@@ -27266,7 +27765,11 @@ Have we met every part of this goal and is there no further work to do?"#
                         );
                         app_event_tx.send_background_event_with_ticket(
                             &ticket,
-                            format!("❌ Failed to start internal browser: {}", error_text),
+                            code_i18n::tr_args(
+                                code_i18n::current_language(),
+                                "tui.browser.error.start_failed",
+                                &[("error", &error_text)],
+                            ),
                         );
                         ChatWidget::schedule_browser_autofix(
                             app_event_tx.clone(),
@@ -27293,7 +27796,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     app_event_tx
                         .send_background_event_with_ticket(
                             &ticket,
-                            "✅ Browser enabled (about:blank)".to_string(),
+                            code_i18n::tr_plain("tui.browser.enabled_blank").to_string(),
                         );
                 }
             });
@@ -27329,11 +27832,15 @@ Have we met every part of this goal and is there no further work to do?"#
                 let ticket = browser_ticket.clone();
 
                 // Add status message
-                let status_msg = format!("🌐 Opening internal browser: {}", full_url);
+                let status_msg = code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.browser.opening_internal",
+                    &[("url", &full_url)],
+                );
                 self.push_background_tail(status_msg);
                 // Also reflect browsing activity in the input border
                 self.bottom_pane
-                    .update_status_text("using browser".to_string());
+                    .update_status_text(code_i18n::tr_plain("tui.browser.status.using_browser").to_string());
 
                 // Connect immediately, don't wait for message send
                 tokio::spawn(async move {
@@ -27358,7 +27865,11 @@ Have we met every part of this goal and is there no further work to do?"#
                         );
                         app_event_tx.send_background_event_with_ticket(
                             &ticket,
-                            format!("❌ Failed to start internal browser: {}", error_text),
+                            code_i18n::tr_args(
+                                code_i18n::current_language(),
+                                "tui.browser.error.start_failed",
+                                &[("error", &error_text)],
+                            ),
                         );
                         ChatWidget::schedule_browser_autofix(
                             app_event_tx.clone(),
@@ -27501,7 +28012,11 @@ Have we met every part of this goal and is there no further work to do?"#
                             // Send success message to chat
                             app_event_tx.send_background_event_with_ticket(
                                 &ticket,
-                                format!("✅ Internal browser opened: {}", result.url),
+                                code_i18n::tr_args(
+                                    code_i18n::current_language(),
+                                    "tui.browser.opened_internal",
+                                    &[("url", result.url.as_str())],
+                                ),
                             );
 
                             // Capture initial screenshot
@@ -27549,7 +28064,14 @@ Have we met every part of this goal and is there no further work to do?"#
                     }
                 });
 
-                format!("Browser mode enabled: {}\n", full_url)
+                format!(
+                    "{}\n",
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.browser.mode_enabled",
+                        &[("url", &full_url)],
+                    )
+                )
             } else {
                 // It's a subcommand
                 match first_arg {
@@ -27568,7 +28090,7 @@ Have we met every part of this goal and is there no further work to do?"#
                             }
                         });
                         self.app_event_tx.send(AppEvent::RequestRedraw);
-                        "Browser mode disabled.".to_string()
+                        code_i18n::tr_plain("tui.browser.mode_disabled").to_string()
                     }
                     "status" => {
                         // Get status from BrowserManager
@@ -27581,7 +28103,9 @@ Have we met every part of this goal and is there no further work to do?"#
                         });
                         status_rx
                             .recv()
-                            .unwrap_or_else(|_| "Failed to get browser status.".to_string())
+                            .unwrap_or_else(|_| {
+                                code_i18n::tr_plain("tui.browser.error.status_failed").to_string()
+                            })
                     }
                     "fullpage" => {
                         if parts.len() > 2 {
@@ -27593,8 +28117,7 @@ Have we met every part of this goal and is there no further work to do?"#
                                             ChatWidget::get_browser_manager().await;
                                         browser_manager.set_fullpage_sync(true);
                                     });
-                                    "Full-page screenshot mode enabled (max 8 segments)."
-                                        .to_string()
+                                    code_i18n::tr_plain("tui.browser.fullpage.enabled").to_string()
                                 }
                                 "off" => {
                                     // Disable full-page mode
@@ -27603,12 +28126,12 @@ Have we met every part of this goal and is there no further work to do?"#
                                             ChatWidget::get_browser_manager().await;
                                         browser_manager.set_fullpage_sync(false);
                                     });
-                                    "Full-page screenshot mode disabled.".to_string()
+                                    code_i18n::tr_plain("tui.browser.fullpage.disabled").to_string()
                                 }
-                                _ => "Usage: /browser fullpage [on|off]".to_string(),
+                                _ => code_i18n::tr_plain("tui.browser.fullpage.usage").to_string(),
                             }
                         } else {
-                            "Usage: /browser fullpage [on|off]".to_string()
+                            code_i18n::tr_plain("tui.browser.fullpage.usage").to_string()
                         }
                     }
                     "config" => {
@@ -27628,15 +28151,23 @@ Have we met every part of this goal and is there no further work to do?"#
                                                     ChatWidget::get_browser_manager().await;
                                                 browser_manager.set_viewport_sync(width, height);
                                             });
-                                            format!(
-                                                "Browser viewport updated: {}x{}",
-                                                width, height
+                                            let width_string = width.to_string();
+                                            let height_string = height.to_string();
+                                            code_i18n::tr_args(
+                                                code_i18n::current_language(),
+                                                "tui.browser.config.viewport.updated",
+                                                &[
+                                                    ("width", &width_string),
+                                                    ("height", &height_string),
+                                                ],
                                             )
                                         } else {
-                                            "Invalid viewport format. Use: /browser config viewport 1920x1080".to_string()
+                                            code_i18n::tr_plain("tui.browser.config.viewport.invalid")
+                                                .to_string()
                                         }
                                     } else {
-                                        "Invalid viewport format. Use: /browser config viewport 1920x1080".to_string()
+                                        code_i18n::tr_plain("tui.browser.config.viewport.invalid")
+                                            .to_string()
                                     }
                                 }
                                 "segments_max" => {
@@ -27646,30 +28177,38 @@ Have we met every part of this goal and is there no further work to do?"#
                                                 ChatWidget::get_browser_manager().await;
                                             browser_manager.set_segments_max_sync(max);
                                         });
-                                        format!("Browser segments_max updated: {}", max)
+                                        let value_string = max.to_string();
+                                        code_i18n::tr_args(
+                                            code_i18n::current_language(),
+                                            "tui.browser.config.segments_max.updated",
+                                            &[("value", &value_string)],
+                                        )
                                     } else {
-                                        "Invalid segments_max value. Use a number.".to_string()
+                                        code_i18n::tr_plain("tui.browser.config.segments_max.invalid")
+                                            .to_string()
                                     }
                                 }
-                                _ => format!(
-                                    "Unknown config key: {}. Available: viewport, segments_max",
-                                    key
+                                _ => code_i18n::tr_args(
+                                    code_i18n::current_language(),
+                                    "tui.browser.config.unknown_key",
+                                    &[("key", key)],
                                 ),
                             }
                         } else {
-                            "Usage: /browser config <key> <value>\nAvailable keys: viewport, segments_max".to_string()
+                            code_i18n::tr_plain("tui.browser.config.usage").to_string()
                         }
                     }
                     _ => {
-                        format!(
-                            "Unknown browser command: '{}'\nUsage: /browser <url> | off | status | fullpage | config",
-                            first_arg
+                        code_i18n::tr_args(
+                            code_i18n::current_language(),
+                            "tui.browser.unknown_command",
+                            &[("value", first_arg)],
                         )
                     }
                 }
             }
         } else {
-            "Browser commands:\n• /browser <url> - Open URL in internal browser\n• /browser off - Disable browser mode\n• /browser status - Show current status\n• /browser fullpage [on|off] - Toggle full-page mode\n• /browser config <key> <value> - Update configuration\n\nUse /chrome [port] to connect to external Chrome browser".to_string()
+            code_i18n::tr_plain("tui.browser.help").to_string()
         };
 
         // Add the response to the UI as a ticketed background event so it stays with
@@ -27704,8 +28243,8 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn validation_group_label(group: ValidationGroup) -> &'static str {
         match group {
-            ValidationGroup::Functional => "Functional checks",
-            ValidationGroup::Stylistic => "Stylistic checks",
+            ValidationGroup::Functional => code_i18n::tr_plain("tui.validation.group.functional"),
+            ValidationGroup::Stylistic => code_i18n::tr_plain("tui.validation.group.stylistic"),
         }
     }
 
@@ -27714,6 +28253,10 @@ Have we met every part of this goal and is there no further work to do?"#
             ValidationGroup::Functional => self.config.validation.groups.functional,
             ValidationGroup::Stylistic => self.config.validation.groups.stylistic,
         }
+    }
+
+    fn validation_harness_enabled(&self) -> bool {
+        self.config.validation.groups.functional || self.config.validation.groups.stylistic
     }
 
     fn validation_tool_requested(&self, name: &str) -> bool {
@@ -27788,6 +28331,51 @@ Have we met every part of this goal and is there no further work to do?"#
         self.refresh_settings_overview_rows();
     }
 
+    fn apply_validation_harness_toggle(&mut self, enable: bool) {
+        if self.validation_harness_enabled() == enable {
+            return;
+        }
+
+        self.config.validation.patch_harness = enable;
+        self.config.validation.groups.functional = enable;
+        self.config.validation.groups.stylistic = enable;
+        self.bottom_pane.set_validation_harness_enabled(enable);
+
+        for group in [ValidationGroup::Functional, ValidationGroup::Stylistic] {
+            if let Err(err) = self.code_op_tx.send(Op::UpdateValidationGroup { group, enable }) {
+                tracing::warn!("failed to send validation group update: {err}");
+            }
+        }
+
+        let persist_result = match find_code_home() {
+            Ok(home) => {
+                set_validation_group_enabled(&home, "functional", enable)
+                    .and_then(|()| set_validation_group_enabled(&home, "stylistic", enable))
+                    .map_err(|e| e.to_string())
+            }
+            Err(err) => Err(err.to_string()),
+        };
+
+        if let Err(err) = persist_result {
+            self.push_background_tail(format!(
+                "⚠️ 校验总开关 {}（写入配置失败: {err}）",
+                if enable { "开启" } else { "关闭" }
+            ));
+        }
+
+        self.refresh_settings_overview_rows();
+    }
+
+    pub(crate) fn toggle_validation_harness_mode(&mut self) {
+        let next = if self.validation_harness_enabled() {
+            ModeOption::DevFast
+        } else {
+            ModeOption::Strict
+        };
+        self.apply_mode_selection(next);
+        self.request_redraw();
+    }
+
     fn apply_validation_tool_toggle(&mut self, name: &str, enable: bool) {
         if name == "actionlint" {
             if self.config.github.actionlint_on_patch == enable {
@@ -27851,6 +28439,15 @@ Have we met every part of this goal and is there no further work to do?"#
 
     fn build_validation_status_message(&self) -> String {
         let mut lines = Vec::new();
+        lines.push(format!(
+            "Validation harness: {}",
+            if self.validation_harness_enabled() {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        ));
+        lines.push("".to_string());
         lines.push("Validation groups:".to_string());
         for group in [ValidationGroup::Functional, ValidationGroup::Stylistic] {
             let enabled = self.validation_group_enabled(group);
@@ -27914,7 +28511,7 @@ Have we met every part of this goal and is there no further work to do?"#
             }
             group @ ("functional" | "stylistic") => {
                 let Some(state) = parts.next() else {
-                    self.push_background_tail("Usage: /validation <tool|group> on|off".to_string());
+                    self.push_background_tail(code_i18n::tr_plain("tui.validation.usage").to_string());
                     return;
                 };
                 let group = if group == "functional" {
@@ -27925,23 +28522,25 @@ Have we met every part of this goal and is there no further work to do?"#
                 match state {
                     "on" | "enable" => self.apply_validation_group_toggle(group, true),
                     "off" | "disable" => self.apply_validation_group_toggle(group, false),
-                    _ => self.push_background_tail(format!(
-                        "⚠️ Unknown validation command '{}'. Use on|off.",
-                        state
+                    _ => self.push_background_tail(code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.validation.unknown_command",
+                        &[("value", state)],
                     )),
                 }
             }
             tool => {
                 let Some(state) = parts.next() else {
-                    self.push_background_tail("Usage: /validation <tool|group> on|off".to_string());
+                    self.push_background_tail(code_i18n::tr_plain("tui.validation.usage").to_string());
                     return;
                 };
                 match state {
                     "on" | "enable" => self.apply_validation_tool_toggle(tool, true),
                     "off" | "disable" => self.apply_validation_tool_toggle(tool, false),
-                    _ => self.push_background_tail(format!(
-                        "⚠️ Unknown validation command '{}'. Use on|off.",
-                        state
+                    _ => self.push_background_tail(code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.validation.unknown_command",
+                        &[("value", state)],
                     )),
                 }
             }
@@ -27965,77 +28564,10 @@ Have we met every part of this goal and is there no further work to do?"#
         }
     }
 
-    fn format_mcp_server_summary(
-        &self,
-        name: &str,
-        cfg: &code_core::config_types::McpServerConfig,
-        enabled: bool,
-    ) -> String {
-        let transport = Self::format_mcp_summary(cfg);
-        let status = self.format_mcp_tool_status(name, enabled);
-        if status.is_empty() {
-            transport
-        } else {
-            format!("{transport} · {status}")
-        }
-    }
-
-    fn format_mcp_tool_status(&self, name: &str, enabled: bool) -> String {
-        if !enabled {
-            return "Tools: disabled".to_string();
-        }
-
-        if let Some(failure) = self.mcp_server_failures.get(name) {
-            return self.format_mcp_failure(failure);
-        }
-
-        if let Some(tools) = self.mcp_tools_by_server.get(name) {
-            let list = Self::format_mcp_tool_list(tools);
-            return format!("Tools: {list}");
-        }
-
-        "Tools: pending".to_string()
-    }
-
-    fn format_mcp_tool_list(tools: &[String]) -> String {
-        const MAX_TOOLS: usize = 6;
-        const MAX_CHARS: usize = 120;
-
-        if tools.is_empty() {
-            return "none".to_string();
-        }
-
-        let mut display = tools
-            .iter()
-            .take(MAX_TOOLS)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ");
-        if tools.len() > MAX_TOOLS {
-            let remaining = tools.len().saturating_sub(MAX_TOOLS);
-            display.push_str(&format!(", +{remaining} more"));
-        }
-        Self::truncate_with_ellipsis(&display, MAX_CHARS)
-    }
-
-    fn format_mcp_failure(&self, failure: &McpServerFailure) -> String {
-        const MAX_CHARS: usize = 160;
-
-        let normalized = failure.message.replace('\n', " ");
-        let message = Self::truncate_with_ellipsis(&normalized, MAX_CHARS);
-        match failure.phase {
-            McpServerFailurePhase::Start => format!("Failed to start: {message}"),
-            McpServerFailurePhase::ListTools => format!("Failed to list tools: {message}"),
-        }
-    }
-
     /// Handle `/mcp` command: manage MCP servers (status/on/off/add).
     pub(crate) fn handle_mcp_command(&mut self, command_text: String) {
         let trimmed = command_text.trim();
         if trimmed.is_empty() {
-            if !self.config.mcp_servers.is_empty() {
-                self.submit_op(Op::ListMcpTools);
-            }
             self.show_settings_overlay(Some(SettingsSection::Mcp));
             return;
         }
@@ -28044,55 +28576,57 @@ Have we met every part of this goal and is there no further work to do?"#
         let sub = parts.next().unwrap_or("");
 
         match sub {
-            "status" => {
-                if !self.config.mcp_servers.is_empty() {
-                    self.submit_op(Op::ListMcpTools);
-                }
-                match find_code_home() {
-                    Ok(home) => match code_core::config::list_mcp_servers(&home) {
-                        Ok((enabled, disabled)) => {
-                            let mut lines = String::new();
-                            if enabled.is_empty() && disabled.is_empty() {
-                                lines.push_str(
-                                    "No MCP servers configured. Use /mcp add … to add one.",
-                                );
-                            } else {
-                                let enabled_count = enabled.len();
-                                lines.push_str(&format!("Enabled ({enabled_count}):\n"));
-                                for (name, cfg) in enabled {
-                                    lines.push_str(&format!(
-                                        "• {} — {}\n",
-                                        name,
-                                        self.format_mcp_server_summary(&name, &cfg, true)
-                                    ));
-                                }
-                                let disabled_count = disabled.len();
-                                lines.push_str(&format!("\nDisabled ({disabled_count}):\n"));
-                                for (name, cfg) in disabled {
-                                    lines.push_str(&format!(
-                                        "• {} — {}\n",
-                                        name,
-                                        self.format_mcp_server_summary(&name, &cfg, false)
-                                    ));
-                                }
+            "status" => match find_code_home() {
+                Ok(home) => match code_core::config::list_mcp_servers(&home) {
+                    Ok((enabled, disabled)) => {
+                        let mut lines = String::new();
+                        if enabled.is_empty() && disabled.is_empty() {
+                            lines.push_str("No MCP servers configured. Use /mcp add … to add one.");
+                        } else {
+                            lines.push_str(&format!("Enabled ({}):\n", enabled.len()));
+                            for (name, cfg) in enabled {
+                                lines.push_str(&format!(
+                                    "• {} — {}\n",
+                                    name,
+                                    Self::format_mcp_summary(&cfg)
+                                ));
                             }
-                            self.push_background_tail(lines);
+                            lines.push_str(&format!("\nDisabled ({}):\n", disabled.len()));
+                            for (name, cfg) in disabled {
+                                lines.push_str(&format!(
+                                    "• {} — {}\n",
+                                    name,
+                                    Self::format_mcp_summary(&cfg)
+                                ));
+                            }
                         }
-                        Err(e) => {
-                            let msg = format!("Failed to read MCP config: {e}");
-                            self.history_push_plain_state(history_cell::new_error_event(msg));
-                        }
-                    },
+                        self.push_background_tail(lines);
+                    }
                     Err(e) => {
-                        let msg = format!("Failed to locate CODEX_HOME: {e}");
+                        let ui_language = code_i18n::current_language();
+                        let msg = code_i18n::tr_args(
+                            ui_language,
+                            "tui.mcp.read_config_failed",
+                            &[("error", &e.to_string())],
+                        );
                         self.history_push_plain_state(history_cell::new_error_event(msg));
                     }
+                },
+                Err(e) => {
+                    let ui_language = code_i18n::current_language();
+                    let msg = code_i18n::tr_args(
+                        ui_language,
+                        "tui.config.find_code_home_failed",
+                        &[("error", &e.to_string())],
+                    );
+                    self.history_push_plain_state(history_cell::new_error_event(msg));
                 }
-            }
+            },
             "on" | "off" => {
                 let name = parts.next().unwrap_or("");
                 if name.is_empty() {
-                    let msg = format!("Usage: /mcp {} <name>", sub);
+                    let ui_language = code_i18n::current_language();
+                    let msg = code_i18n::tr_args(ui_language, "tui.mcp.usage.toggle", &[("sub", sub)]);
                     self.history_push_plain_state(history_cell::new_error_event(msg));
                     return;
                 }
@@ -28141,7 +28675,12 @@ Have we met every part of this goal and is there no further work to do?"#
                         }
                     }
                     Err(e) => {
-                        let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                        let ui_language = code_i18n::current_language();
+                        let msg = code_i18n::tr_args(
+                            ui_language,
+                            "tui.config.find_code_home_failed",
+                            &[("error", &e.to_string())],
+                        );
                         self.history_push_plain_state(history_cell::new_error_event(msg));
                     }
                 }
@@ -28152,7 +28691,7 @@ Have we met every part of this goal and is there no further work to do?"#
                 //   2) /mcp add <command> [args…] [ENV=VAL…]   (name derived)
                 let tail_tokens: Vec<String> = parts.map(|s| s.to_string()).collect();
                 if tail_tokens.is_empty() {
-                    let msg = "Usage: /mcp add <name> <command> [args…] [ENV=VAL…]\n       or: /mcp add <command> [args…] [ENV=VAL…]".to_string();
+                    let msg = code_i18n::tr_plain("tui.mcp.usage.add_long").to_string();
                     self.history_push_plain_state(history_cell::new_error_event(msg));
                     return;
                 }
@@ -28231,7 +28770,7 @@ Have we met every part of this goal and is there no further work to do?"#
                 };
 
                 if command.is_empty() {
-                    let msg = "Usage: /mcp add <name> <command> [args…] [ENV=VAL…]".to_string();
+                    let msg = code_i18n::tr_plain("tui.mcp.usage.add_named").to_string();
                     self.history_push_plain_state(history_cell::new_error_event(msg));
                     return;
                 }
@@ -28276,7 +28815,12 @@ Have we met every part of this goal and is there no further work to do?"#
                         }
                     }
                     Err(e) => {
-                        let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                        let ui_language = code_i18n::current_language();
+                        let msg = code_i18n::tr_args(
+                            ui_language,
+                            "tui.config.find_code_home_failed",
+                            &[("error", &e.to_string())],
+                        );
                         self.history_push_plain_state(history_cell::new_error_event(msg));
                     }
                 }
@@ -28904,6 +29448,18 @@ Have we met every part of this goal and is there no further work to do?"#
                 line.spans.insert(0, ratatui::text::Span::raw("   "));
             }
         }
+
+        if matches!(cell.kind(), crate::history_cell::HistoryCellType::User) {
+            let bg = crate::colors::user_bg();
+            for line in &mut lines {
+                for span in &mut line.spans {
+                    if span.style.bg.is_none() {
+                        span.style.bg = Some(bg);
+                    }
+                }
+            }
+        }
+
         lines.push(ratatui::text::Line::from(""));
         lines
     }
@@ -29065,7 +29621,7 @@ Have we met every part of this goal and is there no further work to do?"#
             let mut spans: Vec<Span> = Vec::new();
             // Title follows theme text color
             spans.push(Span::styled(
-                "Every Code",
+                code_i18n::tr_plain("tui.header.title"),
                 Style::default()
                     .fg(crate::colors::text())
                     .add_modifier(Modifier::BOLD),
@@ -29077,7 +29633,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
-                    "Model: ",
+                    code_i18n::tr_plain("tui.header.label.model"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
@@ -29092,7 +29648,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
-                    "Reasoning: ",
+                    code_i18n::tr_plain("tui.header.label.reasoning"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
@@ -29107,7 +29663,7 @@ Have we met every part of this goal and is there no further work to do?"#
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
-                    "Directory: ",
+                    code_i18n::tr_plain("tui.header.label.directory"),
                     Style::default().fg(crate::colors::text_dim()),
                 ));
                 spans.push(Span::styled(
@@ -29123,7 +29679,7 @@ Have we met every part of this goal and is there no further work to do?"#
                         Style::default().fg(crate::colors::text_dim()),
                     ));
                     spans.push(Span::styled(
-                        "Branch: ",
+                        code_i18n::tr_plain("tui.header.label.branch"),
                         Style::default().fg(crate::colors::text_dim()),
                     ));
                     spans.push(Span::styled(
@@ -29139,7 +29695,8 @@ Have we met every part of this goal and is there no further work to do?"#
         };
 
         // Start with all items in production; tests can opt-in to a minimal header via env flag.
-        let minimal_header = std::env::var_os("CODEX_TUI_FORCE_MINIMAL_HEADER").is_some();
+        let minimal_header = std::env::var_os("CODEX_TUI_FORCE_MINIMAL_HEADER").is_some()
+            || std::env::var_os("CODES_TUI_FORCE_MINIMAL_HEADER").is_some();
         let demo_mode = self.config.demo_developer_message.is_some();
         let mut include_reasoning = !minimal_header;
         let mut include_model = !minimal_header;
@@ -29614,8 +30171,10 @@ struct AutoReviewStubGuard;
 #[cfg(test)]
 impl AutoReviewStubGuard {
     fn install<F: FnMut() + Send + 'static>(f: F) -> Self {
-        let mut guard = AUTO_REVIEW_STUB.lock().unwrap();
+        let mut guard = AUTO_REVIEW_STUB.lock().unwrap_or_else(|err| err.into_inner());
+        assert!(guard.is_none(), "AutoReviewStubGuard already installed");
         *guard = Some(Box::new(f));
+        drop(guard);
         AutoReviewStubGuard
     }
 }
@@ -29636,7 +30195,6 @@ impl Drop for AutoReviewStubGuard {
             CAPTURE_AUTO_TURN_COMMIT_STUB,
             GIT_DIFF_NAME_ONLY_BETWEEN_STUB,
         };
-        use crate::app_event::AppEvent;
         use crate::bottom_pane::AutoCoordinatorViewModel;
     use crate::chatwidget::message::UserMessage;
     use crate::chatwidget::smoke_helpers::{enter_test_runtime_guard, ChatWidgetHarness};
@@ -29670,7 +30228,6 @@ impl Drop for AutoReviewStubGuard {
     };
 use code_core::parse_command::ParsedCommand;
 use code_core::protocol::OrderMeta;
-    use code_core::config_types::{McpServerConfig, McpServerTransportConfig};
     use code_core::protocol::{
         AskForApproval,
         AgentMessageEvent,
@@ -29679,8 +30236,6 @@ use code_core::protocol::OrderMeta;
         Event,
         EventMsg,
         ExecCommandBeginEvent,
-        McpServerFailure,
-        McpServerFailurePhase,
         TaskCompleteEvent,
     };
     use code_core::protocol::AgentInfo as CoreAgentInfo;
@@ -29722,55 +30277,6 @@ use code_core::protocol::OrderMeta;
         let summary_text = summary.unwrap();
         assert!(summary_text.contains("needs work"));
         assert!(summary_text.contains("bug"));
-    }
-
-    #[test]
-    fn mcp_summary_includes_tools_and_failures() {
-        let mut harness = ChatWidgetHarness::new();
-        harness.with_chat(|chat| {
-            chat.mcp_tools_by_server.insert(
-                "alpha".to_string(),
-                vec!["fetch".to_string(), "search".to_string()],
-            );
-            chat.mcp_server_failures.insert(
-                "beta".to_string(),
-                McpServerFailure {
-                    phase: McpServerFailurePhase::ListTools,
-                    message: "timeout".to_string(),
-                },
-            );
-
-            let ok_cfg = McpServerConfig {
-                transport: McpServerTransportConfig::Stdio {
-                    command: "alpha-bin".to_string(),
-                    args: Vec::new(),
-                    env: None,
-                },
-                startup_timeout_sec: None,
-                tool_timeout_sec: None,
-            };
-            let fail_cfg = McpServerConfig {
-                transport: McpServerTransportConfig::Stdio {
-                    command: "beta-bin".to_string(),
-                    args: Vec::new(),
-                    env: None,
-                },
-                startup_timeout_sec: None,
-                tool_timeout_sec: None,
-            };
-
-            let ok_summary = chat.format_mcp_server_summary("alpha", &ok_cfg, true);
-            let fail_summary = chat.format_mcp_server_summary("beta", &fail_cfg, true);
-
-            assert!(
-                ok_summary.contains("Tools: fetch, search"),
-                "expected tool list in summary, got: {ok_summary}"
-            );
-            assert!(
-                fail_summary.contains("Failed to list tools: timeout"),
-                "expected failure message in summary, got: {fail_summary}"
-            );
-        });
     }
 
     #[test]
@@ -29825,10 +30331,8 @@ use code_core::protocol::OrderMeta;
 
     #[test]
     fn auto_review_triggers_when_enabled_and_diff_seen() {
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let _guard = AutoReviewStubGuard::install(|| {});
-        let _capture_guard = CaptureCommitStubGuard::install(|_, _| {
-            Ok(GhostCommit::new("baseline".to_string(), None))
-        });
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
         chat.config.tui.auto_review_enabled = true;
@@ -29842,13 +30346,11 @@ use code_core::protocol::OrderMeta;
 
     #[test]
     fn auto_review_does_not_duplicate_while_running() {
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_clone = calls.clone();
         let _guard = AutoReviewStubGuard::install(move || {
             calls_clone.fetch_add(1, Ordering::SeqCst);
-        });
-        let _capture_guard = CaptureCommitStubGuard::install(|_, _| {
-            Ok(GhostCommit::new("baseline".to_string(), None))
         });
 
         let mut harness = ChatWidgetHarness::new();
@@ -29868,6 +30370,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn auto_review_skips_when_no_changes_since_reviewed_snapshot() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_clone = calls.clone();
         let _guard = AutoReviewStubGuard::install(move || {
@@ -29913,7 +30416,7 @@ use code_core::protocol::OrderMeta;
 
     #[test]
     fn task_started_defers_auto_review_baseline_capture() {
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let _rt = enter_test_runtime_guard();
         let _capture_guard = CaptureCommitStubGuard::install(|_, _| {
             Ok(GhostCommit::new("baseline".to_string(), None))
@@ -30194,7 +30697,8 @@ use code_core::protocol::OrderMeta;
             .iter()
             .find(|row| row.name == "qwen-3-coder")
             .expect("qwen row present");
-        assert_eq!(qwen.enabled, qwen.installed);
+        assert!(!qwen.installed);
+        assert!(!qwen.enabled);
 
         let code = rows
             .iter()
@@ -30217,6 +30721,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn skipped_auto_review_with_findings_defers_to_next_turn() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30288,6 +30793,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn skipped_auto_review_clean_runs_immediately() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30340,6 +30846,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn multiple_skipped_auto_reviews_collapse_to_first_base() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30403,6 +30910,7 @@ use code_core::protocol::OrderMeta;
     #[test]
     fn stale_background_review_is_reclaimed() {
         let _rt = enter_test_runtime_guard();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
@@ -30450,12 +30958,17 @@ use code_core::protocol::OrderMeta;
 
         harness.open_auto_drive_settings();
         let frame_with_settings = crate::test_helpers::render_chat_widget_to_vt100(&mut harness, 90, 24);
-        assert!(frame_with_settings.contains("Auto Drive Settings"));
+        let title_en = code_i18n::tr(code_i18n::Language::En, "tui.settings.panel_title.auto_drive");
+        let title_zh = code_i18n::tr(code_i18n::Language::ZhCn, "tui.settings.panel_title.auto_drive");
+        assert!(
+            frame_with_settings.contains(title_en) || frame_with_settings.contains(title_zh),
+            "expected settings title; got:\n{frame_with_settings}"
+        );
         assert!(!frame_with_settings.contains('\u{fffd}'));
 
         harness.close_auto_drive_settings();
         let frame_after_close = crate::test_helpers::render_chat_widget_to_vt100(&mut harness, 90, 24);
-        assert!(!frame_after_close.contains("Auto Drive Settings"));
+        assert!(!frame_after_close.contains(title_en) && !frame_after_close.contains(title_zh));
         assert!(!frame_after_close.contains('\u{fffd}'));
     }
 
@@ -30587,7 +31100,7 @@ use code_core::protocol::OrderMeta;
         chat.resume_expected_next_request = None;
         chat.resume_provider_baseline = None;
         chat.synthetic_system_req = None;
-        chat.layout.scroll_offset.set(0);
+        chat.layout.scroll_offset = 0;
         chat.layout.last_max_scroll.set(0);
         chat.layout.last_history_viewport_height.set(0);
         #[cfg(any(test, feature = "test-helpers"))]
@@ -30673,17 +31186,18 @@ use code_core::protocol::OrderMeta;
         chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
-        let (prompt, hint, preparation_label, metadata, auto_resolve) = harness
+        let (target, prompt, hint, preparation_label, metadata, auto_resolve) = harness
             .drain_events()
             .into_iter()
             .find_map(|event| match event {
                 AppEvent::RunReviewWithScope {
+                    target,
                     prompt,
                     hint,
                     preparation_label,
                     metadata,
                     auto_resolve,
-                } => Some((prompt, hint, preparation_label, metadata, auto_resolve)),
+                } => Some((target, prompt, hint, preparation_label, metadata, auto_resolve)),
                 _ => None,
             })
             .expect("uncommitted preset should dispatch a workspace review");
@@ -30699,7 +31213,8 @@ use code_core::protocol::OrderMeta;
         );
         assert!(auto_resolve, "auto resolve now defaults to on for workspace reviews");
 
-        assert!(metadata.is_none(), "workspace review should not attach metadata");
+        assert!(matches!(target, ReviewTarget::UncommittedChanges));
+        assert!(metadata.is_none());
     }
 
     #[test]
@@ -31417,20 +31932,6 @@ use code_core::protocol::OrderMeta;
     }
 
     #[test]
-    fn ctrl_g_dispatches_external_editor_event() {
-        let mut harness = ChatWidgetHarness::new();
-        let key_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
-        harness.chat().handle_key_event(key_event);
-        let events = harness.drain_events();
-        assert!(
-            events
-                .iter()
-                .any(|event| matches!(event, AppEvent::OpenExternalEditor { .. })),
-            "expected external editor request on Ctrl+G",
-        );
-    }
-
-    #[test]
     fn goal_entry_esc_exits_immediately_without_suggestion() {
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
@@ -31710,7 +32211,7 @@ use code_core::protocol::OrderMeta;
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
         chat.auto_state.set_phase(AutoRunPhase::Active);
         chat.auto_state.review_enabled = true;
@@ -31789,7 +32290,7 @@ use code_core::protocol::OrderMeta;
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
         chat.auto_state.set_phase(AutoRunPhase::Active);
         chat.auto_state.review_enabled = true;
@@ -31864,6 +32365,7 @@ use code_core::protocol::OrderMeta;
             AutoResolveAttemptLimit::try_new(0).unwrap();
 
         chat.start_review_with_scope(
+            ReviewTarget::UncommittedChanges,
             "Review workspace".to_string(),
             "workspace".to_string(),
             Some("Preparing code review request...".to_string()),
@@ -31962,6 +32464,7 @@ use code_core::protocol::OrderMeta;
             AutoResolveAttemptLimit::try_new(1).unwrap();
 
         chat.start_review_with_scope(
+            ReviewTarget::UncommittedChanges,
             "Review workspace".to_string(),
             "workspace".to_string(),
             Some("Preparing code review request...".to_string()),
@@ -32253,7 +32756,7 @@ use code_core::protocol::OrderMeta;
         let mut harness = ChatWidgetHarness::new();
         let chat = harness.chat();
 
-        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap();
+        let _stub_lock = AUTO_STUB_LOCK.lock().unwrap_or_else(|err| err.into_inner());
 
         chat.auto_state.set_phase(AutoRunPhase::Active);
         chat.auto_state.review_enabled = true;
@@ -32642,7 +33145,7 @@ use code_core::protocol::OrderMeta;
         insert_plain_cell(chat, &["new-1", "new-2"]);
 
         let viewport_height = 6;
-        chat.layout.scroll_offset.set(2);
+        chat.layout.scroll_offset = 2;
 
         let mut terminal = Terminal::new(TestBackend::new(40, viewport_height)).expect("terminal");
         terminal
@@ -32738,7 +33241,7 @@ use code_core::protocol::OrderMeta;
         insert_plain_cell(chat, &["new-1", "new-2"]);
 
         let viewport_height = 6;
-        chat.layout.scroll_offset.set(2);
+        chat.layout.scroll_offset = 2;
 
         {
             let mut terminal =
@@ -32779,7 +33282,7 @@ use code_core::protocol::OrderMeta;
 
         let max_scroll = chat.layout.last_max_scroll.get();
         assert!(max_scroll > 0, "expected overflow to produce a positive max scroll");
-        chat.layout.scroll_offset.set(max_scroll);
+        chat.layout.scroll_offset = max_scroll;
 
         let mut terminal = Terminal::new(TestBackend::new(40, 6)).expect("terminal");
         terminal
@@ -32787,7 +33290,7 @@ use code_core::protocol::OrderMeta;
             .expect("draw history at top boundary");
 
         let max_scroll = chat.layout.last_max_scroll.get();
-        let scroll_from_top = max_scroll.saturating_sub(chat.layout.scroll_offset.get());
+        let scroll_from_top = max_scroll.saturating_sub(chat.layout.scroll_offset);
         let effective = chat.history_render.adjust_scroll_to_content(scroll_from_top);
         let prefix = chat.history_render.prefix_sums.borrow();
         let mut start_idx = match prefix.binary_search(&effective) {
@@ -33267,11 +33770,61 @@ impl ChatWidget<'_> {
     fn auto_resolve_commit_sha(&self) -> Option<String> {
         self.auto_resolve_state
             .as_ref()
-            .and_then(|state| state.last_reviewed_commit.clone())
+            .and_then(|state| state.metadata.as_ref())
+            .and_then(|metadata| metadata.snapshot.as_ref())
+            .and_then(|snapshot| snapshot.snapshot_commit.clone())
     }
 
     fn auto_resolve_scope(&self) -> Option<String> {
-        None
+        self.auto_resolve_commit_sha()
+            .map(|_| "commit".to_string())
+    }
+
+    fn worktree_has_uncommitted_changes(&self) -> Option<bool> {
+        let output = Command::new("git")
+            .current_dir(&self.config.cwd)
+            .args(["status", "--short"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Some(!stdout.trim().is_empty())
+    }
+
+    fn current_head_commit_sha(&self) -> Option<String> {
+        let output = Command::new("git")
+            .current_dir(&self.config.cwd)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            None
+        } else {
+            Some(stdout)
+        }
+    }
+
+    fn commit_subject_for(&self, commit: &str) -> Option<String> {
+        let output = Command::new("git")
+            .current_dir(&self.config.cwd)
+            .args(["show", "-s", "--format=%s", commit])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            None
+        } else {
+            Some(stdout)
+        }
     }
 
     fn strip_context_sections(text: &str) -> String {
@@ -33611,8 +34164,37 @@ impl ChatWidget<'_> {
             base_prompt = base_prompt[..idx].trim_end().to_string();
         }
 
-        let next_hint = state_snapshot.hint.clone();
-        let next_metadata = state_snapshot.metadata.clone();
+        let mut next_hint = state_snapshot.hint.clone();
+        let mut next_metadata = state_snapshot.metadata.clone();
+
+        let is_commit_review = next_metadata
+            .as_ref()
+            .and_then(|meta| meta.snapshot.as_ref())
+            .and_then(|snapshot| snapshot.snapshot_commit.as_ref())
+            .is_some();
+
+        if is_commit_review
+        {
+            if let Some(new_commit) = self.current_head_commit_sha() {
+                let short_sha: String = new_commit.chars().take(7).collect();
+                let subject = self.commit_subject_for(&new_commit);
+                base_prompt = if let Some(subject) = subject {
+                    format!(
+                        "Review the code changes introduced by commit {new_commit} (\"{subject}\"). Provide prioritized, actionable findings."
+                    )
+                } else {
+                    format!(
+                        "Review the code changes introduced by commit {new_commit}. Provide prioritized, actionable findings."
+                    )
+                };
+                next_hint = format!("commit {short_sha}");
+                if let Some(meta) = next_metadata.as_mut() {
+                    if let Some(snapshot) = meta.snapshot.as_mut() {
+                        snapshot.snapshot_commit = Some(new_commit.clone());
+                    }
+                }
+            }
+        }
 
         let mut continued_prompt = base_prompt.clone();
         if let Some(last_review) = state_snapshot.last_review.as_ref() {
@@ -33622,9 +34204,29 @@ impl ChatWidget<'_> {
                 continued_prompt.push_str(&recap);
             }
         }
+        if let Some(commit) = state_snapshot
+            .metadata
+            .as_ref()
+            .and_then(|meta| meta.snapshot.as_ref())
+            .and_then(|snapshot| snapshot.snapshot_commit.clone())
+        {
+            if let Some(true) = self.worktree_has_uncommitted_changes() {
+                continued_prompt.push_str("\n\nNote: there are uncommitted changes in the working tree since commit ");
+                continued_prompt.push_str(&commit);
+                continued_prompt.push_str(
+                    ". Ensure the review covers the updated workspace rather than only the original commit snapshot.",
+                );
+            }
+        }
         continued_prompt.push_str("\n\n");
         continued_prompt.push_str(AUTO_RESOLVE_REVIEW_FOLLOWUP);
-        self.begin_review(continued_prompt, next_hint.clone(), Some(prep_label));
+        let review_target = next_metadata
+            .as_ref()
+            .and_then(|meta| meta.snapshot.as_ref())
+            .and_then(|snapshot| snapshot.snapshot_commit.clone())
+            .map(|sha| ReviewTarget::Commit { sha, title: None })
+            .unwrap_or(ReviewTarget::UncommittedChanges);
+        self.begin_review(review_target, continued_prompt, next_hint.clone(), Some(prep_label));
         if let Some(state) = self.auto_resolve_state.as_mut() {
             state.phase = AutoResolvePhase::WaitingForReview;
             state.prompt = base_prompt;
@@ -33824,7 +34426,7 @@ impl ChatWidget<'_> {
         let workspace_prompt = "Review the current workspace changes (staged, unstaged, and untracked files) and highlight bugs, regressions, risky patterns, and missing tests before merge.".to_string();
         let workspace_hint = "current workspace changes".to_string();
         let workspace_preparation = "Preparing code review for current changes".to_string();
-        let workspace_metadata = None;
+        let workspace_metadata: Option<ReviewContextMetadata> = None;
         let workspace_auto_resolve = self.config.tui.review_auto_resolve;
         items.push(SelectionItem {
             name: "Review uncommitted changes".to_string(),
@@ -33837,6 +34439,7 @@ impl ChatWidget<'_> {
                 let metadata = workspace_metadata.clone();
                 move |tx: &crate::app_event_sender::AppEventSender| {
                     tx.send(crate::app_event::AppEvent::RunReviewWithScope {
+                        target: ReviewTarget::UncommittedChanges,
                         prompt: prompt.clone(),
                         hint: hint.clone(),
                         preparation_label: Some(preparation.clone()),
@@ -34256,7 +34859,11 @@ impl ChatWidget<'_> {
         );
 
         #[cfg(test)]
-        if let Some(stub) = AUTO_REVIEW_STUB.lock().unwrap().as_mut() {
+        if let Some(stub) = AUTO_REVIEW_STUB
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .as_mut()
+        {
             (stub)();
             return;
         }
@@ -34570,7 +35177,7 @@ impl ChatWidget<'_> {
             line.push(' ');
             line.push_str(&format!("Merge {path_text} to apply fixes."));
         }
-        line.push_str(" [Ctrl+A] Show");
+        line.push_str(code_i18n::tr_plain("tui.auto_review.show_agents_hint"));
 
         let message_lines = vec![MessageLine {
             kind: MessageLineKind::Paragraph,
@@ -35057,7 +35664,18 @@ impl ChatWidget<'_> {
             let prompt_closure = prompt.clone();
             let hint_closure = hint.clone();
             let prep_closure = preparation.clone();
-            let metadata_option = None;
+            let metadata_option = Some(ReviewContextMetadata {
+                snapshot: Some(ReviewSnapshotInfo {
+                    snapshot_commit: Some(sha.clone()),
+                    branch: None,
+                    worktree_path: None,
+                    repo_root: None,
+                }),
+            });
+            let target = ReviewTarget::Commit {
+                sha: sha.clone(),
+                title: (!subject.is_empty()).then(|| subject.clone()),
+            };
             let auto_flag = auto_resolve;
             items.push(SelectionItem {
                 name: title,
@@ -35065,6 +35683,7 @@ impl ChatWidget<'_> {
                 is_current: false,
                 actions: vec![Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
                     tx.send(crate::app_event::AppEvent::RunReviewWithScope {
+                        target: target.clone(),
                         prompt: prompt_closure.clone(),
                         hint: hint_closure.clone(),
                         preparation_label: Some(prep_closure.clone()),
@@ -35162,7 +35781,10 @@ impl ChatWidget<'_> {
             let prompt_closure = prompt.clone();
             let hint_closure = hint.clone();
             let prep_closure = preparation.clone();
-            let metadata_option = None;
+            let metadata_option: Option<ReviewContextMetadata> = None;
+            let target = ReviewTarget::BaseBranch {
+                branch: branch_trimmed.to_string(),
+            };
             let auto_flag = auto_resolve;
             items.push(SelectionItem {
                 name: title,
@@ -35170,6 +35792,7 @@ impl ChatWidget<'_> {
                 is_current: false,
                 actions: vec![Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
                     tx.send(crate::app_event::AppEvent::RunReviewWithScope {
+                        target: target.clone(),
                         prompt: prompt_closure.clone(),
                         hint: hint_closure.clone(),
                         preparation_label: Some(prep_closure.clone()),
@@ -35265,12 +35888,14 @@ impl ChatWidget<'_> {
                                 let hint = format!("against {base_branch}");
                                 let preparation_label =
                                     Some(format!("Preparing code review against {base_branch}"));
-                                let metadata = None;
                                 tx.send(crate::app_event::AppEvent::RunReviewWithScope {
+                                    target: ReviewTarget::BaseBranch {
+                                        branch: base_branch.clone(),
+                                    },
                                     prompt,
                                     hint,
                                     preparation_label,
-                                    metadata,
+                                    metadata: None,
                                     auto_resolve: auto_flag,
                                 });
                                 return;
@@ -35278,6 +35903,7 @@ impl ChatWidget<'_> {
                         }
 
                         tx.send(crate::app_event::AppEvent::RunReviewWithScope {
+                            target: ReviewTarget::UncommittedChanges,
                             prompt: "Review the current workspace changes and highlight bugs, regressions, risky patterns, and missing tests before merge.".to_string(),
                             hint: "current workspace changes".to_string(),
                             preparation_label: Some("Preparing code review request...".to_string()),
@@ -35290,6 +35916,7 @@ impl ChatWidget<'_> {
             }
 
             self.start_review_with_scope(
+                ReviewTarget::UncommittedChanges,
                 "Review the current workspace changes and highlight bugs, regressions, risky patterns, and missing tests before merge.".to_string(),
                 "current workspace changes".to_string(),
                 Some("Preparing code review request...".to_string()),
@@ -35299,12 +35926,22 @@ impl ChatWidget<'_> {
         } else {
             let value = trimmed.to_string();
             let preparation = format!("Preparing code review for {value}");
-            self.start_review_with_scope(value.clone(), value, Some(preparation), None, auto_resolve);
+            self.start_review_with_scope(
+                ReviewTarget::Custom {
+                    instructions: value.clone(),
+                },
+                value.clone(),
+                value,
+                Some(preparation),
+                None,
+                auto_resolve,
+            );
         }
     }
 
     pub(crate) fn start_review_with_scope(
         &mut self,
+        target: ReviewTarget,
         prompt: String,
         hint: String,
         preparation_label: Option<String>,
@@ -35323,11 +35960,12 @@ impl ChatWidget<'_> {
             self.auto_resolve_state = None;
         }
 
-        self.begin_review(prompt, hint, preparation_label);
+        self.begin_review(target, prompt, hint, preparation_label);
     }
 
     fn begin_review(
         &mut self,
+        target: ReviewTarget,
         prompt: String,
         hint: String,
         preparation_label: Option<String>,
@@ -35347,18 +35985,10 @@ impl ChatWidget<'_> {
         self.insert_background_event_early(preparation_notice);
         self.request_redraw();
 
-        let user_facing_hint = if hint.trim().is_empty() {
-            None
-        } else {
-            Some(hint)
-        };
-        let target = code_protocol::protocol::ReviewTarget::Custom {
-            instructions: prompt.clone(),
-        };
         let review_request = ReviewRequest {
             target,
             prompt,
-            user_facing_hint,
+            user_facing_hint: (!hint.trim().is_empty()).then_some(hint),
         };
         match try_acquire_lock("review", &self.config.cwd) {
             Ok(Some(guard)) => {
@@ -36695,7 +37325,7 @@ impl ChatWidget<'_> {
             cwd: self.config.cwd.clone(),
             resume_path: None,
             demo_developer_message: self.config.demo_developer_message.clone(),
-            dynamic_tools: Vec::new(),
+            dynamic_tools: self.config.dynamic_tools.clone(),
         };
         self.submit_op(op);
 
@@ -36893,7 +37523,7 @@ impl ChatWidget<'_> {
                     Style::default().fg(crate::colors::text()),
                 ),
                 Span::styled(
-                    "— Ctrl+B to close",
+                    code_i18n::tr_plain("tui.browser_overlay.ctrl_b_close"),
                     Style::default().fg(crate::colors::text_dim()),
                 ),
             ]))
@@ -37257,11 +37887,290 @@ impl ChatWidget<'_> {
         overlay.render(overlay_area, buf);
     }
 
+    fn render_lang_overlay(
+        &self,
+        frame_area: Rect,
+        history_area: Rect,
+        bottom_pane_area: Rect,
+        buf: &mut Buffer,
+        overlay: &LangOverlay,
+    ) {
+        use ratatui::layout::{Constraint, Layout, Margin};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+
+        let scrim_style = Style::default()
+            .bg(crate::colors::overlay_scrim())
+            .fg(crate::colors::text_dim());
+        fill_rect(buf, frame_area, None, scrim_style);
+
+        let padding = 1u16;
+        let footer_reserved = bottom_pane_area.height.min(1);
+        let overlay_bottom =
+            (bottom_pane_area.y + bottom_pane_area.height).saturating_sub(footer_reserved);
+        let overlay_height = overlay_bottom
+            .saturating_sub(history_area.y)
+            .max(1)
+            .min(frame_area.height);
+
+        let window_area = Rect {
+            x: history_area.x + padding,
+            y: history_area.y,
+            width: history_area.width.saturating_sub(padding * 2),
+            height: overlay_height,
+        };
+
+        Clear.render(window_area, buf);
+
+        let t_dim = Style::default().fg(crate::colors::text_dim());
+        let t_fg = Style::default().fg(crate::colors::text());
+
+        let title_text = code_i18n::tr_plain("tui.lang.title");
+        let select_label = code_i18n::tr_plain("tui.common.select_label");
+        let apply_label = code_i18n::tr_plain("tui.common.apply_label");
+        let close_label = code_i18n::tr_plain("tui.common.close_label");
+        let title = Line::from(vec![
+            Span::styled(" ", t_dim),
+            Span::styled(title_text, t_fg),
+            Span::styled(" ——— ", t_dim),
+            Span::styled("↑/↓", t_fg),
+            Span::styled(format!(" {select_label} "), t_dim),
+            Span::styled("Enter", t_fg),
+            Span::styled(format!(" {apply_label} "), t_dim),
+            Span::styled("Esc", t_fg),
+            Span::styled(format!(" {close_label} "), t_dim),
+        ]);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(Style::default().bg(crate::colors::background()))
+            .border_style(
+                Style::default()
+                    .fg(crate::colors::border())
+                    .bg(crate::colors::background()),
+            );
+
+        let inner = block.inner(window_area);
+        block.render(window_area, buf);
+
+        let inner_bg = Style::default().bg(crate::colors::background());
+        for y in inner.y..inner.y + inner.height {
+            for x in inner.x..inner.x + inner.width {
+                buf[(x, y)].set_style(inner_bg);
+            }
+        }
+
+        let padded = inner.inner(Margin::new(1, 1));
+        let footer_height = padded.height.min(3);
+        let list_height = padded.height.saturating_sub(footer_height).max(1);
+        let [list_area, footer_area] =
+            Layout::vertical([Constraint::Length(list_height), Constraint::Length(footer_height)])
+                .areas(padded);
+
+        let options = LangOption::all();
+        let items: Vec<ListItem<'static>> = options
+            .into_iter()
+            .enumerate()
+            .map(|(idx, option)| {
+                let prefix = format!("{} ", idx + 1);
+                let line = Line::from(vec![
+                    Span::styled(prefix, t_dim),
+                    Span::styled(code_i18n::language_self_name(option.to_language()), t_fg),
+                ]);
+                ListItem::new(line)
+            })
+            .collect();
+
+        let list = List::new(items)
+            .highlight_style(
+                Style::default()
+                    .fg(crate::colors::text())
+                    .bg(crate::colors::overlay_scrim())
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("▶ ");
+
+        let mut state = ListState::default();
+        state.select(Some(overlay.selected.min(options.len().saturating_sub(1))));
+        ratatui::widgets::StatefulWidget::render(list, list_area, buf, &mut state);
+
+        let hint = code_i18n::tr_plain("tui.lang.hint");
+        if footer_height == 1 {
+            Paragraph::new(vec![Line::from(vec![Span::styled(hint, t_dim)])]).render(footer_area, buf);
+        } else {
+            let shortcuts_label = code_i18n::tr_plain("tui.common.shortcuts_prefix");
+            Paragraph::new(vec![
+                Line::from(vec![Span::styled(hint, t_dim)]),
+                Line::from(vec![
+                    Span::styled(shortcuts_label, t_dim),
+                    Span::styled("1", t_fg),
+                    Span::styled("/", t_dim),
+                    Span::styled("2", t_fg),
+                ]),
+            ])
+            .render(footer_area, buf);
+        }
+    }
+
     fn browser_title(&self) -> &'static str {
         if self.browser_is_external {
             "Chrome"
         } else {
             "Browser"
+        }
+    }
+
+    fn render_mode_overlay(
+        &self,
+        frame_area: Rect,
+        history_area: Rect,
+        bottom_pane_area: Rect,
+        buf: &mut Buffer,
+        overlay: &ModeOverlay,
+    ) {
+        use ratatui::layout::{Constraint, Layout, Margin};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+
+        let scrim_style = Style::default()
+            .bg(crate::colors::overlay_scrim())
+            .fg(crate::colors::text_dim());
+        fill_rect(buf, frame_area, None, scrim_style);
+
+        let padding = 1u16;
+        let footer_reserved = bottom_pane_area.height.min(1);
+        let overlay_bottom =
+            (bottom_pane_area.y + bottom_pane_area.height).saturating_sub(footer_reserved);
+        let overlay_height = overlay_bottom
+            .saturating_sub(history_area.y)
+            .max(1)
+            .min(frame_area.height);
+
+        let window_area = Rect {
+            x: history_area.x + padding,
+            y: history_area.y,
+            width: history_area.width.saturating_sub(padding * 2),
+            height: overlay_height,
+        };
+
+        Clear.render(window_area, buf);
+
+        let t_dim = Style::default().fg(crate::colors::text_dim());
+        let t_fg = Style::default().fg(crate::colors::text());
+        let ui_language = code_i18n::current_language();
+
+        let title_text = code_i18n::tr(ui_language, "tui.mode.title");
+        let title = Line::from(vec![
+            Span::styled(" ", t_dim),
+            Span::styled(title_text, t_fg),
+            Span::styled(" — ", t_dim),
+            Span::styled("↑/↓", t_fg),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.common.select")),
+                t_dim,
+            ),
+            Span::styled("Enter", t_fg),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.common.apply")),
+                t_dim,
+            ),
+            Span::styled("Esc", t_fg),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.common.close")),
+                t_dim,
+            ),
+        ]);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(Style::default().bg(crate::colors::background()))
+            .border_style(
+                Style::default()
+                    .fg(crate::colors::border())
+                    .bg(crate::colors::background()),
+            );
+
+        let inner = block.inner(window_area);
+        block.render(window_area, buf);
+
+        let inner_bg = Style::default().bg(crate::colors::background());
+        for y in inner.y..inner.y + inner.height {
+            for x in inner.x..inner.x + inner.width {
+                buf[(x, y)].set_style(inner_bg);
+            }
+        }
+
+        let padded = inner.inner(Margin::new(1, 1));
+        let footer_height = padded.height.min(2);
+        let list_height = padded.height.saturating_sub(footer_height).max(1);
+        let [list_area, footer_area] =
+            Layout::vertical([Constraint::Length(list_height), Constraint::Length(footer_height)])
+                .areas(padded);
+
+        let options = ModeOption::all();
+        let items: Vec<ListItem<'static>> = options
+            .into_iter()
+            .enumerate()
+            .map(|(idx, option)| {
+                let prefix = format!("{} ", idx + 1);
+                let label_key = match option {
+                    ModeOption::DevFast => "tui.mode.option.fast",
+                    ModeOption::Strict => "tui.mode.option.strict",
+                };
+                let line = Line::from(vec![
+                    Span::styled(prefix, t_dim),
+                    Span::styled(code_i18n::tr(ui_language, label_key), t_fg),
+                ]);
+                ListItem::new(line)
+            })
+            .collect();
+
+        let list = List::new(items)
+            .highlight_style(
+                Style::default()
+                    .fg(crate::colors::text())
+                    .bg(crate::colors::overlay_scrim())
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("▶ ");
+
+        let mut state = ListState::default();
+        state.select(Some(overlay.selected.min(1)));
+        ratatui::widgets::StatefulWidget::render(list, list_area, buf, &mut state);
+
+        let cwd = self.config.cwd.to_string_lossy();
+        let path_display = Self::truncate_to_width_with_leading_ellipsis(
+            cwd.as_ref(),
+            footer_area.width as usize,
+        );
+        let path_line = Line::from(vec![Span::styled(path_display, t_fg)]);
+
+        let hint = code_i18n::tr(ui_language, "tui.mode.hint");
+        match footer_height {
+            0 => {}
+            1 => {
+                Paragraph::new(vec![path_line]).render(footer_area, buf);
+            }
+            2 => {
+                Paragraph::new(vec![Line::from(vec![Span::styled(hint, t_dim)]), path_line])
+                    .render(footer_area, buf);
+            }
+            _ => {
+                let shortcuts_label = code_i18n::tr(ui_language, "tui.common.shortcuts_prefix");
+                Paragraph::new(vec![
+                    Line::from(vec![Span::styled(hint, t_dim)]),
+                    Line::from(vec![
+                        Span::styled(shortcuts_label, t_dim),
+                        Span::styled("1", t_fg),
+                        Span::styled("/", t_dim),
+                        Span::styled("2", t_fg),
+                    ]),
+                    path_line,
+                ])
+                .render(footer_area, buf);
+            }
         }
     }
 
@@ -37300,9 +38209,16 @@ impl ChatWidget<'_> {
         };
         Clear.render(window_area, buf);
 
+        let ui_language = code_i18n::current_language();
         let title_spans = vec![
-            Span::styled(" Agents ", Style::default().fg(crate::colors::text())),
-            Span::styled("— Ctrl+A to close", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {} ", code_i18n::tr(ui_language, "tui.agents.title")),
+                Style::default().fg(crate::colors::text()),
+            ),
+            Span::styled(
+                code_i18n::tr(ui_language, "tui.agents.title.close_hint"),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ];
 
         let block = Block::default()
@@ -37368,14 +38284,37 @@ impl ChatWidget<'_> {
         if tab_height > 0 {
             let filter_row = tabs_area;
             let mut spans: Vec<Span> = Vec::new();
-            spans.push(Span::styled("Filter", filter_title_style));
+            spans.push(Span::styled(
+                code_i18n::tr(ui_language, "tui.agents.filter.label"),
+                filter_title_style,
+            ));
             spans.push(Span::raw("   "));
             let tabs = [
-                (AgentsTerminalTab::All, "1", "All"),
-                (AgentsTerminalTab::Running, "2", "Running"),
-                (AgentsTerminalTab::Failed, "3", "Failed"),
-                (AgentsTerminalTab::Completed, "4", "Done"),
-                (AgentsTerminalTab::Review, "5", "Review"),
+                (
+                    AgentsTerminalTab::All,
+                    "1",
+                    code_i18n::tr(ui_language, "tui.agents.tab.all"),
+                ),
+                (
+                    AgentsTerminalTab::Running,
+                    "2",
+                    code_i18n::tr(ui_language, "tui.agents.tab.running"),
+                ),
+                (
+                    AgentsTerminalTab::Failed,
+                    "3",
+                    code_i18n::tr(ui_language, "tui.agents.tab.failed"),
+                ),
+                (
+                    AgentsTerminalTab::Completed,
+                    "4",
+                    code_i18n::tr(ui_language, "tui.agents.tab.done"),
+                ),
+                (
+                    AgentsTerminalTab::Review,
+                    "5",
+                    code_i18n::tr(ui_language, "tui.agents.tab.review"),
+                ),
             ];
             for (idx, (tab, number, label)) in tabs.iter().enumerate() {
                 if idx > 0 {
@@ -37395,12 +38334,17 @@ impl ChatWidget<'_> {
                 spans.push(Span::styled(format!("{number} {label}"), style));
             }
             let sort_label = match self.agents_terminal.sort_mode {
-                AgentsSortMode::Recent => "Recent",
-                AgentsSortMode::RunningFirst => "Running",
-                AgentsSortMode::Name => "Name",
+                AgentsSortMode::Recent => code_i18n::tr(ui_language, "tui.agents.sort.recent"),
+                AgentsSortMode::RunningFirst => {
+                    code_i18n::tr(ui_language, "tui.agents.sort.running")
+                }
+                AgentsSortMode::Name => code_i18n::tr(ui_language, "tui.agents.sort.name"),
             };
             let sort_spans = vec![
-                Span::styled("Sort: ", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(
+                    code_i18n::tr(ui_language, "tui.agents.sort.label"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ),
                 Span::raw("( "),
                 Span::styled(
                     format!("{sort_label} ▼"),
@@ -37537,9 +38481,9 @@ impl ChatWidget<'_> {
 
         if items.is_empty() {
             let empty_text = if self.agents_terminal.order.is_empty() {
-                "No agents yet"
+                code_i18n::tr(ui_language, "tui.agents.empty.none")
             } else {
-                "No agents match filters"
+                code_i18n::tr(ui_language, "tui.agents.empty.no_match")
             };
             items.push(ListItem::new(Line::from(vec![Span::styled(
                 empty_text,
@@ -37621,6 +38565,10 @@ impl ChatWidget<'_> {
 
                     let id_short = format!("#{}", agent_id.chars().take(7).collect::<String>());
                     let status_chip = format!("{} {}", agent_status_icon(status.clone()), agent_status_label(status));
+                    let ui_language = code_i18n::current_language();
+                    let status_prefix = code_i18n::tr(ui_language, "tui.agents.meta.status_prefix");
+                    let model_prefix = code_i18n::tr(ui_language, "tui.agents.meta.model_prefix");
+                    let id_prefix = code_i18n::tr(ui_language, "tui.agents.meta.id_prefix");
                     let model_meta = entry
                         .model
                         .as_ref()
@@ -37628,25 +38576,32 @@ impl ChatWidget<'_> {
                         .unwrap_or_else(|| display_name.clone());
                     let mut meta_line: Vec<Span> = vec![
                         Span::raw(" "),
-                        Span::styled("Status:", Style::default().fg(crate::colors::text_dim())),
+                        Span::styled(
+                            status_prefix,
+                            Style::default().fg(crate::colors::text_dim()),
+                        ),
                         Span::raw(" "),
                         Span::styled(status_chip, Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
                         Span::raw("   "),
-                        Span::styled("Model:", Style::default().fg(crate::colors::text_dim())),
+                        Span::styled(model_prefix, Style::default().fg(crate::colors::text_dim())),
                         Span::raw(" "),
                         Span::styled(
                             model_meta,
                             Style::default().fg(crate::colors::text()),
                         ),
                         Span::raw("   "),
-                        Span::styled("ID:", Style::default().fg(crate::colors::text_dim())),
+                        Span::styled(id_prefix, Style::default().fg(crate::colors::text_dim())),
                         Span::raw(" "),
                         Span::styled(id_short, Style::default().fg(crate::colors::text_dim())),
                     ];
                     if let Some(batch_id) = entry.batch_id.as_ref() {
                         meta_line.push(Span::raw("   "));
                         meta_line.push(Span::styled(
-                            format!("Batch: {}", short_batch_label(batch_id)),
+                            code_i18n::tr_args(
+                                ui_language,
+                                "tui.agents.meta.batch_prefix",
+                                &[("label", &short_batch_label(batch_id))],
+                            ),
                             Style::default().fg(crate::colors::text_dim()),
                         ));
                     }
@@ -37796,7 +38751,7 @@ impl ChatWidget<'_> {
             let hint_line = if let Some(pending) = self.agents_terminal.pending_stop.as_ref() {
                 Line::from(vec![
                     Span::styled(
-                        "Stop agent? ",
+                        code_i18n::tr(ui_language, "tui.agents.stop.prompt"),
                         Style::default()
                             .fg(crate::colors::error())
                             .add_modifier(Modifier::BOLD),
@@ -37806,28 +38761,49 @@ impl ChatWidget<'_> {
                         Style::default().fg(crate::colors::text()),
                     ),
                     Span::styled(
-                        " — Enter/Y stop  ",
+                        code_i18n::tr(ui_language, "tui.agents.stop.confirm"),
                         Style::default().fg(crate::colors::text_dim()),
                     ),
                     Span::styled(
-                        "Esc/N cancel",
+                        code_i18n::tr(ui_language, "tui.agents.stop.cancel"),
                         Style::default().fg(crate::colors::text_dim()),
                     ),
                 ])
             } else {
                 Line::from(vec![
                     Span::styled("[↑/↓/←/→]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Navigate   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.navigate")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[1-5]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Filter   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.filter")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[S]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Sort   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.sort")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[H/A]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Toggle Details   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(
+                            " {}   ",
+                            code_i18n::tr(ui_language, "tui.agents.footer.toggle_details")
+                        ),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[X]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Stop   ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}   ", code_i18n::tr(ui_language, "tui.agents.footer.stop")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled("[Ctrl+A]", Style::default().fg(crate::colors::function())),
-                    Span::styled(" Exit", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!(" {}", code_i18n::tr(ui_language, "tui.agents.footer.exit")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                 ])
             };
             Paragraph::new(hint_line)
@@ -37862,7 +38838,7 @@ impl ChatWidget<'_> {
         // Agent status block
         let agent_block = Block::default()
             .borders(Borders::ALL)
-            .title(" Agents ")
+            .title(format!(" {} ", code_i18n::tr_plain("tui.agents.title")))
             .border_style(Style::default().fg(crate::colors::border()));
 
         let inner_agent = agent_block.inner(area);
@@ -38363,6 +39339,10 @@ impl WidgetRef for &ChatWidget<'_> {
         let history_area = layout_areas.get(1).copied().unwrap_or(area);
         let bottom_pane_area = layout_areas.get(2).copied().unwrap_or(area);
 
+        // Click targets are per-frame (e.g. [OPEN] buttons in history cells).
+        // Clear before rendering so stale targets can't be clicked after scroll/layout changes.
+        self.open_click_targets.borrow_mut().clear();
+
         // Record the effective bottom pane height for buffer-mode scrollback inserts.
         self.layout
             .last_bottom_reserved_rows
@@ -38691,7 +39671,7 @@ impl WidgetRef for &ChatWidget<'_> {
         }
 
         let composer_rows = self.layout.last_bottom_reserved_rows.get();
-        let ensure_footer_space = self.layout.scroll_offset.get() == 0
+        let ensure_footer_space = self.layout.scroll_offset == 0
             && composer_rows > 0
             && base_total_height >= viewport_rows
             && request_count > 0;
@@ -38732,11 +39712,8 @@ impl WidgetRef for &ChatWidget<'_> {
         }
         let overscan_extra = total_height.saturating_sub(base_total_height);
         // Calculate scroll position and vertical alignment
-        // Preserve a stable viewport anchor when history grows while the user is scrolled up.
+        // Stabilize viewport when input area height changes while scrolled up.
         let prev_viewport_h = self.layout.last_history_viewport_height.get();
-        let prev_max_scroll = self.layout.last_max_scroll.get();
-        let prev_scroll_offset = self.layout.scroll_offset.get().min(prev_max_scroll);
-        let prev_scroll_from_top = prev_max_scroll.saturating_sub(prev_scroll_offset);
         if prev_viewport_h == 0 {
             // Initialize on first render
             self.layout
@@ -38755,18 +39732,9 @@ impl WidgetRef for &ChatWidget<'_> {
             // scroll_offset is measured from the bottom (0 = bottom/newest)
             // Convert to distance from the top for rendering math.
             let max_scroll = total_height.saturating_sub(content_area.height);
-            if self.layout.scroll_offset.get() > 0 && max_scroll != prev_max_scroll {
-                // If the user has scrolled up and the history height changes (e.g. new output
-                // arrives while streaming), keep the same content anchored at the top of the
-                // viewport by adjusting our bottom-anchored scroll offset.
-                self.layout
-                    .scroll_offset
-                    .set(max_scroll.saturating_sub(prev_scroll_from_top));
-            }
-
-            // Update cache and clamp for display only.
+            // Update cache and clamp for display only
             self.layout.last_max_scroll.set(max_scroll);
-            let clamped_scroll_offset = self.layout.scroll_offset.get().min(max_scroll);
+            let clamped_scroll_offset = self.layout.scroll_offset.min(max_scroll);
             let mut scroll_from_top = max_scroll.saturating_sub(clamped_scroll_offset);
 
             if overscan_extra > 0 && clamped_scroll_offset == 0 {
@@ -38793,6 +39761,21 @@ impl WidgetRef for &ChatWidget<'_> {
                 initial_scroll_from_top = scroll_from_top,
                 "scrollback pre-adjust scroll position",
             );
+
+            // Viewport stabilization: when user is scrolled up (offset > 0) and the
+            // history viewport height changes due to the input area growing/shrinking,
+            // adjust the scroll_from_top to keep the top line steady on screen.
+            if clamped_scroll_offset > 0 {
+                let prev_h = prev_viewport_h as i32;
+                let curr_h = content_area.height as i32;
+                let delta_h = prev_h - curr_h; // positive if viewport shrank
+                if delta_h != 0 {
+                    // Adjust in the opposite direction to keep the same top anchor
+                    let sft = scroll_from_top as i32 - delta_h;
+                    let sft = sft.clamp(0, max_scroll as i32) as u16;
+                    scroll_from_top = sft;
+                }
+            }
 
             // If our scroll origin landed on a spacer row between cells, nudge it up so
             // the viewport starts with real content instead of an empty separator.
@@ -38964,6 +39947,7 @@ impl WidgetRef for &ChatWidget<'_> {
         } else {
             None
         };
+        #[cfg(debug_assertions)]
         #[derive(Debug)]
         struct HeightMismatch {
             history_id: HistoryId,
@@ -38973,6 +39957,7 @@ impl WidgetRef for &ChatWidget<'_> {
             preview: String,
         }
 
+        #[cfg(debug_assertions)]
         let mut height_mismatches: Vec<HeightMismatch> = Vec::new();
         let is_collapsed_reasoning_at = |idx: usize| {
             if idx >= request_count {
@@ -39258,7 +40243,6 @@ impl WidgetRef for &ChatWidget<'_> {
                             "⚙" => crate::colors::info(),        // tool working
                             "✔" => crate::colors::success(),     // tool complete
                             "✖" => crate::colors::error(),       // error
-                            "⚠" => crate::colors::warning(),     // warning notice
                             "★" => crate::colors::text_bright(), // notice/popular
                             _ => crate::colors::text_dim(),
                         }
@@ -39335,6 +40319,39 @@ impl WidgetRef for &ChatWidget<'_> {
                         );
                     } else {
                         item.render_with_skip(item_area, buf, skip_rows);
+                    }
+                }
+
+                // Collect per-frame click targets (e.g. [OPEN] buttons) for mouse handling.
+                if let Some(plain) = item
+                    .as_any()
+                    .downcast_ref::<crate::history_cell::PlainHistoryCell>()
+                {
+                    let requested_width = item_area.width;
+                    let effective_width = if matches!(item.kind(), crate::history_cell::HistoryCellType::User) {
+                        requested_width.saturating_sub(crate::layout_consts::USER_HISTORY_RIGHT_PAD.into())
+                    } else {
+                        requested_width
+                    };
+                    let buttons = plain.open_buttons_for_area(requested_width, effective_width);
+                    for btn in buttons {
+                        if btn.y < skip_rows {
+                            continue;
+                        }
+                        let local_y = btn.y.saturating_sub(skip_rows);
+                        if local_y >= item_area.height {
+                            continue;
+                        }
+                        let width = btn.x_end.saturating_sub(btn.x_start).max(1);
+                        self.open_click_targets.borrow_mut().push(OpenClickTarget {
+                            rect: Rect {
+                                x: item_area.x.saturating_add(btn.x_start),
+                                y: item_area.y.saturating_add(local_y),
+                                width,
+                                height: 1,
+                            },
+                            target: btn.target,
+                        });
                     }
                 }
 
@@ -39439,6 +40456,7 @@ impl WidgetRef for &ChatWidget<'_> {
 
         drop(ps_ref);
 
+        #[cfg(debug_assertions)]
         if let Some(first) = height_mismatches.first() {
             for mismatch in &height_mismatches {
                 tracing::error!(
@@ -39903,6 +40921,10 @@ impl WidgetRef for &ChatWidget<'_> {
         if terminal_overlay_none && !agents_terminal_active {
             if let Some(overlay) = self.settings.overlay.as_ref() {
                 self.render_settings_overlay(area, history_area, buf, overlay);
+            } else if let Some(overlay) = &self.lang.overlay {
+                self.render_lang_overlay(area, history_area, bottom_pane_area, buf, overlay);
+            } else if let Some(overlay) = &self.mode.overlay {
+                self.render_mode_overlay(area, history_area, bottom_pane_area, buf, overlay);
             } else if let Some(overlay) = &self.diffs.overlay {
                 // Global scrim: dim the whole background to draw focus to the viewer
                 // We intentionally do this across the entire widget area rather than just the
@@ -40200,9 +41222,10 @@ impl WidgetRef for &ChatWidget<'_> {
                             height: h,
                         };
                         Clear.render(dialog, buf);
+                        let ui_language = code_i18n::current_language();
                         let dlg_block = Block::default()
                             .borders(Borders::ALL)
-                            .title("Confirm Undo")
+                            .title(code_i18n::tr(ui_language, "tui.undo.confirm.title"))
                             .style(
                                 Style::default()
                                     .bg(crate::colors::background())
@@ -40219,9 +41242,9 @@ impl WidgetRef for &ChatWidget<'_> {
                             }
                         }
                         let lines = vec![
-                            ratatui::text::Line::from("Are you sure you want to undo this diff?"),
+                            ratatui::text::Line::from(code_i18n::tr(ui_language, "tui.undo.confirm.question")),
                             ratatui::text::Line::from(
-                                "Press Enter to confirm • Esc to cancel".to_string().dim(),
+                                code_i18n::tr(ui_language, "tui.undo.confirm.hint").dim(),
                             ),
                         ];
                         let para = Paragraph::new(RtText::from(lines))
@@ -40239,6 +41262,7 @@ impl WidgetRef for &ChatWidget<'_> {
             // Render help overlay (covering the history area) if active
             if self.settings.overlay.is_none() {
                 if let Some(overlay) = &self.help.overlay {
+                    let ui_language = code_i18n::current_language();
                     // Global scrim across widget
                     let scrim_bg = Style::default()
                         .bg(crate::colors::overlay_scrim())
@@ -40256,6 +41280,8 @@ impl WidgetRef for &ChatWidget<'_> {
                         height: history_area.height,
                     };
                     Clear.render(window_area, buf);
+                    let guide_title = code_i18n::tr(ui_language, "tui.help.title");
+                    let close_label = code_i18n::tr(ui_language, "tui.common.close");
                     let block = Block::default()
                         .borders(Borders::ALL)
                         .title(ratatui::text::Line::from(vec![
@@ -40264,7 +41290,7 @@ impl WidgetRef for &ChatWidget<'_> {
                                 Style::default().fg(crate::colors::text_dim()),
                             ),
                             ratatui::text::Span::styled(
-                                "Guide",
+                                guide_title,
                                 Style::default().fg(crate::colors::text()),
                             ),
                             ratatui::text::Span::styled(
@@ -40276,7 +41302,7 @@ impl WidgetRef for &ChatWidget<'_> {
                                 Style::default().fg(crate::colors::text()),
                             ),
                             ratatui::text::Span::styled(
-                                " close ",
+                                format!(" {close_label} "),
                                 Style::default().fg(crate::colors::text_dim()),
                             ),
                         ]))
@@ -40509,7 +41535,7 @@ struct StreamState {
 #[derive(Default)]
 struct LayoutState {
     // Scroll offset from bottom (0 = bottom)
-    scroll_offset: Cell<u16>,
+    scroll_offset: u16,
     // Cached max scroll from last render
     last_max_scroll: std::cell::Cell<u16>,
     // Track last viewport height of the history content area
@@ -40531,6 +41557,16 @@ struct DiffsState {
     overlay: Option<DiffOverlay>,
     confirm: Option<DiffConfirm>,
     body_visible_rows: std::cell::Cell<u16>,
+}
+
+#[derive(Default)]
+struct LangState {
+    overlay: Option<LangOverlay>,
+}
+
+#[derive(Default)]
+struct ModeState {
+    overlay: Option<ModeOverlay>,
 }
 
 #[derive(Default)]
@@ -40626,6 +41662,72 @@ struct HelpOverlay {
 impl HelpOverlay {
     fn new(lines: Vec<RtLine<'static>>) -> Self {
         Self { lines, scroll: 0 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LangOption {
+    ZhCn,
+    En,
+}
+
+impl LangOption {
+    fn all() -> [Self; 2] {
+        [Self::ZhCn, Self::En]
+    }
+
+    fn to_language(self) -> code_i18n::Language {
+        match self {
+            Self::En => code_i18n::Language::En,
+            Self::ZhCn => code_i18n::Language::ZhCn,
+        }
+    }
+}
+
+struct LangOverlay {
+    selected: usize,
+}
+
+impl LangOverlay {
+    fn new() -> Self {
+        let current = code_i18n::current_language();
+        let selected = LangOption::all()
+            .iter()
+            .position(|opt| opt.to_language() == current)
+            .unwrap_or(0);
+        Self { selected }
+    }
+
+    fn current(&self) -> LangOption {
+        LangOption::all()[self.selected.min(1)]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ModeOption {
+    DevFast,
+    Strict,
+}
+
+impl ModeOption {
+    fn all() -> [Self; 2] {
+        [Self::DevFast, Self::Strict]
+    }
+}
+
+struct ModeOverlay {
+    selected: usize,
+}
+
+impl ModeOverlay {
+    fn new(validation_enabled: bool) -> Self {
+        Self {
+            selected: if validation_enabled { 1 } else { 0 },
+        }
+    }
+
+    fn current(&self) -> ModeOption {
+        ModeOption::all()[self.selected.min(1)]
     }
 }
 
@@ -40875,7 +41977,7 @@ impl ChatWidget<'_> {
             }
             Err(_) => {
                 let msg = format!(
-                    "✅ {} TUI notifications (not persisted: CODE_HOME/CODEX_HOME not found)",
+                    "✅ {} TUI notifications (not persisted: config directory unavailable)",
                     if enabled { "Enabled" } else { "Disabled" }
                 );
                 self.push_background_tail(msg);
@@ -40970,7 +42072,12 @@ impl ChatWidget<'_> {
                 }
             },
             Err(e) => {
-                let msg = format!("Failed to locate CODEX_HOME: {}", e);
+                let ui_language = code_i18n::current_language();
+                let msg = code_i18n::tr_args(
+                    ui_language,
+                    "tui.config.find_code_home_failed",
+                    &[("error", &e.to_string())],
+                );
                 self.history_push_plain_state(history_cell::new_error_event(msg));
             }
         }

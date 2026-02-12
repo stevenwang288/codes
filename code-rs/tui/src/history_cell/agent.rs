@@ -99,11 +99,11 @@ impl AgentStatusKind {
 
     fn label(self) -> &'static str {
         match self {
-            AgentStatusKind::Running => "Running",
-            AgentStatusKind::Completed => "Completed",
-            AgentStatusKind::Failed => "Failed",
-            AgentStatusKind::Cancelled => "Cancelled",
-            AgentStatusKind::Pending => "Pending",
+            AgentStatusKind::Running => code_i18n::tr_plain("tui.state.running"),
+            AgentStatusKind::Completed => code_i18n::tr_plain("tui.state.completed"),
+            AgentStatusKind::Failed => code_i18n::tr_plain("tui.state.failed"),
+            AgentStatusKind::Cancelled => code_i18n::tr_plain("tui.state.cancelled"),
+            AgentStatusKind::Pending => code_i18n::tr_plain("tui.state.pending"),
         }
     }
 
@@ -414,10 +414,12 @@ impl AgentRunCell {
         }
 
         if title.is_none() {
-            let agents_segment = if remaining >= string_width("Agents") {
-                "Agents".to_string()
+            let ui_language = code_i18n::current_language();
+            let agents_label = code_i18n::tr(ui_language, "tui.agents_overview.section.agents");
+            let agents_segment = if remaining >= string_width(agents_label) {
+                agents_label.to_string()
             } else {
-                let truncated = truncate_with_ellipsis("Agents", remaining);
+                let truncated = truncate_with_ellipsis(agents_label, remaining);
                 let trimmed = truncated.trim_end();
                 if trimmed.is_empty() {
                     truncated
@@ -645,8 +647,8 @@ impl AgentRunCell {
 
     fn write_mode_label(&self) -> Option<&'static str> {
         match self.write_enabled {
-            Some(true) => Some("Write Agents"),
-            Some(false) => Some("Read Agents"),
+            Some(true) => Some(code_i18n::tr_plain("tui.agent_card.write_agents")),
+            Some(false) => Some(code_i18n::tr_plain("tui.agent_card.read_agents")),
             None => None,
         }
     }
@@ -673,7 +675,11 @@ impl AgentRunCell {
                 lines.push(format!("{}. {}", index + 1, step));
             }
             if self.plan.len() > MAX_PLAN_LINES {
-                lines.push(format!("(+{} more)", self.plan.len() - MAX_PLAN_LINES));
+                lines.push(code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.agent_card.more_steps",
+                    &[("count", &(self.plan.len() - MAX_PLAN_LINES).to_string())],
+                ));
             }
         }
 
@@ -697,11 +703,15 @@ impl AgentRunCell {
         }
 
         let mut rows = Vec::new();
-        rows.push(self.section_heading_row("Agents", body_width, style));
+        rows.push(self.section_heading_row(
+            code_i18n::tr_plain("tui.agents_overview.section.agents"),
+            body_width,
+            style,
+        ));
 
         if self.agents.is_empty() {
             rows.push(self.body_text_row_with_indent(
-                "No agent updates yet",
+                code_i18n::tr_plain("tui.agent_card.no_updates_yet"),
                 body_width,
                 style,
                 secondary_text_style(style),

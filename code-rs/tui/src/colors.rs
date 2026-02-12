@@ -285,6 +285,24 @@ pub(crate) fn assistant_bg() -> Color {
     }
 }
 
+/// Background for user messages: theme background moved 8% toward theme primary.
+pub(crate) fn user_bg() -> Color {
+    match palette_mode() {
+        PaletteMode::Ansi16 => {
+            if is_dark_background(current_theme().background) {
+                Color::Indexed(6)
+            } else {
+                Color::Indexed(12)
+            }
+        }
+        PaletteMode::Ansi256 => {
+            let bg = current_theme().background;
+            let primary = current_theme().primary;
+            mix_toward(bg, primary, 0.08)
+        }
+    }
+}
+
 /// Background for mid-turn assistant messages.
 ///
 /// Uses a lighter tint than `assistant_bg` so progress inserts feel secondary.

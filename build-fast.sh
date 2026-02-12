@@ -225,8 +225,11 @@ else
     CACHE_HOME="${REPO_ROOT}/.code"
   fi
 fi
+
+# Normalize Windows paths (Git Bash passes CODEX_HOME like C:\Users\...\ .codex).
+CACHE_HOME="${CACHE_HOME//\\//}"
 case "${CACHE_HOME}" in
-  /*) ;;
+  /*|[A-Za-z]:/*) ;;
   *)
     CACHE_HOME="${REPO_ROOT}/${CACHE_HOME#./}"
     ;;
@@ -289,7 +292,7 @@ TARGET_CACHE_DIR="${TARGET_CACHE_ROOT}/${CACHE_KEY}/${WORKSPACE_DIR}"
 if [ -z "${CARGO_TARGET_DIR:-}" ]; then
   TARGET_CACHE_DIR_ABS="${TARGET_CACHE_DIR}"
   case "${TARGET_CACHE_DIR_ABS}" in
-    /*) ;;
+    /*|[A-Za-z]:/*) ;;
     *)
       TARGET_CACHE_DIR_ABS="${REPO_ROOT}/${TARGET_CACHE_DIR_ABS#./}"
       ;;
@@ -667,6 +670,15 @@ if [ $? -eq 0 ]; then
           cd "${PERF_DIR}" >/dev/null 2>&1
           ln -sf "$(basename "${PERF_SOURCE}")" "$(basename "${PERF_TARGET}")"
         )
+      fi
+    fi
+
+    if [ "${BUILD_FAST_SKIP_I18N_SCAN:-0}" != "1" ] && [ "${WORKSPACE_DIR}" = "code-rs" ]; then
+      if [ -f "i18n/scan_baseline.json" ]; then
+        echo "Running i18n scan (baseline check)..."
+        ${USE_CARGO} run ${USE_LOCKED} --profile "${PROFILE}" -p code-i18n-scan -- check --root "." --baseline "i18n/scan_baseline.json"
+      else
+        echo "⚠️  i18n baseline not found (i18n/scan_baseline.json). Skipping i18n scan." >&2
       fi
     fi
 

@@ -345,26 +345,27 @@ impl AutoCoordinatorView {
 
     fn status_label(model: &AutoActiveViewModel) -> &'static str {
         if model.waiting_for_review {
-            "Awaiting review"
+            code_i18n::tr_plain("tui.auto_coordinator.status.awaiting_review")
         } else if model.awaiting_submission {
-            "Waiting"
+            code_i18n::tr_plain("tui.auto_coordinator.status.waiting")
         } else if model.coordinator_waiting {
-            "Creating prompt"
+            code_i18n::tr_plain("tui.auto_coordinator.status.creating_prompt")
         } else if model.cli_running {
-            "Running"
+            code_i18n::tr_plain("tui.state.running")
         } else if model.waiting_for_response {
-            "Thinking"
+            code_i18n::tr_plain("tui.auto_coordinator.status.thinking")
         } else if model.started_at.is_some() {
-            "Running"
+            code_i18n::tr_plain("tui.state.running")
         } else if model.elapsed.is_some() && model.started_at.is_none() {
-            "Stopped"
+            code_i18n::tr_plain("tui.state.stopped")
         } else {
-            "Ready"
+            code_i18n::tr_plain("tui.state.ready")
         }
     }
 
     fn is_generic_status_message(message: &str) -> bool {
-        matches!(message, "Auto Drive" | "Auto Drive Goal")
+        message == code_i18n::tr_plain("tui.settings.section.auto_drive")
+            || message == code_i18n::tr_plain("tui.status.auto_drive_goal")
     }
 
     fn resolve_display_message(&self, model: &AutoActiveViewModel) -> String {
@@ -387,7 +388,11 @@ impl AutoCoordinatorView {
 
         if model.awaiting_submission {
             if let Some(countdown) = &model.countdown {
-                return format!("Awaiting confirmation ({}s)", countdown.remaining);
+                return code_i18n::tr_args(
+                    code_i18n::current_language(),
+                    "tui.auto_coordinator.awaiting_confirmation",
+                    &[("seconds", &countdown.remaining.to_string())],
+                );
             }
             if let Some(button) = &model.button {
                 let trimmed = button.label.trim();

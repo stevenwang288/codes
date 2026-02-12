@@ -23,7 +23,6 @@ use crate::chatwidget::ChatWidget;
 use crate::file_search::FileSearchManager;
 use crate::get_login_status;
 use crate::onboarding::onboarding_screen::{OnboardingScreen, OnboardingScreenArgs};
-use crate::thread_spawner;
 use crate::tui::TerminalInfo;
 
 use super::state::{App, AppState, ChatWidgetArgs, FrameTimer};

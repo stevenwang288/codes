@@ -32,7 +32,6 @@ use std::env;
 const BORDER_TOP: &str = "╭─";
 const BORDER_BODY: &str = "│";
 const BORDER_BOTTOM: &str = "╰─";
-const HINT_TEXT: &str = " [Ctrl+S] Settings · [Esc] Stop";
 const ACTION_TIME_INDENT: usize = 1;
 const ACTION_TIME_SEPARATOR_WIDTH: usize = 2;
 const ACTION_TIME_COLUMN_MIN_WIDTH: usize = 6;
@@ -56,10 +55,10 @@ pub(crate) enum AutoDriveStatus {
 impl AutoDriveStatus {
     fn label(self) -> &'static str {
         match self {
-            AutoDriveStatus::Running => "Running",
-            AutoDriveStatus::Paused => "Paused",
-            AutoDriveStatus::Failed => "Failed",
-            AutoDriveStatus::Stopped => "Stopped",
+            AutoDriveStatus::Running => code_i18n::tr_plain("tui.state.running"),
+            AutoDriveStatus::Paused => code_i18n::tr_plain("tui.state.paused"),
+            AutoDriveStatus::Failed => code_i18n::tr_plain("tui.state.failed"),
+            AutoDriveStatus::Stopped => code_i18n::tr_plain("tui.state.stopped"),
         }
     }
 
@@ -70,6 +69,15 @@ impl AutoDriveStatus {
             AutoDriveStatus::Failed => ToolCellStatus::Failed,
         }
     }
+}
+
+fn hint_text() -> String {
+    let ui_language = code_i18n::current_language();
+    format!(
+        " [Ctrl+S] {} · [Esc] {}",
+        code_i18n::tr(ui_language, "tui.common.settings"),
+        code_i18n::tr(ui_language, "tui.common.stop"),
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -300,7 +308,7 @@ impl AutoDriveCardCell {
 
     fn title_row(&self, body_width: usize, style: &CardStyle) -> CardRow {
         let mut segments: Vec<CardSegment> = Vec::new();
-        let title_text = " Auto Drive";
+        let title_text = format!(" {}", code_i18n::tr_plain("tui.settings.section.auto_drive"));
         let status_text = if self.celebration_started_at.is_some() {
             " · Complete".to_string()
         } else {
@@ -318,7 +326,7 @@ impl AutoDriveCardCell {
             let mut bold_title = title_style;
             bold_title = bold_title.add_modifier(Modifier::BOLD);
             segments.push(CardSegment::new(
-                title_text.to_string(),
+                title_text.clone(),
                 bold_title,
             ));
             segments.push(CardSegment::new(
@@ -326,7 +334,7 @@ impl AutoDriveCardCell {
                 status_style,
             ));
         } else {
-            let display = truncate_with_ellipsis(title_text, body_width);
+            let display = truncate_with_ellipsis(title_text.as_str(), body_width);
             let mut bold_title = title_style;
             bold_title = bold_title.add_modifier(Modifier::BOLD);
             segments.push(CardSegment::new(display, bold_title));
@@ -1081,7 +1089,8 @@ impl AutoDriveCardCell {
     }
 
     fn bottom_border_row(&self, body_width: usize, style: &CardStyle) -> CardRow {
-        let text = truncate_with_ellipsis(HINT_TEXT, body_width);
+        let hint = hint_text();
+        let text = truncate_with_ellipsis(&hint, body_width);
         let hint_style = if palette_mode() == PaletteMode::Ansi16 {
             primary_text_style(style)
         } else {
@@ -1236,7 +1245,11 @@ impl HistoryCell for AutoDriveCardCell {
 
     fn display_lines(&self) -> Vec<Line<'static>> {
         let mut lines: Vec<Line<'static>> = Vec::new();
-        lines.push(Line::from(format!("{} — {}", "Auto Drive", self.status.label())));
+        lines.push(Line::from(format!(
+            "{} — {}",
+            code_i18n::tr_plain("tui.settings.section.auto_drive"),
+            self.status.label()
+        )));
         if let Some(goal) = &self.goal {
             lines.push(Line::from(format!("goal: {goal}")));
         }

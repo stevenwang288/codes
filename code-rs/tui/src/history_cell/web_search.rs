@@ -28,10 +28,18 @@ use unicode_width::UnicodeWidthStr;
 const BORDER_TOP: &str = "╭─";
 const BORDER_BODY: &str = "│";
 const BORDER_BOTTOM: &str = "╰─";
-const HINT_TEXT: &str = " [Ctrl+S] Settings · [Esc] Stop";
 const ACTION_TIME_INDENT: usize = 1;
 const ACTION_TIME_SEPARATOR_WIDTH: usize = 2;
 const ACTION_TIME_COLUMN_MIN_WIDTH: usize = 2;
+
+fn hint_text() -> String {
+    let ui_language = code_i18n::current_language();
+    format!(
+        " [Ctrl+S] {} · [Esc] {}",
+        code_i18n::tr(ui_language, "tui.common.settings"),
+        code_i18n::tr(ui_language, "tui.common.stop"),
+    )
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WebSearchStatus {
@@ -143,19 +151,23 @@ impl WebSearchSessionCell {
 
     pub(crate) fn ensure_started_message(&mut self) {
         if self.actions.is_empty() {
-            self.record_action(Duration::ZERO, "Searching…", WebSearchActionKind::Info);
+            self.record_action(
+                Duration::ZERO,
+                code_i18n::tr(code_i18n::current_language(), "tui.web_search.searching"),
+                WebSearchActionKind::Info,
+            );
         }
     }
 
     pub(crate) fn tool_title(&self) -> &'static str {
-        "Web Search"
+        code_i18n::tr_plain("tui.web_search.title")
     }
 
     pub(crate) fn status_label(&self) -> &'static str {
         match self.status {
-            WebSearchStatus::Running => "Running",
-            WebSearchStatus::Completed => "Completed",
-            WebSearchStatus::Failed => "Failed",
+            WebSearchStatus::Running => code_i18n::tr_plain("tui.state.running"),
+            WebSearchStatus::Completed => code_i18n::tr_plain("tui.state.completed"),
+            WebSearchStatus::Failed => code_i18n::tr_plain("tui.state.failed"),
         }
     }
 
@@ -195,7 +207,8 @@ impl WebSearchSessionCell {
 
     fn title_row(&self, body_width: usize, style: &CardStyle) -> CardRow {
         let mut segments: Vec<CardSegment> = Vec::new();
-        let title_text = " Web Search";
+        let ui_language = code_i18n::current_language();
+        let title_text = format!(" {}", code_i18n::tr(ui_language, "tui.web_search.title"));
         let status_text = format!(" · {}", self.status_label());
         let total = format!("{title_text}{status_text}");
         let title_style = if palette_mode() == PaletteMode::Ansi16 {
@@ -211,7 +224,7 @@ impl WebSearchSessionCell {
 
         if UnicodeWidthStr::width(total.as_str()) <= body_width {
             segments.push(CardSegment::new(
-                title_text.to_string(),
+                title_text.clone(),
                 title_style,
             ));
             segments.push(CardSegment::new(
@@ -219,7 +232,7 @@ impl WebSearchSessionCell {
                 status_style,
             ));
         } else {
-            let display = truncate_with_ellipsis(title_text, body_width);
+            let display = truncate_with_ellipsis(&title_text, body_width);
             segments.push(CardSegment::new(display, title_style));
         }
 
@@ -399,7 +412,10 @@ impl WebSearchSessionCell {
 
         let available = body_width.saturating_sub(ACTION_TIME_INDENT);
         if available > 0 {
-            let message = truncate_with_ellipsis("Awaiting web search activity", available);
+            let message = truncate_with_ellipsis(
+                &code_i18n::tr(code_i18n::current_language(), "tui.web_search.awaiting_activity"),
+                available,
+            );
             let mut placeholder = CardSegment::new(message, secondary_text_style(style));
             placeholder.inherit_background = true;
             segments.push(placeholder);
@@ -414,7 +430,8 @@ impl WebSearchSessionCell {
     }
 
     fn bottom_border_row(&self, body_width: usize, style: &CardStyle) -> CardRow {
-        let text = truncate_with_ellipsis(HINT_TEXT, body_width);
+        let hint = hint_text();
+        let text = truncate_with_ellipsis(&hint, body_width);
         let hint_style = if palette_mode() == PaletteMode::Ansi16 {
             Style::default().fg(ansi16_inverse_color())
         } else {

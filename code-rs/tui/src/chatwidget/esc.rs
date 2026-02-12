@@ -1,13 +1,12 @@
 use crossterm::event::KeyEvent;
 use std::time::{Duration, Instant};
 
-use super::{ChatWidget, AUTO_ESC_EXIT_HINT, AUTO_ESC_EXIT_HINT_DOUBLE, DOUBLE_ESC_HINT};
+use super::ChatWidget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EscIntent {
     DismissModal,
     CloseSettings,
-    CloseFilePopup,
     AutoPauseForEdit,
     AutoStopDuringApproval,
     AutoStopActive,
@@ -51,7 +50,7 @@ impl EscRoute {
 impl ChatWidget<'_> {
     // --- Double‑Escape helpers ---
     pub(crate) fn double_esc_hint_label() -> &'static str {
-        DOUBLE_ESC_HINT
+        code_i18n::tr_plain("tui.undo.double_esc_hint_label")
     }
 
     pub(crate) fn show_esc_undo_hint(&mut self) {
@@ -61,9 +60,9 @@ impl ChatWidget<'_> {
 
     pub(super) fn show_auto_drive_exit_hint(&mut self) {
         let hint = if self.auto_state.is_paused_manual() {
-            AUTO_ESC_EXIT_HINT_DOUBLE
+            code_i18n::tr_plain("tui.auto_drive.exit_hint_double")
         } else {
-            AUTO_ESC_EXIT_HINT
+            code_i18n::tr_plain("tui.auto_drive.exit_hint")
         };
         self.bottom_pane
             .set_standard_terminal_hint(Some(hint.to_string()));
@@ -72,7 +71,7 @@ impl ChatWidget<'_> {
     fn auto_stop_via_escape(&mut self, message: Option<String>) {
         self.auto_stop(message);
         self.bottom_pane
-            .update_status_text("Auto Drive stopped.".to_string());
+            .update_status_text(code_i18n::tr_plain("tui.auto_drive.stopped").to_string());
         if self.auto_state.last_run_summary.is_some() {
             self.auto_clear_summary_panel();
         } else {
@@ -115,8 +114,11 @@ impl ChatWidget<'_> {
             return EscRoute::new(EscIntent::AgentsTerminal, true, false);
         }
 
-        if self.bottom_pane.file_popup_visible() {
-            return EscRoute::new(EscIntent::CloseFilePopup, false, false);
+        // Composer popups (slash popup, file search) should handle Esc themselves.
+        // Let the key event fall through to the composer so it can close the popup
+        // without triggering the global Esc policy (clear/backtrack/stop).
+        if self.bottom_pane.composer_popup_visible() {
+            return EscRoute::new(EscIntent::None, false, false);
         }
 
         if self.auto_state.is_active() {
@@ -200,21 +202,23 @@ impl ChatWidget<'_> {
                 self.handle_key_event(key_event);
                 true
             }
-            EscIntent::CloseFilePopup => self.close_file_popup_if_active(),
             EscIntent::AutoPauseForEdit => {
                 self.auto_pause_for_manual_edit(false);
                 true
             }
             EscIntent::AutoStopDuringApproval => {
+                let message = code_i18n::tr_plain("tui.auto_drive.stopped_during_approval").to_string();
                 self.bottom_pane
-                    .update_status_text("Auto Drive stopped during approval.".to_string());
-                self.auto_stop_via_escape(Some("Auto Drive stopped during approval.".to_string()));
+                    .update_status_text(message.clone());
+                self.auto_stop_via_escape(Some(message));
                 true
             }
             EscIntent::AutoStopActive => {
                 self.bottom_pane
-                    .update_status_text("Stopping Auto Drive…".to_string());
-                self.auto_stop_via_escape(Some("Auto Drive stopped by user.".to_string()));
+                    .update_status_text(code_i18n::tr_plain("tui.auto_drive.stopping").to_string());
+                self.auto_stop_via_escape(Some(
+                    code_i18n::tr_plain("tui.auto_drive.stopped_by_user").to_string(),
+                ));
                 true
             }
             EscIntent::AutoGoalEnableEdit => {
@@ -244,15 +248,17 @@ impl ChatWidget<'_> {
                 let _ = self.on_ctrl_c();
                 if auto_was_active {
                     let status = if had_running {
-                        "Command cancelled. Esc stops Auto Drive."
+                        code_i18n::tr_plain("tui.auto_drive.command_cancelled_esc_stops")
                     } else {
-                        "Auto Drive stopped by user."
+                        code_i18n::tr_plain("tui.auto_drive.stopped_by_user")
                     };
                     self.bottom_pane.update_status_text(status.to_string());
-                    self.auto_stop_via_escape(Some("Auto Drive stopped by user.".to_string()));
+                    self.auto_stop_via_escape(Some(
+                        code_i18n::tr_plain("tui.auto_drive.stopped_by_user").to_string(),
+                    ));
                 } else if had_running {
                     self.bottom_pane
-                        .update_status_text("Command cancelled.".to_string());
+                        .update_status_text(code_i18n::tr_plain("tui.auto_drive.command_cancelled").to_string());
                 }
                 true
             }
@@ -282,10 +288,8 @@ impl ChatWidget<'_> {
         let double_ready = last_esc_time.is_some_and(|prev| now.duration_since(prev) <= THRESHOLD);
 
         let mut handled = false;
-        let mut attempts = 0;
 
-        while attempts < 8 {
-            attempts += 1;
+        for _ in 0..8 {
             let route = self.describe_esc_context();
             let mut intent = route.intent;
 
@@ -297,19 +301,9 @@ impl ChatWidget<'_> {
                 intent = EscIntent::OpenUndoTimeline;
             }
 
-            let performed = self.execute_esc_intent(intent, esc_event);
+            let _performed = self.execute_esc_intent(intent, esc_event);
 
             match intent {
-                EscIntent::CloseFilePopup if !route.consume => {
-                    if !performed {
-                        break;
-                    }
-                    continue;
-                }
-                EscIntent::CloseFilePopup => {
-                    handled = true;
-                    break;
-                }
                 EscIntent::ShowUndoHint => {
                     if route.allows_double_esc && !double_ready {
                         *last_esc_time = Some(now);

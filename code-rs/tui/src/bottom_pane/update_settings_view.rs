@@ -39,8 +39,6 @@ pub(crate) struct UpdateSettingsView {
 }
 
 impl UpdateSettingsView {
-    const PANEL_TITLE: &'static str = "Upgrade";
-
     pub fn new(
         app_event_tx: AppEventSender,
         ticket: BackgroundOrderTicket,
@@ -89,21 +87,25 @@ impl UpdateSettingsView {
             if state.checking {
                 self.app_event_tx.send_background_event_with_ticket(
                     &self.ticket,
-                    "Still checking for updates…".to_string(),
+                    code_i18n::tr_plain("tui.updates.status.checking_long").to_string(),
                 );
                 return;
             }
             if let Some(err) = &state.error {
                 self.app_event_tx.send_background_event_with_ticket(
                     &self.ticket,
-                    format!("❌ /update failed: {err}"),
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.updates.error.update_failed",
+                        &[("error", err)],
+                    ),
                 );
                 return;
             }
             let Some(latest) = state.latest_version.clone() else {
                 self.app_event_tx.send_background_event_with_ticket(
                     &self.ticket,
-                    "✅ Code is already up to date.".to_string(),
+                    code_i18n::tr_plain("tui.updates.status.up_to_date").to_string(),
                 );
                 return;
             };
@@ -116,9 +118,14 @@ impl UpdateSettingsView {
 
         self.app_event_tx.send_background_event_with_ticket(
             &self.ticket,
-            format!(
-                "⬆️ Update available: {} → {}. Opening guided upgrade with `{}`…",
-                self.current_version, latest, display
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "tui.updates.notice.update_available",
+                &[
+                    ("current", &self.current_version),
+                    ("latest", &latest),
+                    ("command", &display),
+                ],
             ),
         );
         self.app_event_tx.send(AppEvent::RunUpdateCommand {
@@ -128,9 +135,10 @@ impl UpdateSettingsView {
         });
         self.app_event_tx.send_background_event_with_ticket(
             &self.ticket,
-            format!(
-                "↻ Complete the guided terminal steps for `{}` then restart Code to finish upgrading to {}.",
-                display, latest
+            code_i18n::tr_args(
+                code_i18n::current_language(),
+                "tui.updates.notice.complete_steps",
+                &[("command", &display), ("latest", &latest)],
             ),
         );
         self.is_complete = true;
@@ -145,7 +153,7 @@ impl UpdateSettingsView {
 
         let mut lines: Vec<Line<'static>> = Vec::new();
         lines.push(Line::from(vec![Span::styled(
-            "Upgrade",
+            code_i18n::tr_plain("tui.updates.title"),
             Style::default().add_modifier(Modifier::BOLD),
         )]));
 
@@ -156,7 +164,7 @@ impl UpdateSettingsView {
             Style::default()
         };
         let version_summary = if state.checking {
-            "checking…".to_string()
+            code_i18n::tr_plain("tui.updates.status.checking").to_string()
         } else if let Some(err) = &state.error {
             err.clone()
         } else if let Some(latest) = &state.latest_version {
@@ -168,7 +176,7 @@ impl UpdateSettingsView {
         let run_prefix = if run_selected { "› " } else { "  " };
         lines.push(Line::from(vec![
             Span::styled(run_prefix, run_style),
-            Span::styled("Run Upgrade", run_style),
+            Span::styled(code_i18n::tr_plain("tui.updates.run_upgrade"), run_style),
             Span::raw("  "),
             Span::styled(version_summary, Style::default().fg(colors::text_dim())),
         ]));
@@ -192,15 +200,23 @@ impl UpdateSettingsView {
         };
         lines.push(Line::from(vec![
             Span::styled(toggle_prefix, toggle_label_style),
-            Span::styled("Automatic Upgrades", toggle_label_style),
+            Span::styled(code_i18n::tr_plain("tui.updates.automatic_upgrades"), toggle_label_style),
             Span::raw("  "),
             Span::styled(
-                format!("[{}] Enabled", if self.auto_enabled { "x" } else { " " }),
+                format!(
+                    "[{}] {}",
+                    if self.auto_enabled { "x" } else { " " },
+                    code_i18n::tr_plain("tui.common.enabled")
+                ),
                 enabled_box_style,
             ),
             Span::raw("  "),
             Span::styled(
-                format!("[{}] Disabled", if self.auto_enabled { " " } else { "x" }),
+                format!(
+                    "[{}] {}",
+                    if self.auto_enabled { " " } else { "x" },
+                    code_i18n::tr_plain("tui.common.disabled")
+                ),
                 disabled_box_style,
             ),
         ]));
@@ -214,17 +230,32 @@ impl UpdateSettingsView {
         };
         lines.push(Line::from(vec![
             Span::styled(close_prefix, close_style),
-            Span::styled("Close", close_style),
+            Span::styled(code_i18n::tr_plain("tui.common.close_label"), close_style),
         ]));
 
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled(" ↑↓", Style::default().fg(colors::function())),
-            Span::styled(" Navigate  ", Style::default().fg(colors::text_dim())),
-            Span::styled("Enter", Style::default().fg(colors::success())),
-            Span::styled(" Configure  ", Style::default().fg(colors::text_dim())),
-            Span::styled("Esc", Style::default().fg(colors::error())),
-            Span::styled(" Close", Style::default().fg(colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")),
+                Style::default().fg(colors::text_dim()),
+            ),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(colors::success()),
+            ),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.common.configure")),
+                Style::default().fg(colors::text_dim()),
+            ),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(colors::error()),
+            ),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(colors::text_dim()),
+            ),
         ]));
 
         // Colors for the enabled/disabled boxes already set; no extra lines needed.
@@ -303,7 +334,7 @@ impl<'a> BottomPaneView<'a> for UpdateSettingsView {
         render_panel(
             area,
             buf,
-            Self::PANEL_TITLE,
+            code_i18n::tr_plain("tui.updates.title"),
             PanelFrameStyle::bottom_pane().with_margin(Margin::new(1, 0)),
             |inner, buf| self.render_panel_body(inner, buf),
         );

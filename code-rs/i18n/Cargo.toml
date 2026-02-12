@@ -1,0 +1,15 @@
+[package]
+name = "code-i18n"
+version = { workspace = true }
+edition = { workspace = true }
+
+[features]
+test-helpers = []
+
+[lints]
+workspace = true
+
+[dependencies]
+once_cell = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

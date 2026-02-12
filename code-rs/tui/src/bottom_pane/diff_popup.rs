@@ -61,7 +61,7 @@ impl<'a> BottomPaneView<'a> for DiffPopupView {
         // Outer popup: use selection-colored background with border styling
         let outer_block = Block::default()
             .borders(Borders::ALL)
-            .title("Diffs – Esc close, ◂ ▸ change tabs")
+            .title(code_i18n::tr_plain("tui.diff_popup.title"))
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::selection()));
         outer_block.clone().render(inner, buf);

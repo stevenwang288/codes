@@ -19,9 +19,17 @@ pub async fn login_with_chatgpt(code_home: PathBuf, originator: String) -> std::
     let opts = ServerOptions::new(code_home, CLIENT_ID.to_string(), originator);
     let server = run_login_server(opts)?;
 
+    let ui_language = code_i18n::current_language();
     eprintln!(
-        "Starting local login server on http://localhost:{}.\nIf your browser did not open, navigate to this URL to authenticate:\n\n{}",
-        server.actual_port, server.auth_url,
+        "{}",
+        code_i18n::tr_args(
+            ui_language,
+            "cli.login.local_server_started",
+            &[
+                ("port", &server.actual_port.to_string()),
+                ("url", server.auth_url.as_str())
+            ],
+        )
     );
 
     server.block_until_done().await
@@ -37,11 +45,15 @@ pub async fn run_login_with_chatgpt(cli_config_overrides: CliConfigOverrides) ->
     .await
     {
         Ok(_) => {
-            eprintln!("Successfully logged in");
+            eprintln!("{}", code_i18n::tr_plain("cli.login.success"));
             std::process::exit(0);
         }
         Err(e) => {
-            eprintln!("Error logging in: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(ui_language, "cli.login.error", &[("error", &e.to_string())])
+            );
             std::process::exit(1);
         }
     }
@@ -55,11 +67,15 @@ pub async fn run_login_with_api_key(
 
     match login_with_api_key(&config.code_home, &api_key) {
         Ok(_) => {
-            eprintln!("Successfully logged in");
+            eprintln!("{}", code_i18n::tr_plain("cli.login.success"));
             std::process::exit(0);
         }
         Err(e) => {
-            eprintln!("Error logging in: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(ui_language, "cli.login.error", &[("error", &e.to_string())])
+            );
             std::process::exit(1);
         }
     }
@@ -69,23 +85,29 @@ pub fn read_api_key_from_stdin() -> String {
     let mut stdin = std::io::stdin();
 
     if stdin.is_terminal() {
-        eprintln!(
-            "--with-api-key expects the API key on stdin. Try piping it, e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`."
-        );
+        eprintln!("{}", code_i18n::tr_plain("cli.login.with_api_key_requires_stdin"));
         std::process::exit(1);
     }
 
-    eprintln!("Reading API key from stdin...");
+    eprintln!("{}", code_i18n::tr_plain("cli.login.reading_api_key_from_stdin"));
 
     let mut buffer = String::new();
     if let Err(err) = stdin.read_to_string(&mut buffer) {
-        eprintln!("Failed to read API key from stdin: {err}");
+        let ui_language = code_i18n::current_language();
+        eprintln!(
+            "{}",
+            code_i18n::tr_args(
+                ui_language,
+                "cli.login.read_api_key_from_stdin_failed",
+                &[("error", &err.to_string())]
+            )
+        );
         std::process::exit(1);
     }
 
     let api_key = buffer.trim().to_string();
     if api_key.is_empty() {
-        eprintln!("No API key provided via stdin.");
+        eprintln!("{}", code_i18n::tr_plain("cli.login.no_api_key_provided"));
         std::process::exit(1);
     }
 
@@ -109,11 +131,19 @@ pub async fn run_login_with_device_code(
     }
     match run_device_code_login(opts).await {
         Ok(()) => {
-            eprintln!("Successfully logged in");
+            eprintln!("{}", code_i18n::tr_plain("cli.login.success"));
             std::process::exit(0);
         }
         Err(e) => {
-            eprintln!("Error logging in with device code: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(
+                    ui_language,
+                    "cli.login.device_code_error",
+                    &[("error", &e.to_string())]
+                )
+            );
             std::process::exit(1);
         }
     }
@@ -130,33 +160,56 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
         Ok(Some(auth)) => match auth.mode {
             AuthMode::ApiKey => match auth.get_token().await {
                 Ok(api_key) => {
-                    eprintln!("Logged in using an API key - {}", safe_format_key(&api_key));
+                    let ui_language = code_i18n::current_language();
+                    let safe = safe_format_key(&api_key);
+                    eprintln!(
+                        "{}",
+                        code_i18n::tr_args(
+                            ui_language,
+                            "cli.login.status.api_key",
+                            &[("key", &safe)]
+                        )
+                    );
 
                     if let Ok(env_api_key) = env::var(OPENAI_API_KEY_ENV_VAR) {
                         if env_api_key == api_key {
-                        eprintln!(
-                            "   API loaded from OPENAI_API_KEY environment variable or .env file"
-                        );
-                    }
+                            eprintln!("{}", code_i18n::tr_plain("cli.login.status.api_key_from_env"));
+                        }
                     }
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    eprintln!("Unexpected error retrieving API key: {e}");
+                    let ui_language = code_i18n::current_language();
+                    eprintln!(
+                        "{}",
+                        code_i18n::tr_args(
+                            ui_language,
+                            "cli.login.status.api_key_read_error",
+                            &[("error", &e.to_string())]
+                        )
+                    );
                     std::process::exit(1);
                 }
             },
             AuthMode::ChatGPT | AuthMode::ChatgptAuthTokens => {
-                eprintln!("Logged in using ChatGPT");
+                eprintln!("{}", code_i18n::tr_plain("cli.login.status.chatgpt"));
                 std::process::exit(0);
             }
         },
         Ok(None) => {
-            eprintln!("Not logged in");
+            eprintln!("{}", code_i18n::tr_plain("cli.login.status.not_logged_in"));
             std::process::exit(1);
         }
         Err(e) => {
-            eprintln!("Error checking login status: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(
+                    ui_language,
+                    "cli.login.status.error",
+                    &[("error", &e.to_string())]
+                )
+            );
             std::process::exit(1);
         }
     }
@@ -167,15 +220,19 @@ pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
 
     match logout(&config.code_home) {
         Ok(true) => {
-            eprintln!("Successfully logged out");
+            eprintln!("{}", code_i18n::tr_plain("cli.logout.success"));
             std::process::exit(0);
         }
         Ok(false) => {
-            eprintln!("Not logged in");
+            eprintln!("{}", code_i18n::tr_plain("cli.login.status.not_logged_in"));
             std::process::exit(0);
         }
         Err(e) => {
-            eprintln!("Error logging out: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(ui_language, "cli.logout.error", &[("error", &e.to_string())])
+            );
             std::process::exit(1);
         }
     }
@@ -185,7 +242,15 @@ fn load_config_or_exit(cli_config_overrides: CliConfigOverrides) -> Config {
     let cli_overrides = match cli_config_overrides.parse_overrides() {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Error parsing -c overrides: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(
+                    ui_language,
+                    "cli.config.parse_overrides_error",
+                    &[("error", &e.to_string())]
+                )
+            );
             std::process::exit(1);
         }
     };
@@ -194,7 +259,15 @@ fn load_config_or_exit(cli_config_overrides: CliConfigOverrides) -> Config {
     match Config::load_with_cli_overrides(cli_overrides, config_overrides) {
         Ok(config) => config,
         Err(e) => {
-            eprintln!("Error loading configuration: {e}");
+            let ui_language = code_i18n::current_language();
+            eprintln!(
+                "{}",
+                code_i18n::tr_args(
+                    ui_language,
+                    "cli.config.load_error",
+                    &[("error", &e.to_string())]
+                )
+            );
             std::process::exit(1);
         }
     }

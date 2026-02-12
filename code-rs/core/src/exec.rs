@@ -199,18 +199,18 @@ pub async fn process_exec_tool_call(
             #[allow(unused_mut)]
             let mut timed_out = raw_output.timed_out;
 
-            #[allow(unused_variables)]
-            let mut exit_signal: Option<i32> = None;
-
             #[cfg(target_family = "unix")]
-            {
-                if let Some(sig) = raw_output.exit_status.signal() {
-                    if sig == TIMEOUT_CODE {
-                        timed_out = true;
-                    } else {
-                        exit_signal = Some(sig);
-                    }
-                }
+            let (timed_out_by_signal, exit_signal): (bool, Option<i32>) =
+                match raw_output.exit_status.signal() {
+                    Some(sig) if sig == TIMEOUT_CODE => (true, None),
+                    Some(sig) => (false, Some(sig)),
+                    None => (false, None),
+                };
+            #[cfg(not(target_family = "unix"))]
+            let (timed_out_by_signal, exit_signal): (bool, Option<i32>) = (false, None);
+
+            if timed_out_by_signal {
+                timed_out = true;
             }
 
             let mut exit_code = raw_output.exit_status.code().unwrap_or(-1);

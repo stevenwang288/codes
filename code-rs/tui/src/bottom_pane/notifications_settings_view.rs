@@ -52,20 +52,21 @@ impl NotificationsSettingsView {
             }
             NotificationsMode::Custom { entries } => {
                 let filters = if entries.is_empty() {
-                    "(none)".to_string()
+                    code_i18n::tr_plain("tui.common.none").to_string()
                 } else {
                     entries.join(", ")
                 };
                 self.app_event_tx.send_background_event_with_ticket(
                     &self.ticket,
-                    format!(
-                        "TUI notifications are filtered in config: [{}]",
-                        filters
+                    code_i18n::tr_args(
+                        code_i18n::current_language(),
+                        "tui.notifications.custom_filters",
+                        &[("filters", &filters)],
                     ),
                 );
                 self.app_event_tx.send_background_event_with_ticket(
                     &self.ticket,
-                    "Edit ~/.code/config.toml [tui].notifications to change filters.".to_string(),
+                    code_i18n::tr_plain("tui.notifications.custom_hint").to_string(),
                 );
             }
         }
@@ -74,26 +75,41 @@ impl NotificationsSettingsView {
     fn status_line(&self) -> Line<'static> {
         match &self.mode {
             NotificationsMode::Toggle { enabled } => {
-                let status = if *enabled { "Enabled" } else { "Disabled" };
+                let status = if *enabled {
+                    code_i18n::tr_plain("tui.common.enabled")
+                } else {
+                    code_i18n::tr_plain("tui.common.disabled")
+                };
                 let color = if *enabled {
                     crate::colors::success()
                 } else {
                     crate::colors::warning()
                 };
                 Line::from(vec![
-                    Span::styled("Status: ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::styled(status, Style::default().fg(color).add_modifier(Modifier::BOLD)),
                 ])
             }
             NotificationsMode::Custom { entries } => {
                 let filters = if entries.is_empty() {
-                    "<none>".to_string()
+                    code_i18n::tr_plain("tui.common.none").to_string()
                 } else {
                     entries.join(", ")
                 };
                 Line::from(vec![
-                    Span::styled("Status: ", Style::default().fg(crate::colors::text_dim())),
-                    Span::styled("Custom filter", Style::default().fg(crate::colors::info()).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.common.status_prefix"),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
+                    Span::styled(
+                        code_i18n::tr_plain("tui.notifications.custom_filter"),
+                        Style::default()
+                            .fg(crate::colors::info())
+                            .add_modifier(Modifier::BOLD),
+                    ),
                     Span::raw("  "),
                     Span::styled(filters, Style::default().fg(crate::colors::dim())),
                 ])
@@ -104,16 +120,23 @@ impl NotificationsSettingsView {
     fn toggle_line(&self) -> Line<'static> {
         match &self.mode {
             NotificationsMode::Toggle { enabled } => {
-                let label = if *enabled { "Enabled" } else { "Disabled" };
+                let label = if *enabled {
+                    code_i18n::tr_plain("tui.common.enabled")
+                } else {
+                    code_i18n::tr_plain("tui.common.disabled")
+                };
                 Line::from(vec![
-                    Span::styled("Notifications: ", Style::default().fg(crate::colors::text_dim())),
+                    Span::styled(
+                        format!("{}: ", code_i18n::tr_plain("tui.settings.section.notifications")),
+                        Style::default().fg(crate::colors::text_dim()),
+                    ),
                     Span::raw(label),
                 ])
             }
             NotificationsMode::Custom { .. } => {
                 Line::from(vec![
                     Span::styled(
-                        "Notifications are managed by your config file.",
+                        code_i18n::tr_plain("tui.notifications.managed_by_config"),
                         Style::default().fg(crate::colors::text()),
                     ),
                 ])
@@ -187,7 +210,10 @@ impl<'a> BottomPaneView<'a> for NotificationsSettingsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" Notifications ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.notifications.title")
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -208,7 +234,7 @@ impl<'a> BottomPaneView<'a> for NotificationsSettingsView {
         lines.push(Line::from(""));
         let mut close_line = Line::from(vec![
             Span::raw(if self.selected_row == 1 { "> " } else { "  " }),
-            Span::raw("Close"),
+            Span::raw(code_i18n::tr_plain("tui.common.close_label")),
         ]);
         if self.selected_row == 1 {
             close_line = close_line
@@ -223,19 +249,35 @@ impl<'a> BottomPaneView<'a> for NotificationsSettingsView {
 
         let footer = match &self.mode {
             NotificationsMode::Toggle { .. } => Line::from(vec![
-                Span::styled("Up/Down", Style::default().fg(crate::colors::light_blue())),
-                Span::raw(" Navigate  "),
-                Span::styled("Left/Right or Space", Style::default().fg(crate::colors::success())),
-                Span::raw(" Toggle  "),
-                Span::styled("Enter", Style::default().fg(crate::colors::success())),
-                Span::raw(" Toggle or Close  "),
-                Span::styled("Esc", Style::default().fg(crate::colors::error())),
-                Span::raw(" Cancel"),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.up_down"),
+                    Style::default().fg(crate::colors::light_blue()),
+                ),
+                Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate"))),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.left_right_or_space"),
+                    Style::default().fg(crate::colors::success()),
+                ),
+                Span::raw(format!(" {}  ", code_i18n::tr_plain("tui.common.toggle"))),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.enter"),
+                    Style::default().fg(crate::colors::success()),
+                ),
+                Span::raw(format!(
+                    " {}  ",
+                    code_i18n::tr_plain("tui.notifications.toggle_or_close")
+                )),
+                Span::styled(
+                    code_i18n::tr_plain("tui.common.key.esc"),
+                    Style::default().fg(crate::colors::error()),
+                ),
+                Span::raw(format!(" {}", code_i18n::tr_plain("tui.common.cancel"))),
             ]),
             NotificationsMode::Custom { .. } => Line::from(vec![
-                Span::styled("Edit ", Style::default().fg(crate::colors::text_dim())),
-                Span::styled("[tui].notifications", Style::default().fg(crate::colors::info())),
-                Span::styled(" in ~/.code/config.toml to adjust filters.", Style::default().fg(crate::colors::text_dim())),
+                Span::styled(
+                    code_i18n::tr_plain("tui.notifications.custom_hint"),
+                    Style::default().fg(crate::colors::text_dim()),
+                ),
             ]),
         };
         lines.push(footer);

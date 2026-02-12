@@ -14,6 +14,7 @@ use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 
 use crate::colors;
+use code_i18n;
 
 use crate::onboarding::onboarding_screen::KeyboardHandler;
 use crate::onboarding::onboarding_screen::StepStateProvider;
@@ -46,7 +47,10 @@ impl WidgetRef for &TrustDirectoryWidget {
             .add_modifier(Modifier::BOLD);
         let mut lines: Vec<Line> = vec![
             Line::from(vec![
-                Span::styled("You are running Code in ", success_style),
+                Span::styled(
+                    code_i18n::tr_plain("tui.onboarding.trust.running_in_prefix"),
+                    success_style,
+                ),
                 Span::styled(
                     self.cwd.to_string_lossy().to_string(),
                     Style::default().fg(colors::success()),
@@ -56,17 +60,23 @@ impl WidgetRef for &TrustDirectoryWidget {
         ];
 
         if self.is_git_repo {
-            lines.push(Line::from(
-                "  Since this folder is version controlled, you may wish to allow Code",
-            ));
-            lines.push(Line::from(
-                "  to work in this folder without asking for approval.",
-            ));
+            lines.push(Line::from(format!(
+                "  {}",
+                code_i18n::tr_plain("tui.onboarding.trust.git.line1")
+            )));
+            lines.push(Line::from(format!(
+                "  {}",
+                code_i18n::tr_plain("tui.onboarding.trust.git.line2")
+            )));
         } else {
-            lines.push(Line::from(
-                "  Since this folder is not version controlled, we recommend requiring",
-            ));
-            lines.push(Line::from("  approval of all edits and commands."));
+            lines.push(Line::from(format!(
+                "  {}",
+                code_i18n::tr_plain("tui.onboarding.trust.nogit.line1")
+            )));
+            lines.push(Line::from(format!(
+                "  {}",
+                code_i18n::tr_plain("tui.onboarding.trust.nogit.line2")
+            )));
         }
         lines.push(Line::from(""));
 
@@ -90,23 +100,23 @@ impl WidgetRef for &TrustDirectoryWidget {
             lines.push(create_option(
                 0,
                 TrustDirectorySelection::Trust,
-                "Yes, allow Code to work in this folder without asking for approval",
+                code_i18n::tr_plain("tui.onboarding.trust.git.option1"),
             ));
             lines.push(create_option(
                 1,
                 TrustDirectorySelection::DontTrust,
-                "No, ask me to approve edits and commands",
+                code_i18n::tr_plain("tui.onboarding.trust.git.option2"),
             ));
         } else {
             lines.push(create_option(
                 0,
                 TrustDirectorySelection::Trust,
-                "Allow Code to work in this folder without asking for approval",
+                code_i18n::tr_plain("tui.onboarding.trust.nogit.option1"),
             ));
             lines.push(create_option(
                 1,
                 TrustDirectorySelection::DontTrust,
-                "Require approval of edits and commands",
+                code_i18n::tr_plain("tui.onboarding.trust.nogit.option2"),
             ));
         }
         lines.push(Line::from(""));
@@ -115,9 +125,12 @@ impl WidgetRef for &TrustDirectoryWidget {
             lines.push(Line::from(""));
         }
         lines.push(Line::from(vec![
-            Span::raw("  Press "),
+            Span::raw(format!(
+                "  {}",
+                code_i18n::tr_plain("tui.onboarding.common.press")
+            )),
             Span::styled("Enter", Style::default().fg(colors::function())),
-            Span::raw(" to continue"),
+            Span::raw(code_i18n::tr_plain("tui.onboarding.common.to_continue")),
         ]));
 
         Paragraph::new(lines)

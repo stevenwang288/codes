@@ -148,7 +148,8 @@ pub async fn run_main(cli: Cli, code_linux_sandbox_exe: Option<PathBuf>) -> anyh
 
             if std::io::stdin().is_terminal() && !force_stdin {
                 eprintln!(
-                    "No prompt provided. Either specify one as an argument or pipe the prompt into stdin."
+                    "{}",
+                    code_i18n::tr_plain("exec.prompt.missing")
                 );
                 std::process::exit(1);
             }
@@ -158,14 +159,24 @@ pub async fn run_main(cli: Cli, code_linux_sandbox_exe: Option<PathBuf>) -> anyh
             // writing to stdin, Codex will hang indefinitely, so this should
             // help them debug in that case.
             if !force_stdin {
-                eprintln!("Reading prompt from stdin...");
+                eprintln!(
+                    "{}",
+                    code_i18n::tr_plain("exec.prompt.reading_stdin")
+                );
             }
             let mut buffer = String::new();
             if let Err(e) = std::io::stdin().read_to_string(&mut buffer) {
-                eprintln!("Failed to read prompt from stdin: {e}");
+                let ui_language = code_i18n::current_language();
+                eprintln!(
+                    "{}",
+                    code_i18n::tr_args(ui_language, "exec.prompt.read_failed", &[("error", &e.to_string())])
+                );
                 std::process::exit(1);
             } else if buffer.trim().is_empty() {
-                eprintln!("No prompt provided via stdin.");
+                eprintln!(
+                    "{}",
+                    code_i18n::tr_plain("exec.prompt.empty_stdin")
+                );
                 std::process::exit(1);
             }
             buffer
@@ -179,7 +190,10 @@ pub async fn run_main(cli: Cli, code_linux_sandbox_exe: Option<PathBuf>) -> anyh
     }
     if auto_drive {
         if trimmed_prompt.is_empty() {
-            eprintln!("Auto Drive requires a goal. Provide one after --auto or prefix the prompt with /auto.");
+            eprintln!(
+                "{}",
+                code_i18n::tr_plain("exec.auto_drive.goal_required")
+            );
             std::process::exit(1);
         }
         if auto_drive_goal
@@ -196,7 +210,10 @@ pub async fn run_main(cli: Cli, code_linux_sandbox_exe: Option<PathBuf>) -> anyh
         .as_ref()
         .is_some_and(|g| g.trim().is_empty())
     {
-        eprintln!("Auto Drive requires a goal. Provide one after /auto or --auto.");
+        eprintln!(
+            "{}",
+            code_i18n::tr_plain("exec.auto_drive.goal_required")
+        );
         std::process::exit(1);
     }
 

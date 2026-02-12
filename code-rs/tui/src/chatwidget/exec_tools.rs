@@ -408,7 +408,7 @@ pub(super) fn finalize_exec_cell_at(
 }
 
 pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
-    let interrupted_msg = "Cancelled by user.".to_string();
+    let interrupted_msg = code_i18n::tr_plain("tui.common.cancelled_by_user").to_string();
     let stdout_empty = String::new();
     let running: Vec<(super::ExecCallId, Option<usize>, Option<(usize, usize)>)> = chat
         .exec
@@ -479,7 +479,7 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                         lines: vec![MessageLine {
                             kind: MessageLineKind::Paragraph,
                             spans: vec![InlineSpan {
-                                text: "Wait cancelled".into(),
+                                text: code_i18n::tr_plain("tui.wait.cancelled").into(),
                                 tone: TextTone::Error,
                                 emphasis,
                                 entity: None,
@@ -506,7 +506,7 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                             None,
                             std::time::Duration::from_millis(0),
                             false,
-                            "Cancelled by user.".to_string(),
+                            code_i18n::tr_plain("tui.common.cancelled_by_user").to_string(),
                         );
                         chat.history_replace_at(idx, Box::new(completed));
                     }
@@ -518,7 +518,10 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
         chat.request_redraw();
     }
 
-    web_search_sessions::finalize_all_failed(chat, "Search cancelled by user.");
+    web_search_sessions::finalize_all_failed(
+        chat,
+        code_i18n::tr_plain("tui.search.cancelled_by_user"),
+    );
 
     if !chat.tools_state.running_wait_tools.is_empty() {
         chat.tools_state.running_wait_tools.clear();
@@ -528,7 +531,8 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
         chat.tools_state.running_kill_tools.clear();
     }
 
-    chat.bottom_pane.update_status_text("cancelled".to_string());
+    chat.bottom_pane
+        .update_status_text(code_i18n::tr_plain("tui.common.cancelled").to_string());
     let any_tasks_active = !chat.active_task_ids.is_empty();
     if !any_tasks_active {
         chat.bottom_pane.set_task_running(false);
@@ -1581,24 +1585,48 @@ pub(super) fn handle_exec_end_now(
         } else if let Some(actual_idx) = updated_index {
             chat.exec.running_explore_agg_index = Some(actual_idx);
         }
+        let ui_language = code_i18n::current_language();
+        let exit_code_str = exit_code.to_string();
         let status_text = match status {
             history_cell::ExploreEntryStatus::Success => match action {
-                ExecAction::Read => "files read".to_string(),
-                _ => "exploration updated".to_string(),
+                ExecAction::Read => code_i18n::tr(ui_language, "tui.explore.status.files_read").to_string(),
+                _ => code_i18n::tr(ui_language, "tui.explore.status.updated").to_string(),
             },
             history_cell::ExploreEntryStatus::NotFound => match action {
-                ExecAction::List => "path not found".to_string(),
-                _ => "no matches found".to_string(),
+                ExecAction::List => code_i18n::tr(ui_language, "tui.explore.status.path_not_found").to_string(),
+                _ => code_i18n::tr(ui_language, "tui.explore.status.no_matches").to_string(),
             },
             history_cell::ExploreEntryStatus::Error { .. } => match action {
-                ExecAction::Read => format!("read failed (exit {exit_code})"),
+                ExecAction::Read => code_i18n::tr_args(
+                    ui_language,
+                    "tui.explore.status.read_failed",
+                    &[("exit_code", &exit_code_str)],
+                ),
                 ExecAction::Search => {
-                    if exit_code == 2 { "invalid pattern".to_string() } else { format!("search failed (exit {exit_code})") }
+                    if exit_code == 2 {
+                        code_i18n::tr(ui_language, "tui.explore.status.invalid_pattern").to_string()
+                    } else {
+                        code_i18n::tr_args(
+                            ui_language,
+                            "tui.explore.status.search_failed",
+                            &[("exit_code", &exit_code_str)],
+                        )
+                    }
                 }
-                ExecAction::List => format!("list failed (exit {exit_code})"),
-                _ => format!("exploration failed (exit {exit_code})"),
+                ExecAction::List => code_i18n::tr_args(
+                    ui_language,
+                    "tui.explore.status.list_failed",
+                    &[("exit_code", &exit_code_str)],
+                ),
+                _ => code_i18n::tr_args(
+                    ui_language,
+                    "tui.explore.status.failed",
+                    &[("exit_code", &exit_code_str)],
+                ),
             },
-            history_cell::ExploreEntryStatus::Running => "exploring…".to_string(),
+            history_cell::ExploreEntryStatus::Running => {
+                code_i18n::tr(ui_language, "tui.explore.status.running").to_string()
+            }
         };
         chat.bottom_pane.update_status_text(status_text);
         chat.maybe_hide_spinner();

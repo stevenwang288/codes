@@ -1085,6 +1085,7 @@ dependencies = [
  "code-common",
  "code-core",
  "code-exec",
+ "code-i18n",
  "code-login",
  "code-mcp-server",
  "code-process-hardening",
@@ -1126,6 +1127,7 @@ dependencies = [
  "code-cloud-tasks-client",
  "code-common",
  "code-core",
+ "code-i18n",
  "code-login",
  "code-tui",
  "crossterm",
@@ -1270,6 +1272,7 @@ dependencies = [
  "code-common",
  "code-core",
  "code-git-tooling",
+ "code-i18n",
  "code-ollama",
  "code-protocol",
  "filetime",
@@ -1342,6 +1345,29 @@ dependencies = [
  "thiserror 2.0.17",
  "ts-rs",
  "walkdir",
+]
+
+[[package]]
+name = "code-i18n"
+version = "0.0.0"
+dependencies = [
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "code-i18n-scan"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "code-i18n",
+ "ignore",
+ "proc-macro2",
+ "serde",
+ "serde_json",
+ "syn 2.0.108",
 ]
 
 [[package]]
@@ -1560,6 +1586,7 @@ dependencies = [
  "code-core",
  "code-file-search",
  "code-git-tooling",
+ "code-i18n",
  "code-login",
  "code-mcp-types",
  "code-ollama",

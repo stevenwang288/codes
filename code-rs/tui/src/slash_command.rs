@@ -68,6 +68,8 @@ pub enum SlashCommand {
     Notifications,
     Theme,
     Settings,
+    #[strum(serialize = "l")]
+    Lang,
     Model,
     Reasoning,
     Verbosity,
@@ -99,49 +101,48 @@ impl SlashCommand {
     /// User-visible description shown in the popup.
     pub fn description(self) -> &'static str {
         match self {
-            SlashCommand::Chrome => "connect to your Chrome browser",
-            SlashCommand::Browser => "open internal browser",
-            SlashCommand::Resume => "resume a past session for this folder",
-            SlashCommand::Rename => "rename the current session",
-            SlashCommand::Plan => "create a comprehensive plan (multiple agents)",
-            SlashCommand::Solve => "solve a challenging problem (multiple agents)",
-            SlashCommand::Code => "perform a coding task (multiple agents)",
-            SlashCommand::Reasoning => "change reasoning effort (minimal/low/medium/high)",
-            SlashCommand::Verbosity => "change text verbosity (high/medium/low)",
-            SlashCommand::New => "start a new chat during a conversation",
-            SlashCommand::Init => "create an AGENTS.md file with instructions for Code",
-            SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
-            SlashCommand::Undo => "restore the workspace to the last Code snapshot",
-            SlashCommand::Review => "review your changes for potential issues",
-            SlashCommand::Cloud => "browse, apply, and create cloud tasks",
-            SlashCommand::Quit => "exit Code",
-            SlashCommand::Diff => "show git diff (including untracked files)",
-            SlashCommand::Mention => "mention a file",
-            SlashCommand::Cmd => "run a project command",
-            SlashCommand::Status => "show current session configuration and token usage",
-            SlashCommand::Limits => "adjust session limits",
-            SlashCommand::Update => "check for updates and optionally upgrade",
-            SlashCommand::Notifications => "manage notification settings",
-            SlashCommand::Theme => "customize the app theme",
-            SlashCommand::Settings => "manage all settings in one place",
-            SlashCommand::Prompts => "manage custom prompts",
-            SlashCommand::Skills => "manage skills",
-            SlashCommand::Model => "choose your default model",
-            SlashCommand::Agents => "configure agents",
-            SlashCommand::Auto => "work autonomously on long tasks with Auto Drive",
-            SlashCommand::Branch => {
-                "work in an isolated /branch then /merge when done (great for parallel work)"
-            }
-            SlashCommand::Merge => "merge current worktree branch back to default",
-            SlashCommand::Push => "commit, push, and monitor workflows",
-            SlashCommand::Validation => "control validation harness (status/on/off)",
-            SlashCommand::Mcp => "manage MCP servers",
-            SlashCommand::Perf => "performance tracing (on/off/show/reset)",
-            SlashCommand::Demo => "populate history with demo cells (dev/perf only)",
-            SlashCommand::Login => "manage Code sign-ins (add/select/disconnect)",
-            SlashCommand::Logout => "log out of Code",
+            SlashCommand::Chrome => code_i18n::tr_plain("tui.slash.desc.chrome"),
+            SlashCommand::Browser => code_i18n::tr_plain("tui.slash.desc.browser"),
+            SlashCommand::Resume => code_i18n::tr_plain("tui.slash.desc.resume"),
+            SlashCommand::Rename => code_i18n::tr_plain("tui.slash.desc.rename"),
+            SlashCommand::Plan => code_i18n::tr_plain("tui.slash.desc.plan"),
+            SlashCommand::Solve => code_i18n::tr_plain("tui.slash.desc.solve"),
+            SlashCommand::Code => code_i18n::tr_plain("tui.slash.desc.code"),
+            SlashCommand::Reasoning => code_i18n::tr_plain("tui.slash.desc.reasoning"),
+            SlashCommand::Verbosity => code_i18n::tr_plain("tui.slash.desc.verbosity"),
+            SlashCommand::New => code_i18n::tr_plain("tui.slash.desc.new"),
+            SlashCommand::Init => code_i18n::tr_plain("tui.slash.desc.init"),
+            SlashCommand::Compact => code_i18n::tr_plain("tui.slash.desc.compact"),
+            SlashCommand::Undo => code_i18n::tr_plain("tui.slash.desc.undo"),
+            SlashCommand::Review => code_i18n::tr_plain("tui.slash.desc.review"),
+            SlashCommand::Cloud => code_i18n::tr_plain("tui.slash.desc.cloud"),
+            SlashCommand::Quit => code_i18n::tr_plain("tui.slash.desc.quit"),
+            SlashCommand::Diff => code_i18n::tr_plain("tui.slash.desc.diff"),
+            SlashCommand::Mention => code_i18n::tr_plain("tui.slash.desc.mention"),
+            SlashCommand::Cmd => code_i18n::tr_plain("tui.slash.desc.cmd"),
+            SlashCommand::Status => code_i18n::tr_plain("tui.slash.desc.status"),
+            SlashCommand::Limits => code_i18n::tr_plain("tui.slash.desc.limits"),
+            SlashCommand::Update => code_i18n::tr_plain("tui.slash.desc.update"),
+            SlashCommand::Notifications => code_i18n::tr_plain("tui.slash.desc.notifications"),
+            SlashCommand::Theme => code_i18n::tr_plain("tui.slash.desc.theme"),
+            SlashCommand::Settings => code_i18n::tr_plain("tui.slash.desc.settings"),
+            SlashCommand::Lang => code_i18n::tr_plain("tui.slash.desc.lang"),
+            SlashCommand::Prompts => code_i18n::tr_plain("tui.slash.desc.prompts"),
+            SlashCommand::Skills => code_i18n::tr_plain("tui.slash.desc.skills"),
+            SlashCommand::Model => code_i18n::tr_plain("tui.slash.desc.model"),
+            SlashCommand::Agents => code_i18n::tr_plain("tui.slash.desc.agents"),
+            SlashCommand::Auto => code_i18n::tr_plain("tui.slash.desc.auto"),
+            SlashCommand::Branch => code_i18n::tr_plain("tui.slash.desc.branch"),
+            SlashCommand::Merge => code_i18n::tr_plain("tui.slash.desc.merge"),
+            SlashCommand::Push => code_i18n::tr_plain("tui.slash.desc.push"),
+            SlashCommand::Validation => code_i18n::tr_plain("tui.slash.desc.validation"),
+            SlashCommand::Mcp => code_i18n::tr_plain("tui.slash.desc.mcp"),
+            SlashCommand::Perf => code_i18n::tr_plain("tui.slash.desc.perf"),
+            SlashCommand::Demo => code_i18n::tr_plain("tui.slash.desc.demo"),
+            SlashCommand::Login => code_i18n::tr_plain("tui.slash.desc.login"),
+            SlashCommand::Logout => code_i18n::tr_plain("tui.slash.desc.logout"),
             #[cfg(debug_assertions)]
-            SlashCommand::TestApproval => "test approval request",
+            SlashCommand::TestApproval => code_i18n::tr_plain("tui.slash.desc.test_approval"),
         }
     }
 
@@ -208,6 +209,19 @@ impl SlashCommand {
             )),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod i18n_tests {
+    use super::*;
+
+    #[test]
+    fn slash_command_descriptions_localize_in_zh_cn() {
+        code_i18n::set_language(code_i18n::Language::ZhCn);
+        assert_eq!(SlashCommand::Settings.description(), "集中管理所有设置");
+        assert_eq!(SlashCommand::Chrome.description(), "连接到你的 Chrome 浏览器");
+        assert_eq!(SlashCommand::Lang.description(), "切换界面语言（en/zh-CN）");
     }
 }
 

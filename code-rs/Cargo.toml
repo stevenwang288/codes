@@ -19,6 +19,8 @@ members = [
     "execpolicy",
     "file-search",
     "git-tooling",
+    "i18n",
+    "i18n-scan",
     "linux-sandbox",
     "login",
     "mcp-client",
@@ -90,6 +92,7 @@ code-otel = { path = "otel" }
 code-tui = { path = "tui" }
 code-utils-json-to-toml = { path = "utils/json-to-toml" }
 code-utils-readiness = { path = "utils/readiness" }
+code-i18n = { path = "i18n" }
 code-auto-drive-core = { path = "code-auto-drive-core" }
 mcp-types = { path = "mcp-types", package = "code-mcp-types" }
 upstream-mcp-types = { git = "https://github.com/openai/codex.git", package = "mcp-types", rev = "6c384eb9c610f9a83037d9cad120fb792e782c7c" }

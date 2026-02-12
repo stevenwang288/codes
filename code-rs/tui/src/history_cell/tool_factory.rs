@@ -48,7 +48,7 @@ pub(crate) fn new_active_mcp_tool_call(invocation: McpInvocation) -> ToolCallCel
         id: HistoryId::ZERO,
         call_id: None,
         status: HistoryToolStatus::Running,
-        title: "Working".to_string(),
+        title: code_i18n::tr(code_i18n::current_language(), "tui.status_summary.working").to_string(),
         duration: None,
         arguments: vec![ToolArgument {
             name: "invocation".to_string(),
@@ -71,7 +71,7 @@ pub(crate) fn new_active_custom_tool_call(tool_name: String, args: Option<String
         id: HistoryId::ZERO,
         call_id: None,
         status: HistoryToolStatus::Running,
-        title: "Working".to_string(),
+        title: code_i18n::tr(code_i18n::current_language(), "tui.status_summary.working").to_string(),
         duration: None,
         arguments: vec![ToolArgument {
             name: "invocation".to_string(),
@@ -86,19 +86,19 @@ pub(crate) fn new_active_custom_tool_call(tool_name: String, args: Option<String
 // Friendly present-participle titles for running browser tools
 fn browser_running_title(tool_name: &str) -> &'static str {
     match tool_name {
-        "browser_click" => "Clicking...",
-        "browser_type" => "Typing...",
-        "browser_key" => "Sending key...",
-        "browser_javascript" => "Running JavaScript...",
-        "browser_scroll" => "Scrolling...",
-        "browser_open" => "Opening...",
-        "browser_close" => "Closing...",
-        "browser_status" => "Checking status...",
-        "browser_history" => "Navigating...",
-        "browser_inspect" => "Inspecting...",
-        "browser_console" => "Reading console...",
-        "browser_move" => "Moving...",
-        _ => "Working...",
+        "browser_click" => code_i18n::tr_plain("tui.tool.browser.clicking"),
+        "browser_type" => code_i18n::tr_plain("tui.tool.browser.typing"),
+        "browser_key" => code_i18n::tr_plain("tui.tool.browser.sending_key"),
+        "browser_javascript" => code_i18n::tr_plain("tui.tool.browser.running_javascript"),
+        "browser_scroll" => code_i18n::tr_plain("tui.tool.browser.scrolling"),
+        "browser_open" => code_i18n::tr_plain("tui.tool.browser.opening"),
+        "browser_close" => code_i18n::tr_plain("tui.tool.browser.closing"),
+        "browser_status" => code_i18n::tr_plain("tui.tool.browser.checking_status"),
+        "browser_history" => code_i18n::tr_plain("tui.tool.browser.navigating"),
+        "browser_inspect" => code_i18n::tr_plain("tui.tool.browser.inspecting"),
+        "browser_console" => code_i18n::tr_plain("tui.tool.browser.reading_console"),
+        "browser_move" => code_i18n::tr_plain("tui.tool.browser.moving"),
+        _ => code_i18n::tr_plain("tui.status_summary.working"),
     }
 }
 
@@ -118,7 +118,7 @@ pub(crate) fn arguments_from_json(value: &serde_json::Value) -> Vec<ToolArgument
     arguments_from_json_excluding(value, &[])
 }
 
-pub(crate) fn arguments_from_json_excluding(
+fn arguments_from_json_excluding(
     value: &serde_json::Value,
     exclude: &[&str],
 ) -> Vec<ToolArgument> {
@@ -139,23 +139,6 @@ pub(crate) fn arguments_from_json_excluding(
             name: "args".to_string(),
             value: argument_value_from_json(other),
         }],
-    }
-}
-
-fn sanitize_gh_run_wait_invocation_args(value: &serde_json::Value) -> Option<String> {
-    match value {
-        serde_json::Value::Object(map) => {
-            let mut filtered = map.clone();
-            filtered.remove("jobs");
-            filtered.remove("url");
-            let sanitized = serde_json::to_string(&serde_json::Value::Object(filtered)).ok()?;
-            if sanitized == "{}" {
-                Some(String::new())
-            } else {
-                Some(sanitized)
-            }
-        }
-        _ => None,
     }
 }
 
@@ -310,9 +293,6 @@ pub(crate) fn new_completed_custom_tool_call(
     success: bool,
     result: String,
 ) -> ToolCallCell {
-    if tool_name == "gh_run_wait" {
-        return new_completed_gh_run_wait_tool_call(success, &result);
-    }
     // Special rendering for browser_* tools
     if tool_name.starts_with("browser_") {
         return new_completed_browser_tool_call(tool_name, args, duration, success, result);
@@ -327,25 +307,10 @@ pub(crate) fn new_completed_custom_tool_call(
         HistoryToolStatus::Failed
     };
     let status_title = if success { "Complete" } else { "Error" };
-    let mut parsed_json = None;
-    let invocation_str = if let Some(args_str) = args.as_deref() {
-        let parsed = serde_json::from_str::<serde_json::Value>(args_str).ok();
-        let invocation_args = if tool_name == "gh_run_wait" {
-            parsed
-                .as_ref()
-                .and_then(sanitize_gh_run_wait_invocation_args)
-                .unwrap_or_else(|| args_str.to_string())
-        } else {
-            args_str.to_string()
-        };
-        parsed_json = parsed;
-        if invocation_args.is_empty() {
-            format!("{tool_name}()")
-        } else {
-            format!("{tool_name}({invocation_args})")
-        }
+    let invocation_str = if let Some(args) = args.clone() {
+        format!("{}({})", tool_name, args)
     } else {
-        format!("{tool_name}()")
+        format!("{}()", tool_name)
     };
 
     let mut arguments = vec![ToolArgument {
@@ -354,18 +319,19 @@ pub(crate) fn new_completed_custom_tool_call(
     }];
 
     if let Some(args_str) = args {
-        if let Some(json) = parsed_json {
-            let mut parsed = if tool_name == "gh_run_wait" {
-                arguments_from_json_excluding(&json, &["jobs", "url"])
-            } else {
-                arguments_from_json(&json)
-            };
-            arguments.append(&mut parsed);
-        } else if !args_str.is_empty() {
-            arguments.push(ToolArgument {
-                name: "args".to_string(),
-                value: ArgumentValue::Text(args_str),
-            });
+        match serde_json::from_str::<serde_json::Value>(&args_str) {
+            Ok(json) => {
+                let mut parsed = arguments_from_json(&json);
+                arguments.append(&mut parsed);
+            }
+            Err(_) => {
+                if !args_str.is_empty() {
+                    arguments.push(ToolArgument {
+                        name: "args".to_string(),
+                        value: ArgumentValue::Text(args_str),
+                    });
+                }
+            }
         }
     }
 
@@ -394,76 +360,6 @@ pub(crate) fn new_completed_custom_tool_call(
         error_message: None,
     };
     ToolCallCell::new(state)
-}
-
-fn new_completed_gh_run_wait_tool_call(success: bool, result: &str) -> ToolCallCell {
-    let status = if success {
-        HistoryToolStatus::Success
-    } else {
-        HistoryToolStatus::Failed
-    };
-    let title = gh_run_wait_title(result, success);
-    let result_preview = {
-        let trimmed = result.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            let mut lines = trimmed
-                .lines()
-                .map(|line| line.trim_end())
-                .collect::<Vec<_>>();
-            if let Some(first_non_empty) = lines.iter().position(|line| !line.trim().is_empty()) {
-                if lines[first_non_empty].trim().eq_ignore_ascii_case(title.trim()) {
-                    lines.remove(first_non_empty);
-                }
-            }
-            while lines.first().is_some_and(|line| line.trim().is_empty()) {
-                lines.remove(0);
-            }
-            let remaining = lines.join("\n");
-            if remaining.trim().is_empty() {
-                None
-            } else {
-                let preview_lines = build_preview_lines(&remaining, true);
-                let preview_strings = preview_lines
-                    .iter()
-                    .map(line_to_plain_text)
-                    .collect::<Vec<_>>();
-                Some(ToolResultPreview {
-                    lines: preview_strings,
-                    truncated: false,
-                })
-            }
-        }
-    };
-    let state = ToolCallState {
-        id: HistoryId::ZERO,
-        call_id: None,
-        status,
-        title,
-        duration: None,
-        arguments: Vec::new(),
-        result_preview,
-        error_message: None,
-    };
-    ToolCallCell::new(state)
-}
-
-fn gh_run_wait_title(result: &str, success: bool) -> String {
-    if let Some(line) = result
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-    {
-        if line.to_ascii_lowercase().starts_with("github actions run") {
-            return line.to_string();
-        }
-    }
-    if success {
-        "GitHub Actions run success".to_string()
-    } else {
-        "GitHub Actions run error".to_string()
-    }
 }
 
 /// Completed web_fetch tool call with markdown rendering of the `markdown` field.

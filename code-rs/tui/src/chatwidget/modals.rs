@@ -1,6 +1,7 @@
 use super::ChatWidget;
 
 impl ChatWidget<'_> {
+    #[allow(dead_code)]
     pub(crate) fn close_file_popup_if_active(&mut self) -> bool {
         self.bottom_pane.close_file_popup_if_active()
     }

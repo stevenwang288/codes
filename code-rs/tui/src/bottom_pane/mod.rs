@@ -529,14 +529,20 @@ impl BottomPane<'_> {
     }
 
     /// Attempt to close the file-search popup if visible. Returns true if closed.
+    #[allow(dead_code)]
     pub(crate) fn close_file_popup_if_active(&mut self) -> bool {
         let closed = self.composer.close_file_popup_if_active();
         if closed { self.request_redraw(); }
         closed
     }
 
+    #[allow(dead_code)]
     pub(crate) fn file_popup_visible(&self) -> bool {
         self.composer.file_popup_visible()
+    }
+
+    pub(crate) fn composer_popup_visible(&self) -> bool {
+        self.composer.popup_visible()
     }
 
     /// True if a modal/overlay view is currently displayed (not the composer popup).
@@ -1002,6 +1008,11 @@ impl BottomPane<'_> {
     pub(crate) fn set_footer_hints(&mut self, show_reasoning: bool, show_diffs: bool) {
         self.composer.set_show_reasoning_hint(show_reasoning);
         self.composer.set_show_diffs_hint(show_diffs);
+        self.request_redraw();
+    }
+
+    pub(crate) fn set_validation_harness_enabled(&mut self, enabled: bool) {
+        self.composer.set_validation_harness_enabled(enabled);
         self.request_redraw();
     }
 

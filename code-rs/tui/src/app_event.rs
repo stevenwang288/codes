@@ -8,6 +8,7 @@ use code_core::protocol::ApprovedCommandMatchKind;
 use code_core::protocol::TokenUsage;
 use code_core::git_info::CommitLogEntry;
 use code_core::protocol::ReviewContextMetadata;
+use code_protocol::protocol::ReviewTarget;
 use code_file_search::FileMatch;
 use code_common::model_presets::ModelPreset;
 use crossterm::event::KeyEvent;
@@ -170,6 +171,7 @@ pub(crate) enum AppEvent {
     Paste(String),
 
     /// Open the external editor with the current composer text.
+    #[allow(dead_code)]
     OpenExternalEditor { initial: String },
 
     /// Request to exit the application gracefully.
@@ -388,6 +390,7 @@ pub(crate) enum AppEvent {
 
     /// Run a review with an explicit prompt/hint pair (used by TUI selections)
     RunReviewWithScope {
+        target: ReviewTarget,
         prompt: String,
         hint: String,
         preparation_label: Option<String>,
@@ -501,6 +504,8 @@ pub(crate) enum AppEvent {
     CycleAccessMode,
     /// Cycle Auto Drive composer styling variants (Sentinel → Whisper → …)
     CycleAutoDriveVariant,
+    /// Toggle the validation harness mode (Strict ↔ Dev Fast)
+    ToggleValidationHarnessMode,
     /// Bottom composer expanded (e.g., slash command popup opened)
     ComposerExpanded,
 

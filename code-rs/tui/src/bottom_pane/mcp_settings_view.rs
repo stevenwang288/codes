@@ -6,6 +6,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use code_i18n;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
@@ -107,7 +108,7 @@ impl<'a> BottomPaneView<'a> for McpSettingsView {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
-            .title(" MCP Servers ")
+            .title(format!(" {} ", code_i18n::tr_plain("tui.mcp.title")))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -116,7 +117,10 @@ impl<'a> BottomPaneView<'a> for McpSettingsView {
         let mut selected_line_index: usize = 0;
 
         if self.rows.is_empty() {
-            lines.push(Line::from(vec![Span::styled("No MCP servers configured.", Style::default().fg(crate::colors::text_dim()))]));
+            lines.push(Line::from(vec![Span::styled(
+                code_i18n::tr_plain("tui.mcp.empty"),
+                Style::default().fg(crate::colors::text_dim()),
+            )]));
             lines.push(Line::from(""));
         }
 
@@ -146,7 +150,10 @@ impl<'a> BottomPaneView<'a> for McpSettingsView {
         let add_style = if add_sel { Style::default().bg(crate::colors::selection()).add_modifier(Modifier::BOLD) } else { Style::default() };
         lines.push(Line::from(""));
         let add_line_index = lines.len();
-        lines.push(Line::from(vec![Span::styled(if add_sel { "› " } else { "  " }, Style::default()), Span::styled("Add new server…", add_style)]));
+        lines.push(Line::from(vec![
+            Span::styled(if add_sel { "› " } else { "  " }, Style::default()),
+            Span::styled(code_i18n::tr_plain("tui.mcp.add_new_server"), add_style),
+        ]));
         if add_sel {
             selected_line_index = add_line_index;
         }
@@ -155,7 +162,10 @@ impl<'a> BottomPaneView<'a> for McpSettingsView {
         let close_sel = self.selected == self.rows.len().saturating_add(1);
         let close_style = if close_sel { Style::default().bg(crate::colors::selection()).add_modifier(Modifier::BOLD) } else { Style::default() };
         let close_line_index = lines.len();
-        lines.push(Line::from(vec![Span::styled(if close_sel { "› " } else { "  " }, Style::default()), Span::styled("Close", close_style)]));
+        lines.push(Line::from(vec![
+            Span::styled(if close_sel { "› " } else { "  " }, Style::default()),
+            Span::styled(code_i18n::tr_plain("tui.common.close_label"), close_style),
+        ]));
         if close_sel {
             selected_line_index = close_line_index;
         }
@@ -163,11 +173,26 @@ impl<'a> BottomPaneView<'a> for McpSettingsView {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("↑↓/←→", Style::default().fg(crate::colors::function())),
-            Span::styled(" Navigate/Toggle  ", Style::default().fg(crate::colors::text_dim())),
-            Span::styled("Enter", Style::default().fg(crate::colors::success())),
-            Span::styled(" Toggle/Open  ", Style::default().fg(crate::colors::text_dim())),
-            Span::styled("Esc", Style::default().fg(crate::colors::error())),
-            Span::styled(" Close", Style::default().fg(crate::colors::text_dim())),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.mcp.hint.navigate_toggle")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(crate::colors::success()),
+            ),
+            Span::styled(
+                format!(" {}  ", code_i18n::tr_plain("tui.mcp.hint.toggle_open")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(crate::colors::error()),
+            ),
+            Span::styled(
+                format!(" {}", code_i18n::tr_plain("tui.common.close_label")),
+                Style::default().fg(crate::colors::text_dim()),
+            ),
         ]));
 
         let total_lines = lines.len();

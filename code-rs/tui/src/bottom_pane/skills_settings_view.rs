@@ -2,6 +2,7 @@ use std::fs;
 use code_core::config::find_code_home;
 use code_core::protocol::Op;
 use code_protocol::skills::{Skill, SkillScope};
+use code_i18n;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -162,9 +163,18 @@ impl SkillsSettingsView {
                 Style::default().fg(colors::text())
             };
             let scope_text = match skill.scope {
-                SkillScope::Repo => " [repo]",
-                SkillScope::User => " [user]",
-                SkillScope::System => " [system]",
+                SkillScope::Repo => format!(
+                    " [{}]",
+                    code_i18n::tr_plain("tui.skills_settings.scope.repo")
+                ),
+                SkillScope::User => format!(
+                    " [{}]",
+                    code_i18n::tr_plain("tui.skills_settings.scope.user")
+                ),
+                SkillScope::System => format!(
+                    " [{}]",
+                    code_i18n::tr_plain("tui.skills_settings.scope.system")
+                ),
             };
             let name_span = Span::styled(format!("{arrow} {name}", name = skill.name), name_style);
             let scope_span = Span::styled(scope_text, Style::default().fg(colors::text_dim()));
@@ -175,7 +185,7 @@ impl SkillsSettingsView {
             lines.push(Line::from(vec![name_span, scope_span, desc_span]));
         }
         if lines.is_empty() {
-            lines.push(Line::from("No skills yet. Press Ctrl+N to create."));
+            lines.push(Line::from(code_i18n::tr_plain("tui.skills_settings.empty")));
         }
 
         let add_arrow = if self.selected == self.skills.len() { ">" } else { " " };
@@ -185,12 +195,15 @@ impl SkillsSettingsView {
             Style::default().fg(colors::success()).add_modifier(Modifier::BOLD)
         };
         lines.push(Line::from(vec![Span::styled(
-            format!("{add_arrow} Add new..."),
+            format!(
+                "{add_arrow} {}",
+                code_i18n::tr_plain("tui.skills_settings.add_new")
+            ),
             add_style,
         )]));
 
         let title = Paragraph::new(vec![Line::from(Span::styled(
-            "Skills are reusable instruction bundles stored as SKILL.md files. Edit the frontmatter to update name and description.",
+            code_i18n::tr_plain("tui.skills_settings.description"),
             Style::default().fg(colors::text_dim()),
         ))])
         .alignment(Alignment::Left)
@@ -218,7 +231,7 @@ impl SkillsSettingsView {
     fn render_form(&self, area: Rect, buf: &mut Buffer) {
         let outer = Block::default()
             .borders(Borders::ALL)
-            .title("Skill")
+            .title(code_i18n::tr_plain("tui.skills_settings.title"))
             .style(Style::default().bg(colors::background()));
         let inner = outer.inner(area);
         outer.render(area, buf);
@@ -233,7 +246,10 @@ impl SkillsSettingsView {
             ])
             .split(inner);
 
-        let name_label = Span::styled("Name", Style::default().fg(colors::text_dim()));
+        let name_label = Span::styled(
+            code_i18n::tr_plain("tui.skills_settings.label.name"),
+            Style::default().fg(colors::text_dim()),
+        );
         let name_line = Line::from(vec![name_label]);
         Paragraph::new(name_line).render(vertical[0], buf);
 
@@ -242,9 +258,9 @@ impl SkillsSettingsView {
         self.body_field
             .render(vertical[1], buf, matches!(self.focus, Focus::Body));
 
-        let save_label = if self.focus == Focus::Save { "Save" } else { "Save" };
-        let delete_label = if self.focus == Focus::Delete { "Delete" } else { "Delete" };
-        let cancel_label = if self.focus == Focus::Cancel { "Cancel" } else { "Cancel" };
+        let save_label = code_i18n::tr_plain("tui.skills_settings.button.save");
+        let delete_label = code_i18n::tr_plain("tui.skills_settings.button.delete");
+        let cancel_label = code_i18n::tr_plain("tui.skills_settings.button.cancel");
 
         let btn_span = |label: &str, focus: Focus, color: Style| {
             if self.focus == focus {
@@ -259,7 +275,10 @@ impl SkillsSettingsView {
             btn_span(delete_label, Focus::Delete, Style::default().fg(colors::error()).add_modifier(Modifier::BOLD)),
             Span::raw("   "),
             btn_span(cancel_label, Focus::Cancel, Style::default().fg(colors::text_dim()).add_modifier(Modifier::BOLD)),
-            Span::raw("    Tab cycle - Enter activates"),
+            Span::raw(format!(
+                "    {}",
+                code_i18n::tr_plain("tui.skills_settings.hints.tab_cycle_enter_activate")
+            )),
         ]);
         Paragraph::new(line).render(vertical[2], buf);
 
@@ -297,9 +316,13 @@ impl SkillsSettingsView {
     fn start_new_skill(&mut self) {
         self.selected = self.skills.len();
         self.name_field.set_text("");
-        self.body_field.set_text("---\nname: Example Skill\ndescription: Describe this skill\n---\n");
+        self.body_field
+            .set_text(code_i18n::tr_plain("tui.skills_settings.template.default"));
         self.focus = Focus::Name;
-        self.status = Some(("New skill".to_string(), Style::default().fg(colors::info())));
+        self.status = Some((
+            code_i18n::tr_plain("tui.skills_settings.status.new_skill").to_string(),
+            Style::default().fg(colors::info()),
+        ));
         self.mode = Mode::Edit;
     }
 
@@ -334,13 +357,15 @@ impl SkillsSettingsView {
     fn validate_name(&self, name: &str) -> Result<(), String> {
         let slug = name.trim();
         if slug.is_empty() {
-            return Err("Name is required".to_string());
+            return Err(code_i18n::tr_plain("tui.skills_settings.error.name_required").to_string());
         }
         if !slug
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
         {
-            return Err("Name must use letters, numbers, '-', '_' or '.'".to_string());
+            return Err(
+                code_i18n::tr_plain("tui.skills_settings.error.name_invalid_chars").to_string(),
+            );
         }
 
         let dup = self
@@ -349,20 +374,28 @@ impl SkillsSettingsView {
             .enumerate()
             .any(|(idx, skill)| idx != self.selected && skill_slug(skill).eq_ignore_ascii_case(slug));
         if dup {
-            return Err("A skill with this name already exists".to_string());
+            return Err(code_i18n::tr_plain("tui.skills_settings.error.name_exists").to_string());
         }
         Ok(())
     }
 
     fn validate_frontmatter(&self, body: &str) -> Result<(), String> {
         let Some(frontmatter) = extract_frontmatter(body) else {
-            return Err("SKILL.md must start with YAML frontmatter".to_string());
+            return Err(
+                code_i18n::tr_plain("tui.skills_settings.error.frontmatter_required").to_string(),
+            );
         };
         if frontmatter_value(&frontmatter, "name").is_none() {
-            return Err("Frontmatter must include name".to_string());
+            return Err(
+                code_i18n::tr_plain("tui.skills_settings.error.frontmatter_name_required")
+                    .to_string(),
+            );
         }
         if frontmatter_value(&frontmatter, "description").is_none() {
-            return Err("Frontmatter must include description".to_string());
+            return Err(
+                code_i18n::tr_plain("tui.skills_settings.error.frontmatter_description_required")
+                    .to_string(),
+            );
         }
         Ok(())
     }
@@ -371,7 +404,7 @@ impl SkillsSettingsView {
         if let Some(skill) = self.skills.get(self.selected) {
             if skill.scope != SkillScope::User {
                 self.status = Some((
-                    "Only user skills can be saved".to_string(),
+                    code_i18n::tr_plain("tui.skills_settings.error.only_user_can_save").to_string(),
                     Style::default().fg(colors::error()),
                 ));
                 return;
@@ -393,7 +426,10 @@ impl SkillsSettingsView {
             Ok(path) => path,
             Err(err) => {
                 self.status = Some((
-                    format!("CODE_HOME unavailable: {err}"),
+                    format!(
+                        "{}: {err}",
+                        code_i18n::tr_plain("tui.skills_settings.error.code_home_unavailable")
+                    ),
                     Style::default().fg(colors::error()),
                 ));
                 return;
@@ -404,7 +440,10 @@ impl SkillsSettingsView {
         dir.push(&name);
         if let Err(err) = fs::create_dir_all(&dir) {
             self.status = Some((
-                format!("Failed to create skill dir: {err}"),
+                format!(
+                    "{}: {err}",
+                    code_i18n::tr_plain("tui.skills_settings.error.create_dir_failed")
+                ),
                 Style::default().fg(colors::error()),
             ));
             return;
@@ -413,14 +452,18 @@ impl SkillsSettingsView {
         path.push("SKILL.md");
         if let Err(err) = fs::write(&path, &body) {
             self.status = Some((
-                format!("Failed to save: {err}"),
+                format!(
+                    "{}: {err}",
+                    code_i18n::tr_plain("tui.skills_settings.error.save_failed")
+                ),
                 Style::default().fg(colors::error()),
             ));
             return;
         }
 
-        let description = frontmatter_value(&body, "description")
-            .unwrap_or_else(|| "No description".to_string());
+        let description = frontmatter_value(&body, "description").unwrap_or_else(|| {
+            code_i18n::tr_plain("tui.skills_settings.default.no_description").to_string()
+        });
         let display_name = frontmatter_value(&body, "name").unwrap_or_else(|| name.clone());
 
         let mut updated = self.skills.clone();
@@ -438,14 +481,20 @@ impl SkillsSettingsView {
             self.selected = updated.len() - 1;
         }
         self.skills = updated;
-        self.status = Some(("Saved.".to_string(), Style::default().fg(colors::success())));
+        self.status = Some((
+            code_i18n::tr_plain("tui.skills_settings.status.saved").to_string(),
+            Style::default().fg(colors::success()),
+        ));
 
         self.app_event_tx.send(AppEvent::CodexOp(Op::ListSkills));
     }
 
     fn delete_current(&mut self) {
         if self.selected >= self.skills.len() {
-            self.status = Some(("Nothing to delete".to_string(), Style::default().fg(colors::warning())));
+            self.status = Some((
+                code_i18n::tr_plain("tui.skills_settings.status.nothing_to_delete").to_string(),
+                Style::default().fg(colors::warning()),
+            ));
             self.mode = Mode::List;
             self.focus = Focus::List;
             return;
@@ -453,7 +502,7 @@ impl SkillsSettingsView {
         let skill = self.skills[self.selected].clone();
         if skill.scope != SkillScope::User {
             self.status = Some((
-                "Only user skills can be deleted".to_string(),
+                code_i18n::tr_plain("tui.skills_settings.error.only_user_can_delete").to_string(),
                 Style::default().fg(colors::error()),
             ));
             return;
@@ -462,7 +511,10 @@ impl SkillsSettingsView {
         if let Err(err) = fs::remove_file(&skill.path) {
             if err.kind() != std::io::ErrorKind::NotFound {
                 self.status = Some((
-                    format!("Delete failed: {err}"),
+                    format!(
+                        "{}: {err}",
+                        code_i18n::tr_plain("tui.skills_settings.error.delete_failed")
+                    ),
                     Style::default().fg(colors::error()),
                 ));
                 return;
@@ -482,7 +534,10 @@ impl SkillsSettingsView {
 
         self.mode = Mode::List;
         self.focus = Focus::List;
-        self.status = Some(("Deleted.".to_string(), Style::default().fg(colors::success())));
+        self.status = Some((
+            code_i18n::tr_plain("tui.skills_settings.status.deleted").to_string(),
+            Style::default().fg(colors::success()),
+        ));
 
         self.app_event_tx.send(AppEvent::CodexOp(Op::ListSkills));
     }

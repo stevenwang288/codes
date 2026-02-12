@@ -68,7 +68,7 @@ impl AccountSwitchSettingsView {
     fn info_lines(&self) -> Vec<Line<'static>> {
         let mut lines = Vec::new();
         lines.push(Line::from(vec![Span::styled(
-            "Accounts",
+            code_i18n::tr_plain("tui.settings.panel_title.accounts"),
             Style::default().add_modifier(Modifier::BOLD),
         )]));
         lines.push(Line::from(""));
@@ -101,26 +101,26 @@ impl AccountSwitchSettingsView {
 
         lines.push(row(
             0,
-            "Auto-switch on rate/usage limit",
+            code_i18n::tr_plain("tui.accounts.option.auto_switch"),
             self.auto_switch_enabled,
         ));
         lines.push(Line::from(vec![
             Span::raw("    "),
             Span::styled(
-                "Switches to another connected account on 429/usage_limit.",
+                code_i18n::tr_plain("tui.accounts.option.auto_switch.desc"),
                 dim,
             ),
         ]));
 
         lines.push(row(
             1,
-            "API key fallback when all accounts limited",
+            code_i18n::tr_plain("tui.accounts.option.api_key_fallback"),
             self.api_key_fallback_enabled,
         ));
         lines.push(Line::from(vec![
             Span::raw("    "),
             Span::styled(
-                "Only used if every connected ChatGPT account is limited.",
+                code_i18n::tr_plain("tui.accounts.option.api_key_fallback.desc"),
                 dim,
             ),
         ]));
@@ -132,17 +132,23 @@ impl AccountSwitchSettingsView {
         let indicator = if close_selected { ">" } else { " " };
         lines.push(Line::from(vec![
             Span::styled(format!("{indicator} "), close_style),
-            Span::styled("Close", close_style),
+            Span::styled(code_i18n::tr_plain("tui.common.close_label"), close_style),
         ]));
 
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
-            Span::styled(" Up/Down", Style::default().fg(colors::function())),
-            Span::styled(" Navigate  ", dim),
-            Span::styled("Enter", Style::default().fg(colors::success())),
-            Span::styled(" Toggle  ", dim),
-            Span::styled("Esc", Style::default().fg(colors::error())),
-            Span::styled(" Close", dim),
+            Span::styled(" ↑↓", Style::default().fg(colors::function())),
+            Span::styled(format!(" {}  ", code_i18n::tr_plain("tui.common.navigate")), dim),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.enter"),
+                Style::default().fg(colors::success()),
+            ),
+            Span::styled(format!(" {}  ", code_i18n::tr_plain("tui.common.toggle")), dim),
+            Span::styled(
+                code_i18n::tr_plain("tui.common.key.esc"),
+                Style::default().fg(colors::error()),
+            ),
+            Span::styled(format!(" {}", code_i18n::tr_plain("tui.common.close_label")), dim),
         ]));
 
         lines

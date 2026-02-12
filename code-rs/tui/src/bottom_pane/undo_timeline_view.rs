@@ -430,7 +430,7 @@ impl UndoTimelineView {
         files_block.render(files_area, buf);
         let file_lines = if entry.file_lines.is_empty() {
             vec![Line::from(Span::styled(
-                "No file changes captured for this snapshot.",
+                code_i18n::tr_plain("tui.undo.timeline.no_file_changes"),
                 Style::default().fg(crate::colors::text_dim()),
             ))]
         } else {
@@ -450,39 +450,65 @@ impl UndoTimelineView {
     }
 
     fn footer_lines(&self, entry: &UndoTimelineEntry) -> Vec<Line<'static>> {
+        let files_label = code_i18n::tr_plain("tui.undo.timeline.files");
+        let conversation_label = code_i18n::tr_plain("tui.undo.timeline.conversation");
+        let navigate_label = code_i18n::tr_plain("tui.common.navigate");
+        let toggle_files_label = code_i18n::tr_plain("tui.undo.timeline.toggle_files");
+        let toggle_conversation_label = code_i18n::tr_plain("tui.undo.timeline.toggle_conversation");
+        let restore_label = code_i18n::tr_plain("tui.undo.timeline.restore");
+        let close_label = code_i18n::tr_plain("tui.undo.timeline.close");
+
         let files_status = if entry.files_available {
             if self.restore_files {
-                Span::styled("[x] Files", Style::default().fg(crate::colors::success()))
+                Span::styled(
+                    format!("[x] {files_label}"),
+                    Style::default().fg(crate::colors::success()),
+                )
             } else {
-                Span::styled("[ ] Files", Style::default().fg(crate::colors::text_dim()))
+                Span::styled(
+                    format!("[ ] {files_label}"),
+                    Style::default().fg(crate::colors::text_dim()),
+                )
             }
         } else {
-            Span::styled("[ ] Files", Style::default().fg(crate::colors::text_dim()))
+            Span::styled(
+                format!("[ ] {files_label}"),
+                Style::default().fg(crate::colors::text_dim()),
+            )
         };
 
         let convo_status = if entry.conversation_available {
             if self.restore_conversation {
-                Span::styled("[x] Conversation", Style::default().fg(crate::colors::success()))
+                Span::styled(
+                    format!("[x] {conversation_label}"),
+                    Style::default().fg(crate::colors::success()),
+                )
             } else {
-                Span::styled("[ ] Conversation", Style::default().fg(crate::colors::text_dim()))
+                Span::styled(
+                    format!("[ ] {conversation_label}"),
+                    Style::default().fg(crate::colors::text_dim()),
+                )
             }
         } else {
-            Span::styled("[ ] Conversation", Style::default().fg(crate::colors::text_dim()))
+            Span::styled(
+                format!("[ ] {conversation_label}"),
+                Style::default().fg(crate::colors::text_dim()),
+            )
         };
 
         vec![
             Line::from(vec![files_status, Span::raw("  "), convo_status]),
             Line::from(vec![
                 Span::styled("↑↓ PgUp PgDn", Style::default().fg(crate::colors::light_blue())),
-                Span::raw(" Navigate  "),
+                Span::raw(format!(" {navigate_label}  ")),
                 Span::styled("Space", Style::default().fg(crate::colors::success())),
-                Span::raw(" Toggle files  "),
+                Span::raw(format!(" {toggle_files_label}  ")),
                 Span::styled("C", Style::default().fg(crate::colors::success())),
-                Span::raw(" Toggle conversation  "),
+                Span::raw(format!(" {toggle_conversation_label}  ")),
                 Span::styled("Enter", Style::default().fg(crate::colors::success())),
-                Span::raw(" Restore  "),
+                Span::raw(format!(" {restore_label}  ")),
                 Span::styled("Esc", Style::default().fg(crate::colors::error())),
-                Span::raw(" Close"),
+                Span::raw(format!(" {close_label}")),
             ]),
         ]
     }
@@ -548,7 +574,10 @@ impl<'a> BottomPaneView<'a> for UndoTimelineView {
         Clear.render(area, buf);
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(" Restore workspace snapshot ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.undo.timeline.title_restore_snapshot")
+            ))
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()))
             .title_alignment(Alignment::Center);
@@ -562,7 +591,10 @@ impl<'a> BottomPaneView<'a> for UndoTimelineView {
 
         let list_block = Block::default()
             .borders(Borders::ALL)
-            .title(" Snapshots ")
+            .title(format!(
+                " {} ",
+                code_i18n::tr_plain("tui.undo.timeline.title_snapshots")
+            ))
             .border_style(Style::default().fg(crate::colors::border()))
             .style(Style::default().bg(crate::colors::background()).fg(crate::colors::text()));
         let list_inner = list_block.inner(list_area);
